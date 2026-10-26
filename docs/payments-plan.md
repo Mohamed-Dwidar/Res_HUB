@@ -382,7 +382,11 @@ UI names only (labels, titles, buttons, popups, PDFs, docs); code, tables, route
 - "Close My Shift" → popup (totals) → "Confirm Closing" / "Cancel"; the form sends the highest payment id shown; new payments
   meanwhile → refused "review again". The account can close an employee's shift on their behalf (logged `close_on_behalf`).
 
-### After closing (no reopen)
+### After closing
+- **Reopen** (account only, 2026-10-26, user — replaces "no reopen"): the shift popup's "Reopen" → a reason → the closing's payments
+  and expenses go back to that login's open shift (`shift_closing_id` 0, closed again from My Shift / on behalf), the closing row is
+  deleted, `shift_events` keeps a `reopen` event (its id, totals, who, reason; its other events stay). Only the login's LAST closing,
+  never an imported one (`ShiftClosingService::reopen()` / `reopenError()`).
 - **Edit / delete** (account only, as before) of a payment in a CLOSED shift: reason required (`change_reason` / `delete_reason`);
   `ShiftClosingService::paymentChanged()` recalculates the shift's totals, logs `payment_edit` / `payment_delete` in
   `shift_events` (payment_id, by, reason, `changes` = {before, after} snapshots) and sets `edited_at` / `edit_count` → the

@@ -4,11 +4,18 @@
 {{--
     A closed shift (popup): its totals (recalculated when the account edits / deletes one of its payments), its payments in the
     Payments list columns (row menu included). No history here (user 2026-10-13; the changes stay logged in shift_events).
-    No reopen (docs/payments-plan.md §2b): the account changes a payment directly from its row menu, with a reason.
+    The account changes a payment directly from its row menu, with a reason; "Reopen" (the account only, 2026-10-26; not an imported
+    closing) opens Shift/reopen (reason → its rows back to the open shift; refused there when it is not the login's last closing).
 --}}
 @section('title')
     Shift of {{ $closing->user?->userable?->displayName() ?? '-' }}
     <span class="ml-2">@include('paymentmodule::Shift.partials.status')</span>
+@endsection
+
+@section('actions')
+    @if ($area === 'account' && !$closing->is_imported)
+        <a href="{{ route('account.shifts.reopen', ['id' => $closing->id] + request()->only('date')) }}" data-modal class="btn btn-sm btn-warning"><i data-lucide="unlock"></i> Reopen</a>
+    @endif
 @endsection
 
 @section('modal-size', 'xl')

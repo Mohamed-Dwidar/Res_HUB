@@ -34,7 +34,6 @@ class DailySummaryAccountModuleController extends Controller
             'date' => $date,
             'summary' => $this->summaryService->summary($accountId, $date),
             'refunds' => $this->summaryService->refunds($accountId, $date),
-            'expenses' => $this->summaryService->expenses($accountId, $date),
             'shifts' => $this->shiftService->closingsForDate($accountId, $date),
             'openPeriods' => $this->shiftService->openPeriods($accountId, $date),
             // the employees' open shifts older than the reminder time (+ their "still working" answers), whatever their dates

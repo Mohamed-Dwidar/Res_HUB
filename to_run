@@ -243,6 +243,12 @@ SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEM
   'ALTER TABLE shift_events MODIFY action ENUM(''close'',''close_on_behalf'',''logout_closed'',''logout_still_working'',''still_working'',''payment_edit'',''payment_delete'',''payment_refund'',''expense_edit'',''expense_delete'') NOT NULL, ADD expense_id BIGINT NOT NULL DEFAULT 0 AFTER payment_id, ADD INDEX shift_events_expense_id_index (expense_id)',
   'SELECT ''expense_id exists''');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- shift_events.action 'reopen' (2026-10-26; also in the create migration): the account reopened a closing (reason; its rows back to
+-- the open shift, the closing row deleted). Added once; a re-run: "exists"
+SET @sql = IF((SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shift_events' AND COLUMN_NAME = 'action') NOT LIKE '%''reopen''%',
+  'ALTER TABLE shift_events MODIFY action ENUM(''close'',''close_on_behalf'',''logout_closed'',''logout_still_working'',''still_working'',''payment_edit'',''payment_delete'',''payment_refund'',''expense_edit'',''expense_delete'',''reopen'') NOT NULL',
+  'SELECT ''shift_events reopen exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND COLUMN_NAME = 'refund_of') = 0,
   'ALTER TABLE payments ADD refund_of BIGINT NOT NULL DEFAULT 0 AFTER withholding_certificate_id, ADD reason VARCHAR(255) NULL AFTER notes, ADD INDEX payments_refund_of_index (refund_of)',

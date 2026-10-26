@@ -105,14 +105,6 @@ class DailySummaryService
         return $summary;
     }
 
-    // the expenses dated that day (spent_at), as they were added
-    public function expenses($accountId, $date): Collection
-    {
-        return Expense::with('creatable.userable', 'expenseCategory', 'paymentMethod')
-            ->where('account_id', $accountId)->where('spent_at', Carbon::parse($date)->toDateString())
-            ->orderBy('created_at')->get();
-    }
-
     // the refunds dated that day (who, amount, the original payment, reason), as they were added
     public function refunds($accountId, $date): Collection
     {

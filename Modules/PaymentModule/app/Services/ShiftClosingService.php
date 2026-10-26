@@ -239,6 +239,46 @@ class ShiftClosingService
         });
     }
 
+    /**
+     * Reopen a closing (the account only, reason required; user 2026-10-26): its payments / expenses go back to the login's open
+     * shift (shift_closing_id 0, closed again from My Shift / on behalf), the closing row is deleted, and a "reopen" event keeps
+     * its id, totals, who and why (its other events stay). Only the login's LATEST closing (an older one would put old money
+     * under a newer closing), never an imported one (years of old payments).
+     */
+    public function reopen($accountId, $id, Model $by, string $reason): ShiftClosing
+    {
+        if (!$this->paymentService->isOwner($by)) {
+            abort(403, 'Only the account can reopen a shift.');
+        }
+
+        return DB::transaction(function () use ($accountId, $id, $by, $reason) {
+            $closing = ShiftClosing::where('account_id', $accountId)->lockForUpdate()->findOrFail($id);
+            if ($error = $this->reopenError($closing)) {
+                throw ValidationException::withMessages(['reason' => $error]);
+            }
+            Payment::where('shift_closing_id', $closing->id)->update(['shift_closing_id' => 0]);
+            Expense::where('shift_closing_id', $closing->id)->update(['shift_closing_id' => 0]);
+            $this->log($closing, 'reopen', $by, $reason);
+            $closing->delete();
+
+            return $closing;
+        });
+    }
+
+    // why a closing can't be reopened (null = it can): imported, or not the login's latest closing
+    public function reopenError(ShiftClosing $closing): ?string
+    {
+        if ($closing->is_imported) {
+            return 'An imported shift (from the old system) can\'t be reopened.';
+        }
+        $newer = ShiftClosing::where('account_id', $closing->account_id)->where('user_id', $closing->user_id)
+            ->where(fn ($query) => $query->where('closed_at', '>', $closing->closed_at)
+                ->orWhere(fn ($query) => $query->where('closed_at', $closing->closed_at)->where('id', '>', $closing->id)))
+            ->exists();
+
+        return $newer ? 'Only the last closing of this login can be reopened: reopen the newer one first.' : null;
+    }
+
     // a reminder answer of the employee: still_working (reason required) | logout_still_working
     public function stillWorking($accountId, User $employee, string $action, ?string $reason = null): ShiftEvent
     {
@@ -288,7 +328,8 @@ class ShiftClosingService
 
     /**
      * The open shifts of the account's collectors, the account included (all, or the ones with payments dated $date):
-     * [user_id => ['user', 'since', 'count', 'cash_total', 'withholding_total', 'dated_count' (payments of $date)]], oldest first
+     * [user_id => ['user', 'since', 'count', 'cash_total' (payments − refunds), 'refunds_total', 'expenses_total', 'net_total',
+     * 'withholding_total', 'dated_count' (payments of $date)]], oldest first
      */
     public function openPeriods($accountId, $date = null): Collection
     {
@@ -298,7 +339,7 @@ class ShiftClosingService
             ->groupBy('creatable_id')
             ->selectRaw("creatable_id, MIN(created_at) since, COUNT(*) n,
                 SUM(CASE type WHEN 'payment' THEN amount WHEN 'refund' THEN -amount ELSE 0 END) cash,
-                SUM(IF(type = 'withholding', amount, 0)) wh, SUM(paid_at = ?) dated", [$day])
+                SUM(IF(type = 'refund', amount, 0)) refunds, SUM(IF(type = 'withholding', amount, 0)) wh, SUM(paid_at = ?) dated", [$day])
             ->get()->keyBy('creatable_id');
         $expenses = Expense::where('account_id', $accountId)->where('shift_closing_id', 0)
             ->where('creatable_type', (new User)->getMorphClass())->whereIn('creatable_id', $this->collectorUserIds($accountId))
@@ -318,7 +359,9 @@ class ShiftClosingService
                     'count' => (int) ($payment?->n ?? 0),
                     'expenses_count' => (int) ($expense?->n ?? 0),
                     'cash_total' => round((float) ($payment?->cash ?? 0), 2),
+                    'refunds_total' => round((float) ($payment?->refunds ?? 0), 2),
                     'expenses_total' => round((float) ($expense?->total ?? 0), 2),
+                    'net_total' => round((float) ($payment?->cash ?? 0) - (float) ($expense?->total ?? 0), 2),
                     'withholding_total' => round((float) ($payment?->wh ?? 0), 2),
                     'dated_count' => (int) ($payment?->dated ?? 0) + (int) ($expense?->dated ?? 0),
                 ];

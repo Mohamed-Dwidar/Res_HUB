@@ -58,12 +58,13 @@ trait MyShiftActions
             // the payments' dates (one date, or first → last) + how many
             ->addColumn('payments_html', fn ($closing) => view('paymentmodule::Shift.partials.payment-dates', compact('closing'))->render())
             ->addColumn('status_html', fn ($closing) => view('paymentmodule::Shift.partials.status', compact('closing'))->render())
-            ->editColumn('cash_total', fn ($closing) => number_format($closing->cash_total, 2))
-            ->editColumn('withholding_total', fn ($closing) => number_format($closing->withholding_total, 2))
-            ->editColumn('expenses_total', fn ($closing) => $closing->expenses_total ? '<span class="text-danger">' . number_format(-$closing->expenses_total, 2) . '</span>' : '0.00')
+            // money colors of the shift totals (custom.css .money-*): collected green, cash out red, 0 grey, net green bold (red < 0)
+            ->editColumn('cash_total', fn ($closing) => '<span class="' . ($closing->cash_total ? 'money-in' : 'money-zero') . '">' . number_format($closing->cash_total, 2) . '</span>')
+            ->editColumn('withholding_total', fn ($closing) => '<span class="' . ($closing->withholding_total ? 'money-withholding' : 'money-zero') . '">' . number_format($closing->withholding_total, 2) . '</span>')
+            ->editColumn('expenses_total', fn ($closing) => $closing->expenses_total ? '<span class="money-out">' . number_format(-$closing->expenses_total, 2) . '</span>' : '<span class="money-zero">0.00</span>')
             // what was handed over: collected - expenses
-            ->addColumn('net_total', fn ($closing) => '<span class="font-medium">' . number_format($closing->net_total, 2) . '</span>')
-            ->rawColumns(['closed_html', 'period', 'payments_html', 'status_html', 'expenses_total', 'net_total'])
+            ->addColumn('net_total', fn ($closing) => '<span class="money-net' . ($closing->net_total < 0 ? ' money-net--negative' : '') . '">' . number_format($closing->net_total, 2) . '</span>')
+            ->rawColumns(['closed_html', 'period', 'payments_html', 'status_html', 'cash_total', 'withholding_total', 'expenses_total', 'net_total'])
             ->only(['DT_RowId', 'closed_html', 'period', 'payments_html', 'status_html', 'cash_total', 'expenses_total', 'net_total', 'withholding_total'])
             ->toJson();
     }

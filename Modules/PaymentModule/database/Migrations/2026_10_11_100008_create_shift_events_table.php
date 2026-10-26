@@ -24,8 +24,8 @@ return new class extends Migration {
             // users.id of who did it (the employee or the account)
             $table->bigInteger('by_user_id');
             $table->enum('action', ['close', 'close_on_behalf', 'logout_closed', 'logout_still_working', 'still_working',
-                'payment_edit', 'payment_delete', 'payment_refund', 'expense_edit', 'expense_delete']);
-            // required on still_working and the payment_* actions
+                'payment_edit', 'payment_delete', 'payment_refund', 'expense_edit', 'expense_delete', 'reopen']);
+            // required on still_working, the payment_* actions and reopen
             $table->string('reason')->nullable();
             // the closing's totals at that moment (close, payment_edit / payment_delete: after the change)
             $table->json('totals')->nullable();

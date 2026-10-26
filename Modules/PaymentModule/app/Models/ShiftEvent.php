@@ -21,6 +21,8 @@ class ShiftEvent extends Model
         'payment_refund' => 'Payment refunded',
         'expense_edit' => 'Expense edited',
         'expense_delete' => 'Expense deleted',
+        // the account reopened the closing (reason; its rows went back to the open shift, the closing row was deleted)
+        'reopen' => 'Reopened by the account',
     ];
 
     // only created_at (a log row is never changed)
