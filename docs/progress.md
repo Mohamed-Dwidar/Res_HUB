@@ -6,6 +6,7 @@
 ---
 
 ## Current status
+- **Schedule timeline hours in 12 hour form (2026-10-27), uncommitted, tested (HTTP kernel: 8am … 11pm 12am 1am for Pivot 8 → 26), not in a browser:** `Schedule/partials/hourly` hour labels (were 08 … 01); the blocks / chips keep `H:i`.
 - **Daily Summary "By Collector" redesigned (2026-10-26), uncommitted, tested (HTTP kernel + headless Chrome screenshot of 25-10), not checked by the user:** columns Collected By | Cash In | Refunds | Cash Out | Net (no Method column); one bold row per collector (light grey band, colored totals), its payment methods under it indented, smaller and grey (only when more than one method; one method = its name next to the collector); amounts right aligned, even-width digits. `DailySummary/partials/totals`, custom.css `.collector-table*`.
 - **Daily Summary Shifts: Cash In | Refunds | Cash Out | Net per shift (2026-10-26), uncommitted, tested (HTTP kernel, 26-10 + 25-10: open + closed + imported rows), not in a browser:** columns Collected By | Status | From → To | Cash In | Refunds | Cash Out | Net | Withholding | action — amounts only (no counts, user), colors `.money-*`; open rows from `ShiftClosingService::openPeriods()` (+ `refunds_total`, `net_total`), closed rows from the closing (refunds = `totals.refunds.total`, before 2026-10-13 the per-method sum; net = `net_total`). **Fixed on the way:** open-shift rows had no Cash Out cell (columns shifted). The day's "Cash Out" list section removed (user: not needed; `DailySummaryService::expenses()` deleted, the Cash Out amounts stay in the shifts / Day Totals). Seen in the DB: the user's own browser test of reopen (closings #16 / #17 reopened, reasons "test" / "dsss"; employee 7 closed again #21).
 - **Reopen a closed shift (2026-10-26), uncommitted, tested (HTTP kernel, rolled back: employee 16's shift closed → the popup has Reopen; the form; reason missing → 422; imported closing: no button + 422; an older closing → refused text + 422 "Only the last closing…"; the latest reopened → 200, closing gone, its rows open again, `reopen` event (by 1, reason, totals); then the older one (now last) → 200 → all 8 payments + 1 expense open, My Shift has Close My Shift; an employee → 403), not in a browser:** the account only, from the shift popup (Daily Summary View, My Closings) "Reopen" → `Shift/reopen` (totals + Reason) → DELETE `account.shifts.reopen.store` → `ShiftClosingService::reopen()`: rows back to the login's open shift, the closing deleted, `shift_events` `reopen` (its id, totals, by, reason); only the login's LAST closing, never an imported one (`reopenError()`); answer reload + redirect (the Daily Summary day / My Shift). DB: `shift_events.action` + `reopen` (run by Claude, backup `storage/app/backups/shift_events-before-reopen-20261026.sql`; to_run 3.1 guarded MODIFY, re-run = "exists"; create migration). Spec `payments-plan.md` §2b "After closing" updated (was: no reopen).
@@ -333,6 +334,12 @@
 
 ## Session log
 
+### 2026-10-27 — Schedule timeline: hours as am / pm
+- **Changed:** `Schedule/partials/hourly` (hour labels)
+- **Why:** user request
+- **Affects:** the Schedule timeline (both areas)
+- **Commit:** see suggested commit (user commits)
+
 ### 2026-10-26 — Daily Summary: By Collector redesigned
 - **Changed:** `DailySummary/partials/totals` (By Collector), custom.css `.collector-table*`
 - **Why:** user (the table was hard to read)
@@ -386,10 +393,4 @@
 - **Why:** user (the old system's calendar months: 31 → 28 Feb → 31 Mar, no drift)
 - **Affects:** Renew (form + save), repeat of period types, the account's reservation edit; hourly / full day not
 - **DB:** run 2026-10-23: 4 yearly rows + 78 zero rows → the start day (in to_run, idempotent)
-- **Commit:** see suggested commit (user commits)
-
-### 2026-10-23 — full re-import from the 22-10 live backup
-- **Changed:** `dwidar_res_portal` reloaded (to_run STEP 1 → 6), to_run header
-- **Why:** user (latest source data)
-- **Affects:** all data; the 21–22 Oct test data is gone
 - **Commit:** see suggested commit (user commits)

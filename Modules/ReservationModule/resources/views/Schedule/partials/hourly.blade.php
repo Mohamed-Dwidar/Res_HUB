@@ -36,7 +36,7 @@
                         @endif
                         <div class="tl-grid tl-lanes-1">
                             @foreach ($section['hours'] as $index => $hour)
-                                <span class="tl-hour tl-from-{{ $index * 4 + 1 }} tl-span-4">{{ sprintf('%02d', ($hourFrom + $index) % 24) }}</span>
+                                <span class="tl-hour tl-from-{{ $index * 4 + 1 }} tl-span-4">{{-- 12 hour labels (user 2026-10-27): 12am, 1am … 12pm, 1pm … --}}{{ (($hourFrom + $index) % 12 ?: 12) . (($hourFrom + $index) % 24 < 12 ? 'am' : 'pm') }}</span>
                             @endforeach
                         </div>
                         @if ($section['hasLater'])
