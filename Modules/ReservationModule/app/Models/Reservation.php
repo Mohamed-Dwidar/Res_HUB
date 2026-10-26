@@ -580,6 +580,28 @@ class Reservation extends Model implements Payable
     }
 
     /**
+     * The end of a period that starts on $start, by the plan's lease period and the anchor day (subscription_day, the day of month
+     * the subscription renews on; user 2026-10-23, calendar months like the old system): month → the next start = the anchor day
+     * of the month after $start's month, clamped to its last day (31 → 28/29 Feb → 31 Mar → 30 Apr); year → the same date next
+     * year (29-02 → 28-02). The end = that next start − 1 day, 23:59:59. null for other lease periods (the caller keeps its rule).
+     * The same rule in custom.js reservationEndFromPlan().
+     */
+    public static function anchoredEnd(Carbon $start, ?int $anchor, ?string $leasePeriod): ?Carbon
+    {
+        $start = $start->copy()->startOfDay();
+        $next = match ($leasePeriod) {
+            'month' => (function () use ($start, $anchor) {
+                $month = $start->copy()->startOfMonth()->addMonthNoOverflow();
+                return $month->day(min($anchor ?: $start->day, $month->daysInMonth));
+            })(),
+            'year' => $start->copy()->addYearNoOverflow(),
+            default => null,
+        };
+
+        return $next?->subDay()->endOfDay();
+    }
+
+    /**
      * The periods of the Schedule page renewals (period types, counted, with a member and an end, not marked left), by their
      * last day (END_DATE_SQL): ending on / between the dates; renewed or not decided by the caller.
      */

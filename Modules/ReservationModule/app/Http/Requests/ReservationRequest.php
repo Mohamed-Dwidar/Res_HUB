@@ -70,6 +70,9 @@ class ReservationRequest extends FormRequest
             // the period it renews: the Renew form (hidden, both areas) / "Renewal of #" in the account's edit form; employees'
             // edits keep it; checked by ReservationService::renewalError()
             'renewal_of' => $this->route('id') && !$this->routeIs('account.*') ? ['exclude'] : ['nullable', 'integer', 'min:1'],
+            // the anchor day of a period ("Billing day", 2026-10-23): the account's edit form only; else set from the start day /
+            // kept as saved (ReservationService)
+            'subscription_day' => $this->route('id') && $this->routeIs('account.*') ? ['nullable', 'integer', 'between:1,31'] : ['exclude'],
         ];
     }
 
@@ -151,6 +154,7 @@ class ReservationRequest extends FormRequest
             'end_time' => 'end time',
             'end_at' => 'end date',
             'renewal_of' => 'renewal of',
+            'subscription_day' => 'billing day',
             'number_of_peoples' => 'number of people',
             'discount_percentage' => 'discount %',
             'discount_value' => 'discount value',

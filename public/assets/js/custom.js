@@ -771,8 +771,12 @@ function reservationEndFromPlan(form, planChanged) {
         end.setHours(hm[0] + 1, hm[1]);
         endTime.value = pad(end.getHours()) + ":" + pad(end.getMinutes());
     } else if (months) {
+        // a month plan: the anchor day (the account's "Billing day" field, or the Renew / edit form's data-anchor; new = the start
+        // day), clamped to the month's last day (Reservation::anchoredEnd(), 2026-10-23); a year plan: the same date next year
+        var dayEl = formField(form, "subscription_day");
+        var anchor = months === 1 ? (parseInt(dayEl && dayEl.value, 10) || parseInt(endEl.dataset.anchor, 10) || end.getDate()) : end.getDate();
         var target = new Date(end.getFullYear(), end.getMonth() + months, 1);
-        target.setDate(Math.min(end.getDate(), new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()));
+        target.setDate(Math.min(anchor, new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()));
         end = target;
         end.setDate(end.getDate() - 1);
     } else if (period === "week") {

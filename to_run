@@ -7,7 +7,7 @@
    withholding certificates, day closings: don't enter real data in those in the new system before go-live.
    Employees + their logins are upserted (kept on a re-run: positions / shifts / passwords you set stay).
  (The previous to_run is kept in storage/app/backups/to_run.before-2026-10-11 / -10-13 / -10-14 / -10-19.)
- Last full re-run: 2026-10-19 (fresh live backup, done by Claude; see docs/progress.md).
+ Last full re-run: 2026-10-23 (the 22-10 evening live backup, done by Claude; see docs/progress.md).
 =====================================================================
 
 =====================================================================
@@ -22,7 +22,7 @@
         (or re-enter it after).
  [ ] 5. STEP 3 — the SQL from "USE dwidar_res_portal;" down to the end of 3.15 (just before STEP 4) as ONE script.
         3.0d / 3.0b / 3.0e must say 'ok' (no BLOCKING rows), else stop.
- [ ] 6. STEP 4 (packages recalculate) → STEP 4b (SQL) → STEP 5 (payments:refresh, shifts:recalculate --imported).
+ [ ] 6. STEP 4 (packages recalculate) → STEP 4b (SQL) → STEP 5 (payments:refresh, shifts:recalculate --imported, then the 5-sd SQL: subscription_day 4 + 78).
  [ ] 7. STEP 5b a) dry run → check the numbers → real run; then 5b b) and 5b c) SQL (CURDATE() based cutoffs).
  [ ] 8. STEP 5c merge dry run → check the groups → real run (if packages moved: STEP 4b again).
  [ ] 9. STEP 5d (unique index) — its duplicates check must return 0 rows.
@@ -658,6 +658,19 @@ STEP 5 — paid / remaining of every reservation and package + the imported shif
 -----
 php artisan payments:refresh
 php artisan shifts:recalculate --imported
+
+-- 5-sd) SQL — subscription_day = the renewal anchor of a period (the day of month the next period starts on; user 2026-10-23).
+--    a) 4 running yearly Virtual Office periods imported with a stored day that is not their start day → their start day.
+--       Expected 4 the first time, 0 on a re-run.
+UPDATE reservations SET subscription_day = DAY(start_at)
+WHERE id IN (16702, 20714, 20715, 21087) AND subscription_day <> DAY(start_at);
+SELECT ROW_COUNT() fixed_yearly_days_expected_4;
+--    b) period rows imported with 0 (none running) → their start day. Expected 78 (2026-10-23 source), 0 on a re-run.
+--       App-created rows always have it (the start day, ReservationService); hourly / full day rows are left as they are.
+UPDATE reservations r JOIN subscription_types t ON t.id = r.subscription_type_id AND t.booking_mode = 'period'
+SET r.subscription_day = DAY(r.start_at)
+WHERE r.subscription_day = 0 AND r.start_at IS NOT NULL;
+SELECT ROW_COUNT() backfilled_zero_days_expected_78;
 
 -----
 STEP 5b — renewals of the imported periods (every run: 3.9 reloads the reservations, so renewal_of / left_at start empty)

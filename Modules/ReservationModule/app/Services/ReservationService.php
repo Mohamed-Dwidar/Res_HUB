@@ -70,6 +70,10 @@ class ReservationService
                 'reservation_status_id' => $this->statusService->defaultId($accountId),
                 'renewal_of' => $renewalOf,
             ]);
+            // a renewal carries the renewed period's anchor day (its start may be the 28th of an anchor 31), 2026-10-23
+            if ($renewalOf && !empty($period?->subscription_day)) {
+                $reservation->subscription_day = $period->subscription_day;
+            }
             if ($renewalOf && ($error = $this->renewalError($accountId, $reservation, $renewalOf))) {
                 throw ValidationException::withMessages(['renewal_of' => $error]);
             }
@@ -96,8 +100,14 @@ class ReservationService
 
         return DB::transaction(function () use ($reservation, $accountId, $data) {
             $oldPackageId = $reservation->package_id;
-            // the repeat is chosen on create only, it is kept as it is
-            $reservation->fill(Arr::except($this->reservationData($accountId, $data), ['is_repeat', 'repeat_frequency', 'repeat_interval']));
+            // the repeat is chosen on create only, it is kept as it is; the anchor day (subscription_day) is kept as saved, the
+            // account's edit form may change it ("Billing day", sent only then; 2026-10-23)
+            $reservation->fill(Arr::except($this->reservationData($accountId, $data), ['is_repeat', 'repeat_frequency', 'repeat_interval', 'subscription_day']));
+            if (!empty($data['subscription_day'])) {
+                $reservation->subscription_day = (int) $data['subscription_day'];
+            } elseif (!$reservation->subscription_day) {
+                $reservation->subscription_day = $reservation->start_at->day;
+            }
             // "Renewal of #" (the account's edit form only: the key is sent only then): set / cleared, checked like a Renew
             if (array_key_exists('renewal_of', $data)) {
                 $reservation->renewal_of = !empty($data['renewal_of']) ? (int) $data['renewal_of'] : null;
@@ -181,21 +191,33 @@ class ReservationService
 
     /**
      * The next period of a subscription (the "Renew" form, not saved): same member, package, type, space, unit, plan,
-     * amounts; no notes; renewal_of = the subscription. A time based plan starts when it ends, for the same length. A date plan:
-     * its last day = the DATE of its end (an imported end at 00:00 is that day, an app end is 23:59:59 of it — the next period
-     * of the imported data starts the day after in 501 / 544 cases, 2026-10-14), so it starts the day after, no overlap, for
-     * the same number of days.
+     * amounts; no notes; renewal_of = the subscription. A date plan: its last day = the DATE of its end (an imported end at 00:00
+     * is that day, an app end is 23:59:59 of it — the next period of the imported data starts the day after in 501 / 544 cases,
+     * 2026-10-14), so it starts the day after, no overlap; its end follows the plan's lease period and the carried anchor day
+     * (a month / year plan, Reservation::anchoredEnd(), 2026-10-23: 31-01 → 28-02 → 31-03 …; a multi-year period renews for
+     * 1 year), else the same number of days. A time based plan: a period type with a month / year plan = the same dates, with
+     * the current period's start / end times; otherwise it starts when the current one ends, for the same length.
+     * replicate() keeps the subscription_day.
      */
     public function renewalOf(Reservation $subscription): Reservation
     {
         $end = $subscription->realEnd() ?? $subscription->start_at;
-        if ($subscription->plan?->is_time_based) {
+        $timeBased = (bool) $subscription->plan?->is_time_based;
+        $anchoredEnd = !$timeBased || $subscription->isPeriod()
+            ? Reservation::anchoredEnd($subscription->renewalDate(), $subscription->subscription_day, $subscription->plan?->lease_period)
+            : null;
+        if ($timeBased && !$anchoredEnd) {
             $start = $end->copy();
             $length = $subscription->start_at->diffInSeconds($end);
             $newEnd = $length > 0 ? $start->copy()->addSeconds($length) : $start->copy();
         } else {
             $start = $subscription->renewalDate();
-            $newEnd = $start->copy()->addDays((int) $subscription->start_at->copy()->startOfDay()->diffInDays($end->copy()->startOfDay()))->endOfDay();
+            $newEnd = $anchoredEnd
+                ?? $start->copy()->addDays((int) $subscription->start_at->copy()->startOfDay()->diffInDays($end->copy()->startOfDay()))->endOfDay();
+            if ($timeBased) {
+                $start->setTimeFrom($subscription->start_at);
+                $newEnd->setTimeFrom($end);
+            }
         }
 
         // the same package (the Renew form does not change it)
@@ -358,18 +380,24 @@ class ReservationService
     }
 
     // the copies of a repeated reservation: same data, moved to each repeat start (same duration), repeat_id = the original;
-    // a period type: each copy renews the one before it (renewal_of: the first copy → the original), so the chain is renewed
+    // a period type: each copy renews the one before it (renewal_of: the first copy → the original), so the chain is renewed;
+    // a period type repeated by its plan's lease period (monthly / yearly): each end by the original's anchor day
+    // (Reservation::anchoredEnd(), 2026-10-23: no gaps / overlaps at month ends) and the copies keep its subscription_day
     private function createRepeats(Reservation $reservation, Carbon $until): int
     {
         $starts = Reservation::repeatStarts($reservation->start_at, $reservation->repeat_frequency, (int) $reservation->repeat_interval, $until, Reservation::MAX_REPEATS);
         $duration = $reservation->end_at ? $reservation->start_at->diffInSeconds($reservation->end_at) : null;
         $previousId = $reservation->isPeriod() ? $reservation->id : null;
+        $lease = $reservation->plan?->is_time_based ? null : $reservation->plan?->lease_period;
+        $anchored = $previousId && ($reservation->repeat_frequency === 'monthly' && $lease === 'month'
+            || $reservation->repeat_frequency === 'yearly' && $lease === 'year');
 
         foreach ($starts as $start) {
             $copy = $reservation->replicate();
             $copy->start_at = $start;
-            $copy->end_at = $duration !== null ? $start->copy()->addSeconds($duration) : null;
-            $copy->subscription_day = $start->day;
+            $copy->end_at = $anchored ? Reservation::anchoredEnd($start, $reservation->subscription_day, $lease)
+                : ($duration !== null ? $start->copy()->addSeconds($duration) : null);
+            $copy->subscription_day = $anchored ? $reservation->subscription_day : $start->day;
             $copy->is_repeat = false;
             $copy->repeat_frequency = 'monthly';
             $copy->repeat_interval = 1;

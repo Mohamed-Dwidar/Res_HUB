@@ -49,6 +49,8 @@
         && isset($subscriptionTypes[$reservation->subscription_type_id]) ? $subscriptionTypes[$reservation->subscription_type_id] : null;
     // "Book For": a saved reservation in a package opens on Package
     $bookFor = old('book_for', $reservation?->package_id ? 'package' : 'member');
+    // the anchor day of the Renew / edit form (custom.js reservationEndFromPlan(): a month plan ends by it; new = the start day)
+    $anchorDay = ($renewing || $reservation?->exists) && $reservation->subscription_day ? $reservation->subscription_day : null;
 @endphp
 
 @if ($renewing)
@@ -140,7 +142,8 @@
         {{-- always required ("The reservation continues" removed 2026-10-15: a subscription is renewed by a new period, renewal_of) --}}
         @include('layoutmodule::partials.field', ['name' => 'end_at', 'label' => 'End Date', 'type' => 'date', 'required' => true,
             'value' => old('end_at', $endAt),
-            'attrs' => 'data-default-from="start_at"' . ($nightDates ? $nightDates . ' data-real-date="' . $endDefault->format('Y-m-d') . '"' : '')])
+            'attrs' => 'data-default-from="start_at"' . ($anchorDay ? ' data-anchor="' . $anchorDay . '"' : '')
+                . ($nightDates ? $nightDates . ' data-real-date="' . $endDefault->format('Y-m-d') . '"' : '')])
         <div data-time-fields>
             @include('layoutmodule::partials.field', ['name' => 'end_time', 'label' => 'End Time', 'type' => 'time', 'required' => true, 'value' => $endTime])
         </div>
@@ -194,6 +197,10 @@
     <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
         @include('layoutmodule::partials.field', ['name' => 'renewal_of', 'label' => 'Renewal of #', 'type' => 'number', 'value' => $reservation->renewal_of,
             'attrs' => 'min="1" step="1"', 'hint' => 'The reservation number of the period this one renews (empty = none). Same subscription type, not renewed by another one.'])
+        {{-- the anchor day (subscription_day, 2026-10-23): a monthly renewal starts on this day of the month (the month's last day when shorter) --}}
+        @include('layoutmodule::partials.field', ['name' => 'subscription_day', 'label' => 'Billing day', 'type' => 'number',
+            'value' => old('subscription_day', $reservation->subscription_day ?: $reservation->start_at?->day),
+            'attrs' => 'min="1" max="31" step="1"', 'hint' => 'The day of the month the subscription renews on (31 = the last day of a shorter month).'])
     </div>
 @endif
 
