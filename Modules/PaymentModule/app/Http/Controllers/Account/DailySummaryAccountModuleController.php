@@ -30,11 +30,14 @@ class DailySummaryAccountModuleController extends Controller
         $accountId = Auth::user()->userable->ownerAccountId();
         $date = $request->filled('date') && strtotime((string) $request->input('date')) ? Carbon::parse($request->input('date'))->startOfDay() : today();
 
+        $shifts = $this->shiftService->closingsForDate($accountId, $date);
+
         return view('paymentmodule::DailySummary.index', [
             'date' => $date,
-            'summary' => $this->summaryService->summary($accountId, $date),
+            // By Collector also lists the logins with an empty closing of the day (0.00)
+            'summary' => $this->summaryService->withEmptyClosings($this->summaryService->summary($accountId, $date), $shifts),
             'refunds' => $this->summaryService->refunds($accountId, $date),
-            'shifts' => $this->shiftService->closingsForDate($accountId, $date),
+            'shifts' => $shifts,
             'openPeriods' => $this->shiftService->openPeriods($accountId, $date),
             // the employees' open shifts older than the reminder time (+ their "still working" answers), whatever their dates
             'longOpen' => $this->shiftService->longOpenPeriods(Auth::user()->userable),

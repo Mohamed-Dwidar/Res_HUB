@@ -102,7 +102,8 @@ class ShiftClosingService
 
     /**
      * The collector's open shift: ['payments' (oldest first), 'expenses', 'summary', 'since' (created_at of the oldest payment /
-     * expense, null = none), 'last_closing' (their last closing, null = never)]
+     * expense, null = none), 'last_closing' (their last closing, null = never), 'already_closed' (nothing open and already closed
+     * in this business day: no second closing, 2026-10-27)]
      */
     public function openPeriod($accountId, $userId): array
     {
@@ -110,13 +111,28 @@ class ShiftClosingService
             ->with('payable', 'member', 'paymentMethod', 'incomeCategory')->orderBy('created_at')->orderBy('id')->get();
         $expenses = $this->openExpenses($accountId, $userId)->with('expenseCategory', 'paymentMethod')->orderBy('created_at')->orderBy('id')->get();
 
+        $lastClosing = ShiftClosing::where('account_id', $accountId)->where('user_id', $userId)->latest('closed_at')->first();
+
         return [
             'payments' => $payments,
             'expenses' => $expenses,
             'summary' => $this->summary($accountId, $payments, $expenses),
             'since' => collect([$payments->first()?->created_at, $expenses->first()?->created_at])->filter()->min(),
-            'last_closing' => ShiftClosing::where('account_id', $accountId)->where('user_id', $userId)->latest('closed_at')->first(),
+            'last_closing' => $lastClosing,
+            'already_closed' => $payments->isEmpty() && $expenses->isEmpty() && $this->closedThisBusinessDay($accountId, $lastClosing),
         ];
+    }
+
+    // a closing made in the current business day (Settings › General hours: Pivot = from 02:00 to 02:00)
+    private function closedThisBusinessDay($accountId, ?ShiftClosing $closing): bool
+    {
+        if (!$closing?->closed_at) {
+            return false;
+        }
+        $account = Account::settingsOf($accountId);
+        [$start] = $account->businessDay($account->businessDate());
+
+        return $closing->closed_at->gte($start);
     }
 
     /**
@@ -218,8 +234,13 @@ class ShiftClosingService
             // locked until the end: a payment / expense can't join / leave the shift while it is closed
             $payments = $this->openPayments($accountId, $collector->getKey())->lockForUpdate()->get();
             $expenses = $this->openExpenses($accountId, $collector->getKey())->lockForUpdate()->get();
+            // an empty shift can be closed too (0.00, user 2026-10-27): the login marks the end of their shift — once per
+            // business day: nothing new since a closing of today = already closed
             if ($payments->isEmpty() && $expenses->isEmpty()) {
-                throw ValidationException::withMessages(['shift' => 'There is no cash in or cash out to close.']);
+                $last = ShiftClosing::where('account_id', $accountId)->where('user_id', $collector->getKey())->latest('closed_at')->first();
+                if ($this->closedThisBusinessDay($accountId, $last)) {
+                    throw ValidationException::withMessages(['shift' => 'This shift is already closed (' . $last->closed_at->format('d-m-Y h:i A') . '), nothing new since then.']);
+                }
             }
             if ((int) $payments->max('id') !== $upToId || (int) $expenses->max('id') !== $upToExpenseId) {
                 throw ValidationException::withMessages(['shift' => 'Cash in or cash out was added or changed since you opened this window. Review the totals again.']);
@@ -425,13 +446,19 @@ class ShiftClosingService
         return $closing->expenses()->with('expenseCategory', 'paymentMethod')->latest('created_at')->latest('id')->limit(self::POPUP_LIMIT)->get();
     }
 
-    // the closings with payments / expenses dated $date (the Daily Summary)
+    // the closings with payments / expenses dated $date (the Daily Summary) + the EMPTY closings (0.00, 2026-10-27) closed in
+    // that business day
     public function closingsForDate($accountId, $date): Collection
     {
-        $date = Carbon::parse($date)->toDateString();
+        $day = Carbon::parse($date)->startOfDay();
+        $date = $day->toDateString();
+        [$from, $to] = Account::settingsOf($accountId)->businessDay($day);
+
         return $this->listQuery($accountId)
             ->where(fn ($query) => $query->whereHas('payments', fn ($query) => $query->where('paid_at', $date))
-                ->orWhereHas('expenses', fn ($query) => $query->where('spent_at', $date)))
+                ->orWhereHas('expenses', fn ($query) => $query->where('spent_at', $date))
+                ->orWhere(fn ($query) => $query->whereDoesntHave('payments')->whereDoesntHave('expenses')
+                    ->where('closed_at', '>=', $from)->where('closed_at', '<', $to)))
             ->orderBy('closed_at')->get();
     }
 

@@ -16,7 +16,7 @@
 
 @if (!empty($summary['collectors']))
     {{-- By Collector (redesigned 2026-10-26): one bold row per collector with their totals, then their methods indented and
-         lighter (only when more than one method; one method = its name next to the collector); amounts right aligned --}}
+         lighter (always, also for one method: user 2026-10-27); an empty closing = the tag "No cash in / out"; amounts right aligned --}}
     <div class="form-section mt-8">By Collector</div>
     <div class="table-wrap">
         <table class="data-table collector-table">
@@ -29,16 +29,14 @@
                         $totalRefunds = $lines->sum('refunds');
                         $totalOut = $lines->sum('expenses');
                         $totalNet = (float) ($collector['net'] ?? $lines->sum('net'));
-                        $single = $lines->count() === 1;
                     @endphp
                     <tr class="collector-table__person">
-                        <td>{{ $collector['name'] }}@if ($single) <span class="collector-table__method-tag">{{ $methodName($lines->keys()->first()) }}</span>@endif</td>
+                        <td>{{ $collector['name'] }}@if (!empty($collector['empty'])) <span class="collector-table__method-tag">No cash in / out · shift closed</span>@endif</td>
                         <td class="num {{ $inClass($totalIn) }}">{{ number_format($totalIn, 2) }}</td>
                         <td class="num {{ $outClass($totalRefunds) }}">{{ number_format(-$totalRefunds, 2) }}</td>
                         <td class="num {{ $outClass($totalOut) }}">{{ number_format(-$totalOut, 2) }}</td>
                         <td class="num {{ $netClass($totalNet) }}">{{ number_format($totalNet, 2) }}</td>
                     </tr>
-                    @unless ($single)
                         @foreach ($lines as $methodId => $line)
                             <tr class="collector-table__method">
                                 <td>{{ $methodName($methodId) }}</td>
@@ -48,7 +46,6 @@
                                 <td class="num {{ (float) $line['net'] < 0 ? 'money-out' : '' }}">{{ number_format($line['net'], 2) }}</td>
                             </tr>
                         @endforeach
-                    @endunless
                 @endforeach
             </tbody>
         </table>

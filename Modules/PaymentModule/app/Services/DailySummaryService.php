@@ -105,6 +105,28 @@ class DailySummaryService
         return $summary;
     }
 
+    /**
+     * By Collector + the logins whose closings of the day are EMPTY (0.00, ShiftClosingService::closingsForDate(); 2026-10-27):
+     * a collector line with no methods, net 0, 'empty' = true — only for logins with no cash in / out that day.
+     */
+    public function withEmptyClosings(array $summary, Collection $closings): array
+    {
+        foreach ($closings as $closing) {
+            $empty = !$closing->count && !(int) ($closing->totals['expenses']['count'] ?? 0);
+            if (!$empty || isset($summary['collectors'][$closing->user_id])) {
+                continue;
+            }
+            $summary['collectors'][$closing->user_id] = [
+                'name' => $closing->user?->userable?->displayName() ?? 'User #' . $closing->user_id,
+                'methods' => [],
+                'net' => 0.0,
+                'empty' => true,
+            ];
+        }
+
+        return $summary;
+    }
+
     // the refunds dated that day (who, amount, the original payment, reason), as they were added
     public function refunds($accountId, $date): Collection
     {

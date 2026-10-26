@@ -11,7 +11,10 @@
 @endsection
 
 @section('actions')
-    @if ($period['payments']->isNotEmpty() || $period['expenses']->isNotEmpty())
+    {{-- also with no cash in / out (closes with 0.00, 2026-10-27), but not twice: nothing new since a closing of this business day --}}
+    @if ($period['already_closed'])
+        <span class="badge badge-status-success"><i data-lucide="lock"></i> Shift closed {{ $period['last_closing']->closed_at->format('h:i A') }}</span>
+    @else
         <a href="{{ route($area . '.shift.confirm') }}" data-modal class="btn btn-primary"><i data-lucide="lock"></i> Close My Shift</a>
     @endif
 @endsection

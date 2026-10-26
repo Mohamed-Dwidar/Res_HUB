@@ -16,18 +16,29 @@
 @endsection
 
 @section('content')
-    @if ($period['payments']->isEmpty() && $period['expenses']->isEmpty())
-        <div class="text-slate-500">No cash in or cash out since the last closing, nothing to close.</div>
+    {{-- an empty shift closes too, with 0.00 (2026-10-27) --}}
+    @php
+        $empty = $period['payments']->isEmpty() && $period['expenses']->isEmpty();
+    @endphp
+    @if ($period['already_closed'])
+        {{-- closed already in this business day and nothing new since (no second closing, 2026-10-27) --}}
+        <div class="text-slate-500">This shift is already closed ({{ $period['last_closing']->closed_at->format('d-m-Y h:i A') }}), nothing new since then.</div>
     @else
         <div class="mb-4">
-            {{ $period['summary']['count'] }} payments and {{ $period['summary']['expenses']['count'] }} expenses since {{ $period['since']?->format('d-m-Y h:i A') }}.
-            After closing, only the account can still change them (with a reason, logged on the shift).
+            @if ($empty)
+                No cash in or cash out since the last closing: the shift closes with 0.00.
+            @else
+                {{ $period['summary']['count'] }} payments and {{ $period['summary']['expenses']['count'] }} expenses since {{ $period['since']?->format('d-m-Y h:i A') }}.
+                After closing, only the account can still change them (with a reason, logged on the shift).
+            @endif
             @if ($employee)
                 It is logged as closed by you on their behalf.
             @endif
         </div>
 
-        @include('paymentmodule::Shift.partials.totals', ['summary' => $period['summary']])
+        @unless ($empty)
+            @include('paymentmodule::Shift.partials.totals', ['summary' => $period['summary']])
+        @endunless
 
         <form method="POST" action="{{ route($employee ? 'account.shifts.close' : $area . '.shift.close') }}" data-ajax>
             @csrf
