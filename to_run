@@ -7,7 +7,7 @@
    withholding certificates, day closings: don't enter real data in those in the new system before go-live.
    Employees + their logins are upserted (kept on a re-run: positions / shifts / passwords you set stay).
  (The previous to_run is kept in storage/app/backups/to_run.before-2026-10-11 / -10-13 / -10-14 / -10-19.)
- Last full re-run: 2026-10-23 (the 22-10 evening live backup, done by Claude; see docs/progress.md).
+ Last full re-run: 2026-10-26 (the 26-10 evening live backup, done by Claude; see docs/progress.md).
 =====================================================================
 
 =====================================================================
@@ -25,7 +25,7 @@
  [ ] 6. STEP 4 (packages recalculate) → STEP 4b (SQL) → STEP 5 (payments:refresh, shifts:recalculate --imported, then the 5-sd SQL: subscription_day 4 + 78).
  [ ] 7. STEP 5b a) dry run → check the numbers → real run; then 5b b) and 5b c) SQL (CURDATE() based cutoffs).
  [ ] 8. STEP 5c merge dry run → check the groups → real run (if packages moved: STEP 4b again).
- [ ] 9. STEP 5d (unique index) — its duplicates check must return 0 rows.
+ [ ] 9. STEP 5d (unique index) — its duplicates check must return 0 rows; then STEP 5e (ANALYZE TABLE: fresh index statistics, else the Schedule is slow).
  [ ] 10. STEP 6 checks (every old = new, 6.6 / 6.11 all 0).
  [ ] 11. php artisan optimize:clear; open Schedule, Reservations, Packages, Payments, My Shift, Members (account + employee).
  SKIP: STEP 2 and everything in the ARCHIVE section at the end (one-time steps, already applied).
@@ -445,8 +445,11 @@ FROM dwidar_pivot_api.members m;
 
 -- 3.7b phone_key of every member (2026-10-18; Member::phoneKey(): digits only; an Egyptian mobile → its 10 digits), the same
 --      key the app saves. Expected on account 1: 2,932 rows (the duplicates are merged in STEP 5c, after the imports)
+--      A phone with several numbers (separated by / , ; |) = the key of the first one (2026-10-26: #2930 "01026126829 /
+--      01550787727" = 22 digits, longer than phone_key varchar(20) → the import stopped here).
 UPDATE members m
-JOIN (SELECT id, REGEXP_REPLACE(phone, '[^0-9]', '') d FROM members) x ON x.id = m.id
+JOIN (SELECT id, REGEXP_REPLACE(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(phone, '/', 1), ',', 1), ';', 1), '|', 1), '[^0-9]', '') d
+      FROM members) x ON x.id = m.id
 SET m.phone_key = IF(REGEXP_LIKE(x.d, '^(0020|20|0)?1[0125][0-9]{8}$'), RIGHT(x.d, 10), x.d)
 WHERE m.merged_into IS NULL;
 
@@ -591,15 +594,21 @@ SET @sql = CONCAT('ALTER TABLE payment_methods AUTO_INCREMENT = ', (SELECT GREAT
 --      closed_at = the LATER of its last payment / last expense (created_at); its "close" event at the same time (user 2026-10-14).
 --      Re-runnable: it only adds a shift for a login without one and links what is still open. The totals (count, collected,
 --      expenses, net per method) are set by STEP 5 `php artisan shifts:recalculate --imported` (the app's own code).
+--      The business day of the run stays OPEN (user 2026-10-26): rows ENTERED (created_at) since its start (today_hours_to − 24,
+--      Pivot 02:00; before 02:00 = the day before) AND DATED that day (payments.paid_at / expenses.spent_at) are left in each
+--      login's open shift, closed from My Shift in the app; a row entered today with an earlier date was earned then → closed.
+SET @cut = (SELECT GREATEST(today_hours_to - 24, 0) FROM accounts WHERE id = 1);
+SET @open_from = TIMESTAMP(DATE(NOW() - INTERVAL @cut HOUR)) + INTERVAL @cut HOUR;
+SELECT @open_from open_shifts_from;
 INSERT INTO shift_closings (account_id, user_id, first_payment_at, last_payment_at, count, cash_total, withholding_total, expenses_total,
   totals, notes, is_imported, closed_by, closed_at, created_at, updated_at)
 SELECT 1, x.user_id, MIN(x.first_at), MAX(x.last_at), 0, 0, 0, 0, NULL, 'Imported from the old system', 1, 1, MAX(x.last_at), NOW(), NOW()
 FROM (
   SELECT p.creatable_id user_id, MIN(p.created_at) first_at, MAX(p.created_at) last_at FROM payments p
-  WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 GROUP BY p.creatable_id
+  WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 AND (p.created_at < @open_from OR p.paid_at < DATE(@open_from)) GROUP BY p.creatable_id
   UNION ALL
   SELECT e.creatable_id, MIN(e.created_at), MAX(e.created_at) FROM expenses e
-  WHERE e.account_id = 1 AND e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0 GROUP BY e.creatable_id
+  WHERE e.account_id = 1 AND e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0 AND (e.created_at < @open_from OR e.spent_at < DATE(@open_from)) GROUP BY e.creatable_id
 ) x JOIN users u ON u.id = x.user_id
 WHERE x.user_id NOT IN (SELECT user_id FROM shift_closings WHERE notes = 'Imported from the old system')
 GROUP BY x.user_id;
@@ -612,12 +621,16 @@ SELECT COUNT(*) imported_closings_expected_15 FROM shift_closings WHERE is_impor
 UPDATE payments p
 JOIN shift_closings s ON s.account_id = p.account_id AND s.user_id = p.creatable_id AND s.notes = 'Imported from the old system'
 SET p.shift_closing_id = s.id
-WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0;
+WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 AND (p.created_at < @open_from OR p.paid_at < DATE(@open_from));
 
 UPDATE expenses e
 JOIN shift_closings s ON s.account_id = e.account_id AND s.user_id = e.creatable_id AND s.notes = 'Imported from the old system'
 SET e.shift_closing_id = s.id
-WHERE e.account_id = 1 AND e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0;
+WHERE e.account_id = 1 AND e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0 AND (e.created_at < @open_from OR e.spent_at < DATE(@open_from));
+
+-- left open (the run's business day), per login: today's cash in / out of the old system (2026-10-26 run: payments 16: 8, 7: 3; expenses 16: 1, 1: 2, 7: 1)
+SELECT 'payments' t, creatable_id login, COUNT(*) n FROM payments WHERE id < 100001 AND deleted_at IS NULL AND shift_closing_id = 0 GROUP BY creatable_id
+UNION ALL SELECT 'expenses', creatable_id, COUNT(*) FROM expenses WHERE id < 100001 AND deleted_at IS NULL AND shift_closing_id = 0 GROUP BY creatable_id;
 
 -- every imported shift: its span + closed_at from its payments AND expenses (the later last one)
 UPDATE shift_closings s
@@ -732,6 +745,18 @@ PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 SELECT account_id, phone_key, COUNT(*) n FROM members WHERE phone_key IS NOT NULL GROUP BY account_id, phone_key HAVING n > 1;
 
 -----
+STEP 5e — SQL, AFTER STEP 5d: fresh index statistics (2026-10-26). MySQL samples them right after the inserts of STEP 3 (renewal_of
+          still empty then) and refreshes them only after ~10% of a table changes: STEP 5b fills renewal_of on ~5% of the
+          reservations, so the stats kept saying "1 distinct value" and the Schedule's "not renewed" check scanned every
+          reservation per period (6.3 s → see the check). Only statistics, no data change; safe to run again.
+-----
+ANALYZE TABLE reservations, members, packages, payments, expenses, extras;
+-- check: the renewal_of index must show about as many distinct values as there are renewal links (STEP 5b a), not 1
+SELECT (SELECT CARDINALITY FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations'
+          AND INDEX_NAME = 'reservations_renewal_of_index') renewal_of_cardinality,
+       (SELECT COUNT(DISTINCT renewal_of) FROM reservations) renewal_links;
+
+-----
 STEP 6 — checks (SQL): every "old" must equal its "new"
 -----
 -- 6.1 rows
@@ -804,10 +829,16 @@ UNION ALL SELECT 'packages credit', COUNT(*), SUM(remaining) FROM packages WHERE
 
 -- 6.11 shift closings (after 3.15 + STEP 5): every imported payment / expense is in its imported closing; the closings' totals = their
 --      payments / expenses; every imported closing is closed at its LAST payment / expense, its "close" event at the same time — all 0
-SELECT 'imported payments without a closing (0)' t, COUNT(*) n FROM payments p
-  WHERE p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0
-UNION ALL SELECT 'imported expenses without a closing (0)', COUNT(*) FROM expenses e
-  WHERE e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0
+--      (run on the same day as STEP 3: rows of the run's business day stay open on purpose, 3.15)
+SET @cut = (SELECT GREATEST(today_hours_to - 24, 0) FROM accounts WHERE id = 1);
+SET @open_from = TIMESTAMP(DATE(NOW() - INTERVAL @cut HOUR)) + INTERVAL @cut HOUR;
+SELECT 'imported payments not entered + dated on the run day without a closing (0)' t, COUNT(*) n FROM payments p
+  WHERE p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 AND (p.created_at < @open_from OR p.paid_at < DATE(@open_from))
+UNION ALL SELECT 'imported expenses not entered + dated on the run day without a closing (0)', COUNT(*) FROM expenses e
+  WHERE e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0 AND (e.created_at < @open_from OR e.spent_at < DATE(@open_from))
+UNION ALL SELECT 'imported rows of the run day inside a closing (0)', COUNT(*) FROM (
+  SELECT id FROM payments WHERE id < 100001 AND deleted_at IS NULL AND shift_closing_id > 0 AND created_at >= @open_from AND paid_at >= DATE(@open_from)
+  UNION ALL SELECT id FROM expenses WHERE id < 100001 AND deleted_at IS NULL AND shift_closing_id > 0 AND created_at >= @open_from AND spent_at >= DATE(@open_from)) r
 UNION ALL SELECT 'closings whose totals differ (0)', COUNT(*) FROM shift_closings s
   LEFT JOIN (SELECT shift_closing_id, COUNT(*) n, ROUND(SUM(CASE type WHEN 'payment' THEN amount WHEN 'refund' THEN -amount ELSE 0 END), 2) cash
         FROM payments WHERE deleted_at IS NULL AND shift_closing_id > 0 GROUP BY shift_closing_id) p ON p.shift_closing_id = s.id

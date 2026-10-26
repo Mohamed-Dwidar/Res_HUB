@@ -42,10 +42,11 @@ class Member extends Model
     /**
      * The phone as compared / searched: digits only; an Egyptian mobile → its 10 digits (so 0122…, 20122…, +20122…, 0020122…
      * are one number); any other number keeps all its digits (a foreign number never matches an Egyptian one by chance).
+     * A phone with several numbers ("0102… / 0155…", separated by / , ; |) = the first one (2026-10-26: the column is 20 long).
      */
     public static function phoneKey(?string $phone): string
     {
-        $digits = preg_replace('/\D/', '', (string) $phone);
+        $digits = preg_replace('/\D/', '', preg_split('/[\/,;|]/', (string) $phone)[0]);
         return preg_match(self::EGYPT_MOBILE_REGEX, $digits, $match) ? $match[1] : $digits;
     }
 

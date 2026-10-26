@@ -8,6 +8,7 @@
 
 @section('actions')
     <a href="{{ route('account.employees.edit', $employee->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    @include('employeemodule::Account.Employee.partials.left-form', ['backToView' => true])
     @include('employeemodule::Account.Employee.partials.delete-form')
 @endsection
 

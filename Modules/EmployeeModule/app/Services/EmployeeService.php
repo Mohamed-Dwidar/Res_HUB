@@ -69,6 +69,15 @@ class EmployeeService
         return $employee;
     }
 
+    // Mark Left (leave date = today: from now on he can not log in, EnsureUserIsActive logs him out on his next request) /
+    // Undo Left (no leave date); the Employees list row menu and the employee view (2026-10-26)
+    public function setLeft($accountId, $id, bool $left): Employee
+    {
+        $employee = $this->findOne($accountId, $id);
+        $employee->update(['leave_date' => $left ? today() : null]);
+        return $employee;
+    }
+
     // soft delete; the login is removed so he can not sign in and the email can be used again
     public function deleteOne($accountId, $id)
     {

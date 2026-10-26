@@ -1,4 +1,4 @@
-# Res HUB (Pivot Reservations)
+# Res HUB (Reservations Portal)
 
 The reservations and payments system for a coworking space: spaces, units and plans; hourly, full-day and monthly / yearly
 subscription bookings; member packages; cash in / cash out with shift closing; and the daily Schedule page.

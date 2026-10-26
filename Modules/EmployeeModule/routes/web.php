@@ -20,6 +20,8 @@ Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' .
         Route::get('{id}/edit', [EmployeeAccountModuleController::class, 'edit'])->name('edit');
         Route::put('{id}', [EmployeeAccountModuleController::class, 'update'])->name('update');
         Route::delete('{id}', [EmployeeAccountModuleController::class, 'destroy'])->name('destroy');
+        Route::patch('{id}/left', [EmployeeAccountModuleController::class, 'left'])->name('left');
+        Route::patch('{id}/left/undo', [EmployeeAccountModuleController::class, 'undoLeft'])->name('left.undo');
         Route::get('{id}/attachments/{attachmentId}', [EmployeeAccountModuleController::class, 'downloadAttachment'])->name('attachments.download');
     });
 

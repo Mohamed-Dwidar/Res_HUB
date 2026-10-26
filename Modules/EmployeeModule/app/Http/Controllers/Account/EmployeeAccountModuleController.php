@@ -124,6 +124,25 @@ class EmployeeAccountModuleController extends Controller
         ]);
     }
 
+    // Mark Left / Undo Left (the row menu: the updated row; the employee view: back_to_view → the view again)
+    public function left(Request $request, $id)
+    {
+        return $this->leftAnswer($request, $id, true, 'The employee has been marked as left, he can not log in any more.');
+    }
+
+    public function undoLeft(Request $request, $id)
+    {
+        return $this->leftAnswer($request, $id, false, 'The employee is working again, he can log in.');
+    }
+
+    private function leftAnswer(Request $request, $id, bool $left, string $message)
+    {
+        $this->employeeService->setLeft($this->accountId(), $id, $left);
+
+        return response()->json(['message' => $message, 'row' => $this->row($request, $id)]
+            + ($request->boolean('back_to_view') ? ['modal' => route('account.employees.show', $id)] : []));
+    }
+
     public function destroy($id)
     {
         $this->employeeService->deleteOne($this->accountId(), $id);

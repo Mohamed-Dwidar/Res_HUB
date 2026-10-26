@@ -2,7 +2,7 @@
     One period row ($reservation, $kind today | overdue | next | new). Payment is due at the START of a period (2026-10-19):
     renewed = its renewal (renewedBy) exists AND is paid.
     - today / next: its renewal date (the day after its last day, Reservation::renewalDate()), the period's amount (net);
-      no renewal → Renew | a renewal still owing → "Renewal created · Due <remaining>" + Pay (Cash In for the renewal) |
+      no renewal → Renew (+ Mark left on Renews today, 2026-10-26) | a renewal still owing → "Renewal created · Due <remaining>" + Pay (Cash In for the renewal) |
       a paid renewal → ✓ Renewed → its end
     - overdue, overdue_kind renew (ended, no renewal): "due since <renewal date>", the period's amount, Renew + Mark left
       (+ its own Due / Pay when it still owes) | overdue_kind pay (the chain's current period still owing): "due since <its start>",
@@ -85,6 +85,8 @@
                 @if ($owes($reservation))
                     <a href="{{ $payUrl($reservation) }}" data-modal class="btn btn-secondary btn-sm"><i data-lucide="wallet"></i> Pay</a>
                 @endif
+                @include('reservationmodule::Reservation.partials.left-form')
+            @elseif ($kind === 'today')
                 @include('reservationmodule::Reservation.partials.left-form')
             @endif
         @endif
