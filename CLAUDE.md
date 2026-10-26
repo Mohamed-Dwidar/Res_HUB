@@ -1,4 +1,4 @@
-# Project: Res Portal (Reservations)
+# Project: Res HUB (Reservations)
 
 @docs/progress.md
 

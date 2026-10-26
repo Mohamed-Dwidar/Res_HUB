@@ -1,61 +1,128 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Res HUB (Pivot Reservations)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+The reservations and payments system for a coworking space: spaces, units and plans; hourly, full-day and monthly / yearly
+subscription bookings; member packages; cash in / cash out with shift closing; and the daily Schedule page.
+It replaces the old Pivot system (`dwidar_pivot_api`), whose data is imported by the `to_run` script.
 
-## About Laravel
+## Main features
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Schedule** — the business day at a glance (the day runs to 02:00): an hourly timeline, full-day bookings, subscriptions
+  starting / renewing / not renewed, cancelled bookings and the open shift's totals.
+- **Reservations** — hourly, full-day and period (subscription) bookings, with:
+  - a live availability check against each unit's capacity;
+  - repeats;
+  - Renew, with calendar-month renewals on the subscription's billing day;
+  - Mark left;
+  - Today / Upcoming / All tabs and list filters, including a Renewal filter.
+- **Packages** — a member's bundle of reservations with a discount, extras and a PDF statement.
+- **Members** — server-side search, quick add from any form, duplicates found by mobile number and merged.
+- **Payments** — Cash In (payments, withholding), Cash Out (expenses, refunds), receipts (PDF), withholding certificates.
+- **Shift closing** — every login closes its own shift. Changes after closing are made by the account owner with a reason,
+  and are logged. The owner also has a Daily Summary page.
+- **Settings** — spaces and units (drag-and-drop order), plans, subscription types, reservation statuses, payment methods,
+  income / expense categories, companies, jobs, employee positions and shifts.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Users and areas
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+| Area | Login | Who |
+|---|---|---|
+| Admin | `/admin` (guard `admin`) | approves accounts |
+| Account | `/login` (guard `web`) | the business owner: everything, incl. edits / deletes and settings |
+| Employee | `/login` (guard `web`) | the account's staff: daily work (Schedule, reservations, payments, packages, members, My Shift) |
 
-## Learning Laravel
+`users.userable` is a morph to `Account` or `Employee`. Data is scoped by `Auth::user()->userable->ownerAccountId()`.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Stack
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+- Laravel 12, PHP ^8.2, MySQL (timezone Africa/Cairo)
+- Modular: [`nwidart/laravel-modules`](https://github.com/nWidart/laravel-modules), 14 modules in `Modules/`
+- Blade + the Tailwise "dagger" template (compiled `public/assets/css/app.css`), vanilla JS in `public/assets/js/custom.js`
+- DataTables (server side, `yajra/laravel-datatables-oracle`), with jQuery used only for DataTables (`noConflict`)
+- `prettus/l5-repository`, `intervention/image`, `maatwebsite/excel`, `niklasravnsborg/laravel-pdf` (mpdf)
+- **No CDN:** every library and font is a local file under `public/assets/vendor/` and `public/assets/fonts/`.
+  This covers jQuery, DataTables, SweetAlert2, flatpickr, Tom Select and Lucide.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Getting started
 
-## Laravel Sponsors
+```bash
+composer install
+cp .env.example .env          # set DB_DATABASE / DB_USERNAME / DB_PASSWORD
+php artisan key:generate
+php artisan migrate           # see "Database" below
+php artisan serve             # http://127.0.0.1:8000
+```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+- There's no front-end build. Edit `public/assets/css/custom.css` and `public/assets/js/custom.js` directly; they're loaded
+  with `?v=filemtime`.
+- The Vite / Tailwind entries in `package.json` aren't used by the pages.
+- After changing views or config, run `php artisan optimize:clear`.
 
-### Premium Partners
+### Useful commands
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+| Command | What it does |
+|---|---|
+| `php artisan payments:refresh {--account=}` | Recalculates paid / remaining of every reservation and package |
+| `php artisan shifts:recalculate {--imported} {--account=}` | Recalculates shift totals (payments − refunds − expenses) |
+| `php artisan reservations:link-renewals {--dry-run} {--account=}` | Links imported subscription periods to the period they renew |
+| `php artisan members:merge-duplicates {--dry-run} {--account=}` | Merges members that share one mobile number |
+| `php artisan test` | Tests (only the Laravel examples so far) |
 
-## Contributing
+## Project structure
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```
+Modules/{Name}Module/
+  app/Http/Controllers/{Account|Admin|Employee|Guest|Auth}/   {Module}{UserType}ModuleController
+  app/Http/Controllers/Concerns/                              shared Account + Employee actions (traits)
+  app/Http/Requests, Models, Repositories, Services
+  database/Migrations, resources/views, routes/web.php
+app/Helpers/                 LocalizedHelper (name_ar / name_en), SafeMorphHelper, UploaderHelper
+public/assets/css/custom.css all custom CSS (pdf.css for PDF views only)
+public/assets/js/custom.js   popups, ajax forms, dependent selects, the Schedule page, list filters
+public/assets/js/datatables.js  DataTables setup + the row API
+Template_Source/             the purchased template's HTML (reference for markup / classes)
+to_run                       the old → new data transfer script (re-runnable for go-live)
+docs/                        progress + feature specs
+```
 
-## Code of Conduct
+| Module | Covers |
+|---|---|
+| UserModule, AccountModule, EmployeeModule, AdminModule | logins, user types, account settings, employees |
+| LayoutModule | layouts, sidebars, shared partials (fields, filters, popups) |
+| SpaceModule, UnitModule, PlanModule | spaces + subscription types, units, plans / prices |
+| ReservationModule | reservations, statuses, the Schedule page, renewals |
+| PackageModule | packages, statement PDF |
+| PaymentModule | cash in / out, extras, refunds, withholding, shift closing, Daily Summary |
+| MemberModule, CompanyModule, JobModule | members and their lookups |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Conventions
 
-## Security Vulnerabilities
+- **Thin controllers:** validation goes in Form Requests and business logic in Services. Services called outside a form
+  (imports, commands) check their own rules and throw `ValidationException`.
+- **Features shared by the account and employees:** a `Concerns/{X}Actions` trait plus two thin controllers. Routes are
+  named `{area}.{resource}.{action}` (e.g. `account.reservations.show`), always with named routes.
+- **Lists:** server-side DataTables. View / add / edit open in a popup (`data-modal`), forms submit by ajax (`data-ajax`),
+  and rows update in place.
+- **No inline CSS:** no `style=""` and no `<style>`. Use named classes in `custom.css`, and template markup from
+  `Template_Source/`. Template files are never edited; overrides go in `custom.js`.
+- **Display formats:** dates `d-m-Y`, times `h:i A`. Input values stay `Y-m-d` / `H:i`.
+- **Database:** snake_case columns, `account_id` on every account-owned table, `0` = none for non-nullable foreign ids,
+  `name_ar` / `name_en` for translated text (UI is English for now).
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Database and the data transfer
 
-## License
+The current database is a **trial import** of the old system. On go-live day the whole import is run again from `to_run`,
+following its GO-LIVE CHECKLIST (backup, pre-check, reload, recalculations, renewal links, member merge, checks).
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- **Every manual change goes into `to_run`.** Any change made to the database by hand (`ALTER`, `UPDATE`, backfill) must
+  also be added there: idempotent, with the expected row counts.
+- **`dwidar_pivot_api` is read-only.** It's the old live system's database and is never written to.
+- **Schema changes:** in practice the module's `create_*_table` migration is edited and the column is changed by hand in
+  the database, plus the matching guarded step in `to_run`.
+
+## Documentation
+
+- [`docs/progress.md`](docs/progress.md) — current status, decisions per module, known issues, session log
+- [`docs/payments-plan.md`](docs/payments-plan.md) — payments, shift closing, expenses, invoices / ETA plan (read before
+  any payments work)
+- [`docs/reservations-list-plan.md`](docs/reservations-list-plan.md) — the reservations and packages lists
+- [`CLAUDE.md`](CLAUDE.md) — working rules and the cross-module dependencies map
