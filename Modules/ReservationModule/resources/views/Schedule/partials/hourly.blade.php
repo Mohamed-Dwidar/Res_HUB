@@ -60,7 +60,7 @@
                                 @if ($section['hasEarlier'])
                                     <div class="tl-side">
                                         @foreach ($row['earlier'] as $reservation)
-                                            <a href="{{ route($area . '.reservations.show', $reservation->id) }}" data-modal class="tl-chip" title="{{ $reservation->period }}">← {{ $reservation->member?->name ?? '-' }} {{ $reservation->start_at->format('H:i') }}–{{ $reservation->realEnd()?->format('H:i') }}</a>
+                                            <a href="{{ route($area . '.reservations.show', $reservation->id) }}" data-modal class="tl-chip" title="{{ $reservation->period }}">← {{ $reservation->member?->name ?? '-' }} {{ $reservation->start_at->format('g:ia') }}–{{ $reservation->realEnd()?->format('g:ia') }}</a>
                                         @endforeach
                                     </div>
                                 @endif
@@ -79,7 +79,7 @@
                                             class="tl-block tl-block--{{ $pay }} tl-from-{{ $block['from'] }} tl-span-{{ $block['span'] }} tl-lane-{{ $block['lane'] }} {{ $block['clipStart'] ? 'tl-block--clip-start' : '' }} {{ $block['clipEnd'] ? 'tl-block--clip-end' : '' }}"
                                             title="{{ $reservation->member?->name ?? '-' }} · {{ $reservation->period }}">
                                             <span class="tl-block__name">{{ $block['clipStart'] ? '← ' : '' }}{{ $reservation->member?->name ?? '-' }}{{ $block['clipEnd'] ? ' →' : '' }}</span>
-                                            <span class="tl-block__time">{{ $reservation->start_at->format('H:i') }}–{{ $reservation->realEnd()?->format('H:i') ?? '…' }} · {{ ['paid' => 'Paid', 'due' => 'Due', 'package' => 'In package'][$pay] }}</span>
+                                            <span class="tl-block__time">{{ $reservation->start_at->format('g:ia') }}–{{ $reservation->realEnd()?->format('g:ia') ?? '…' }} · {{ ['paid' => 'Paid', 'due' => 'Due', 'package' => 'In package'][$pay] }}</span>
                                         </a>
                                     @endforeach
                                     @if ($isToday)
@@ -89,7 +89,7 @@
                                 @if ($section['hasLater'])
                                     <div class="tl-side">
                                         @foreach ($row['later'] as $reservation)
-                                            <a href="{{ route($area . '.reservations.show', $reservation->id) }}" data-modal class="tl-chip" title="{{ $reservation->period }}">{{ $reservation->member?->name ?? '-' }} {{ $reservation->start_at->format('H:i') }} →</a>
+                                            <a href="{{ route($area . '.reservations.show', $reservation->id) }}" data-modal class="tl-chip" title="{{ $reservation->period }}">{{ $reservation->member?->name ?? '-' }} {{ $reservation->start_at->format('g:ia') }} →</a>
                                         @endforeach
                                     </div>
                                 @endif
