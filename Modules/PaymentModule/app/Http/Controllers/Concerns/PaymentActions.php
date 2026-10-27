@@ -90,6 +90,8 @@ trait PaymentActions
             'categories' => $this->categoryService->filterOptions($accountId, $activeOnly),
             // Cash Out: the category filter (+ Refunds)
             'expenseCategories' => $type === 'out' ? $this->expenseCategoryService->filterOptions($accountId, $activeOnly) : [],
+            // the "Created By" filter (the account only): its logins, the account first
+            'logins' => $this->collectorId() ? [] : app(\Modules\PaymentModule\app\Services\PaymentExceptionService::class)->users($accountId),
             // ?member_id= (the Members list, the account only): that member's cash in, the All date tab
             'member' => $type === 'in' && !$this->collectorId() && $request->filled('member_id')
                 ? \Modules\MemberModule\app\Models\Member::where('account_id', $accountId)->find((int) $request->input('member_id')) : null,
@@ -116,8 +118,9 @@ trait PaymentActions
         }
 
         // direction=in: the Cash In tab (no refunds, they are Cash Out)
-        // member_id: the Members list's Payments (account)
-        return ['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['for', 'method', 'date_from', 'date_to', 'direction', 'member_id']);
+        // member_id: the Members list's Payments (account); created_by: the account only (employees see their own rows anyway)
+        return ['search' => trim((string) ($filters['search'] ?? ''))]
+            + Arr::only($filters, array_merge(['for', 'method', 'date_from', 'date_to', 'direction', 'member_id'], $this->collectorId() ? [] : ['created_by']));
     }
 
     // DataTables server side: tab + search + for / method / dates filters, + the summary line of those rows

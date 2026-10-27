@@ -79,6 +79,15 @@
                 <option value="withholding">Withholding</option>
             @endif
         </select>
+        {{-- who recorded it (the account only, 2026-10-28; employees see only their own rows) --}}
+        @if ($logins)
+            <select name="created_by" class="{{ config('layoutmodule.form.select') }}" aria-label="Created By">
+                <option value="">All (Created By)</option>
+                @foreach ($logins as $id => $name)
+                    <option value="{{ $id }}">{{ $name }}</option>
+                @endforeach
+            </select>
+        @endif
         @include('layoutmodule::partials.datatable-clear')
     </form>
 

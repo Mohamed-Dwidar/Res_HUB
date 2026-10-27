@@ -36,7 +36,7 @@ class CashListService
      */
     public function query($accountId, string $direction, array $filters, string $tab, $collectorId = null)
     {
-        $common = Arr::only($filters, ['search', 'date_from', 'date_to']);
+        $common = Arr::only($filters, ['search', 'date_from', 'date_to', 'created_by']);
         $method = ctype_digit((string) ($filters['method'] ?? '')) ? (int) $filters['method'] : null;
         $category = (string) ($filters['category'] ?? '');
 

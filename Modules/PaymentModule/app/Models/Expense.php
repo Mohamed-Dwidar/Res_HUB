@@ -110,6 +110,11 @@ class Expense extends Model
     // search (no., item, notes) | expense_category_id | method (an id) | date_from / date_to (spent_at)
     public function scopeFilter($query, array $filters = [])
     {
+        // the login who recorded it (the Payments page "Created By", the account only, 2026-10-28)
+        if (!empty($filters['created_by'])) {
+            $query->collectedBy((int) $filters['created_by']);
+        }
+
         if (!empty($filters['search'])) {
             $search = '%' . $filters['search'] . '%';
             $query->where(fn ($query) => $query->where('expense_no', 'like', $search)->orWhere('item', 'like', $search)->orWhere('notes', 'like', $search));

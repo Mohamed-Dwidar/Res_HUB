@@ -191,6 +191,11 @@ class Payment extends Model
      */
     public function scopeFilter($query, array $filters = [])
     {
+        // the login who recorded it (the Payments page "Created By", the account only, 2026-10-28)
+        if (!empty($filters['created_by'])) {
+            $query->collectedBy((int) $filters['created_by']);
+        }
+
         if (!empty($filters['search'])) {
             $search = '%' . $filters['search'] . '%';
             $query->where(function ($query) use ($search) {
