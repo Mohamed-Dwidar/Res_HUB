@@ -38,7 +38,9 @@
                 'hint' => 'Only for the plans / income categories with "Table tax". VAT is calculated on net + table tax.'])
             @include('layoutmodule::partials.field', ['name' => 'tax_start_date', 'label' => 'Tax Start Date', 'type' => 'date',
                 'value' => $account->tax_start_date?->format('Y-m-d'),
-                'hint' => 'Empty = no taxes yet. Reservations, packages and extras created on or after this date get their taxes; older ones are never changed.'])
+                'attrs' => 'data-tax-count-url="' . route('account.settings.general.tax-count') . '"',
+                'hint' => 'Empty = no taxes yet. Reservations created on or after this date can have "Invoice requested"; older ones are never changed. A past date: only you can tick it on the reservations made before you set it.'
+                    . ($account->tax_start_set_at ? ' Set on ' . $account->tax_start_set_at->format('d-m-Y h:i A') . '.' : '')])
             @include('layoutmodule::partials.field', ['name' => 'tax_rounding', 'label' => 'Rounding', 'type' => 'select', 'required' => true,
                 'options' => \Modules\PaymentModule\app\Services\Tax\TaxRule::ROUNDINGS, 'value' => $account->taxRounding(), 'width' => 'long',
                 'hint' => 'Some tax-inclusive prices can\'t be split exactly into net + taxes: who takes the 0.01 difference.'])

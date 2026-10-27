@@ -58,6 +58,17 @@ class Reservation extends Model implements Payable
         'discount_value' => 'float',
         'net_amount' => 'float',
         'paid_amount' => 'float',
+        // the tax snapshot (docs/payments-plan.md §3, ReservationService via TaxSnapshot): set by the service, never mass assigned
+        'invoice_requested' => 'boolean',
+        'tax_vat_rate' => 'float',
+        'tax_vat_exempt' => 'boolean',
+        'tax_table_rate' => 'float',
+        'tax_inclusive' => 'boolean',
+        'tax_net' => 'float',
+        'table_tax' => 'float',
+        'vat' => 'float',
+        'tax_extra_discount' => 'float',
+        'tax_total' => 'float',
         'remaining' => 'float',
     ];
 
@@ -142,10 +153,24 @@ class Reservation extends Model implements Payable
         return $this->morphTo();
     }
 
-    // Payable: its net amount, 0 with a not counted status (cancelled ...); inside a package it is paid through the package
+    // what it costs the member (taxes, docs/payments-plan.md §3): the tax total when an invoice is requested and it was taxed,
+    // else the net amount (the price after discount, as before taxes); DUE_SQL = the same in SQL
+    const DUE_SQL = 'CASE WHEN reservations.invoice_requested = 1 AND reservations.tax_total IS NOT NULL THEN reservations.tax_total ELSE reservations.net_amount END';
+
+    public function isTaxed(): bool
+    {
+        return $this->invoice_requested && $this->tax_total !== null;
+    }
+
+    public function dueAmount(): float
+    {
+        return $this->isTaxed() ? (float) $this->tax_total : (float) $this->net_amount;
+    }
+
+    // Payable: what it costs (dueAmount()), 0 with a not counted status (cancelled ...); inside a package it is paid through the package
     public function payableAmount(): float
     {
-        return $this->status && !$this->status->is_counted ? 0 : (float) $this->net_amount;
+        return $this->status && !$this->status->is_counted ? 0 : $this->dueAmount();
     }
 
     public function payableMemberId(): int

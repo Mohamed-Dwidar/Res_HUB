@@ -45,7 +45,7 @@
                                     @endif
                                 @endif
                             </td>
-                            <td class="whitespace-nowrap">{{ number_format($reservation->net_amount, 2) }}</td>
+                            <td class="whitespace-nowrap">{{ number_format($reservation->dueAmount(), 2) }}</td>
                             <td><span class="{{ $reservation->status?->badge_class ?? 'badge badge-status-slate' }}">{{ $reservation->status?->name ?? '-' }}</span></td>
                         </tr>
                     @endforeach

@@ -1,7 +1,8 @@
 {{--
     The tax flags of a plan / income category (HasTaxFlags, docs/payments-plan.md §3), only while VAT is on (Settings › General):
     absent fields keep their stored values. $model = the plan / category (null on create), $showIf = optional data-show-if rule.
-    @include('paymentmodule::Tax.partials.flags', ['model' => $plan, 'what' => 'reservations'])
+    @include('paymentmodule::Tax.partials.flags', ['model' => $plan, 'what' => 'reservations', 'invoiceDefault' => true])
+    $invoiceDefault: + "Invoice by default" (pre-ticks "Invoice requested" on new rows)
 --}}
 @php($account = \Modules\AccountModule\app\Models\Account::current())
 @if ($account?->vatEnabled())
@@ -16,6 +17,11 @@
             @include('layoutmodule::partials.checkbox', ['name' => 'price_includes_tax', 'label' => 'Price includes tax',
                 'checked' => $model?->price_includes_tax ?? true,
                 'hint' => 'On: the amount is what the member pays. Off: the taxes are added to it.'])
+            @if (!empty($invoiceDefault))
+                @include('layoutmodule::partials.checkbox', ['name' => 'invoice_by_default', 'label' => 'Invoice by default',
+                    'checked' => $model?->invoice_by_default ?? false,
+                    'hint' => 'Ticks "Invoice requested" on new ' . $what . ' (it can be changed on each one). Taxes are calculated only with an invoice.'])
+            @endif
         </div>
         <div class="{{ config('layoutmodule.form.hint') }}">
             Used for {{ $what }} created on or after the tax start date (Settings › General). Changing them never changes saved ones.

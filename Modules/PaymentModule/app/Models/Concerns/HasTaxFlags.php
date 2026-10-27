@@ -12,23 +12,25 @@ use Modules\AccountModule\app\Models\Account;
 trait HasTaxFlags
 {
     const TAX_FLAGS = ['vat_exempt', 'table_tax', 'price_includes_tax'];
+    // + invoice_by_default (2026-10-28): pre-ticks "Invoice requested" on new rows (plans: reservations; categories: Phase C)
+    const TAX_FIELDS = [...self::TAX_FLAGS, 'invoice_by_default'];
 
     public function initializeHasTaxFlags(): void
     {
-        $this->mergeFillable(self::TAX_FLAGS);
-        $this->mergeCasts(array_fill_keys(self::TAX_FLAGS, 'boolean'));
+        $this->mergeFillable(self::TAX_FIELDS);
+        $this->mergeCasts(array_fill_keys(self::TAX_FIELDS, 'boolean'));
     }
 
     // the request rules (the fields are only on the form while VAT is on: absent = kept)
     public static function taxFlagRules(): array
     {
-        return array_fill_keys(self::TAX_FLAGS, 'sometimes|boolean');
+        return array_fill_keys(self::TAX_FIELDS, 'sometimes|boolean');
     }
 
     // the flags sent by the form, only those present (an absent one keeps its stored value)
     public static function taxFlagsFrom(array $data): array
     {
-        return collect(self::TAX_FLAGS)->filter(fn ($flag) => array_key_exists($flag, $data))
+        return collect(self::TAX_FIELDS)->filter(fn ($flag) => array_key_exists($flag, $data))
             ->mapWithKeys(fn ($flag) => [$flag => !empty($data[$flag])])->all();
     }
 

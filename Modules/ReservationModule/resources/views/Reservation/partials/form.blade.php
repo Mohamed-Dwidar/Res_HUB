@@ -13,7 +13,9 @@
     // the unit capacity (data-capacity): 1 or 0 = the number of people is 1, the field is hidden (custom.js reservationCapacity())
     $unitOptions = collect($units)->mapWithKeys(fn ($unit) => [$unit['id'] => ['name' => $unit['name'], 'data' => ['capacity' => $unit['capacity']]]])->all();
     // data-time-based: the plan reservations have a start / end time (custom.js shows the time inputs)
-    $planOptions = collect($plans)->mapWithKeys(fn ($plan) => [$plan['id'] => ['name' => $plan['name'], 'data' => ['amount' => $plan['amount'], 'time-based' => $plan['timeBased'], 'period-hours' => $plan['periodHours'], 'lease-period' => $plan['leasePeriod']]]])->all();
+    // + the plan's tax type / "Invoice by default" (custom.js reservationTax(), docs/payments-plan.md §3)
+    $planOptions = collect($plans)->mapWithKeys(fn ($plan) => [$plan['id'] => ['name' => $plan['name'], 'data' => ['amount' => $plan['amount'], 'time-based' => $plan['timeBased'], 'period-hours' => $plan['periodHours'], 'lease-period' => $plan['leasePeriod'],
+        'vat-exempt' => $plan['vatExempt'], 'table-tax' => $plan['tableTax'], 'inclusive' => $plan['inclusive'], 'invoice-default' => $plan['invoiceDefault']]]])->all();
     $packageOptions = collect($packages)->map(fn ($package) => ['name' => $package['name'], 'data' => ['member-id' => $package['member_id'], 'member-text' => $package['member_text']]])->all();
     // the date / time inputs need Y-m-d / H:i values (the browser shows them in the user's format)
     // create: today, now -> in 1 hour (pre-filled from the Schedule page: its start -> in 1 hour); edit / renew: the saved values
@@ -166,6 +168,44 @@
     @include('layoutmodule::partials.field', ['name' => 'net_amount', 'label' => 'Net Amount', 'type' => 'number', 'value' => $reservation?->net_amount ?? 0,
         'attrs' => 'min="0" step="0.01" data-net', 'hint' => 'Change the discount % / value or the net, the others are calculated.'])
 </div>
+
+{{-- Taxes only when the customer requests an invoice (docs/payments-plan.md §3), once taxes apply to this reservation (the tax
+     start date; a saved one keeps its tax type): the checkbox (new = the plan's "Invoice by default", Renew = the renewed
+     period's), the live breakdown and the "will owe X more" warning on a paid one (custom.js reservationTax(); the server
+     recalculates). Inside a package the package's invoice counts (Phase C). --}}
+@php
+    $taxAccount = \Modules\AccountModule\app\Models\Account::current();
+    $taxesOn = $taxAccount && ($reservation?->exists
+        ? \Modules\PaymentModule\app\Services\Tax\TaxSnapshot::applies($taxAccount, $reservation)
+        : $taxAccount->taxesApplyTo(now()));
+    $storedRule = $reservation?->exists ? \Modules\PaymentModule\app\Services\Tax\TaxRule::fromSnapshot($reservation) : null;
+    // created before the (back-dated) start date was set: the owner only, never pre-ticked (Account::isBackdated())
+    $backdated = $taxesOn && $reservation?->exists && $taxAccount->isBackdated($reservation->created_at);
+    $taxesOn = $taxesOn && !($backdated && $area !== 'account');
+@endphp
+@if ($taxesOn)
+    <div class="tax-box" data-tax-box data-vat-rate="{{ $taxAccount->vatRate() }}" data-table-rate="{{ $taxAccount->tableTaxRate() }}"
+        data-rounding="{{ $taxAccount->taxRounding() }}" data-keep="{{ $reservation?->exists || $renewing ? 1 : 0 }}"
+        data-in-package="{{ $renewing && $reservation->package_id ? 1 : 0 }}"
+        @if ($storedRule) data-stored-plan="{{ $reservation->plan_id }}"
+            data-stored="{{ json_encode(['vat' => $storedRule->vatBasisPoints(), 'table' => $storedRule->tableBasisPoints(), 'inclusive' => $storedRule->inclusive, 'rounding' => $storedRule->rounding]) }}" @endif
+        @if ($reservation?->exists) data-paid="{{ (float) $reservation->paid_amount }}" data-due="{{ $reservation->dueAmount() }}" data-was="{{ $reservation->invoice_requested ? 1 : 0 }}" @endif>
+        @unless ($renewing && $reservation->package_id)
+            <div @unless ($renewing) data-show-if="book_for=member" @endunless>
+                @include('layoutmodule::partials.checkbox', ['name' => 'invoice_requested', 'label' => 'Invoice requested',
+                    'checked' => (bool) $reservation?->invoice_requested,
+                    'hint' => 'Taxes are added only when the customer asks for an invoice (the plan sets which taxes).'])
+            </div>
+        @endunless
+        @if ($backdated)
+            <div class="{{ config('layoutmodule.form.hint') }}">Made before taxes were set up (back-dated start date): tick it only if the customer asks for an invoice. Employees don't see it here.</div>
+        @endif
+        <div class="tax-breakdown" data-tax-breakdown></div>
+        <div class="tax-warning" data-tax-warning hidden></div>
+        {{-- the double-tax guard: the member's VAT (manual) cash ins near the dates, while "Invoice requested" is ticked --}}
+        <div class="tax-warning" data-tax-vat data-url="{{ route($area . '.reservations.manual-vat') }}" hidden></div>
+    </div>
+@endif
 
 {{-- only when the subscription type can repeat (custom.js [data-type-allows]) --}}
 {{-- on create only: the copies are made when it is saved (not changed on edit) --}}

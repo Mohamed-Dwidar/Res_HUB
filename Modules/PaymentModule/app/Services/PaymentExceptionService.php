@@ -7,6 +7,7 @@ use Illuminate\Support\Collection;
 use Modules\AccountModule\app\Models\Account;
 use Modules\EmployeeModule\app\Models\Employee;
 use Modules\PaymentModule\app\Models\Expense;
+use Modules\PaymentModule\app\Models\InvoiceRequestLog;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Models\ShiftEvent;
 use Modules\UserModule\app\Models\User;
@@ -20,11 +21,13 @@ use Modules\UserModule\app\Models\User;
  *   since 2026-10-27, before that only the edits of closed shifts)
  * - deleted: the deleted cash in / refunds / cash out (soft deleted: who, when, reason)
  * - expenses: cash outs recorded by EMPLOYEES from Settings › General "review cash out from" (default 500)
+ * - invoice: "Invoice requested" changed on a reservation that already had payments (invoice_request_logs, 2026-10-28; the
+ *   login = who changed it)
  * The user filter = the login who RECORDED the row (the one the exception is about); edits / deletes also show who changed it.
  */
 class PaymentExceptionService
 {
-    const TABS = ['late' => 'Late Entries', 'edited' => 'Edited', 'deleted' => 'Deleted', 'expenses' => 'Expenses'];
+    const TABS = ['late' => 'Late Entries', 'edited' => 'Edited', 'deleted' => 'Deleted', 'expenses' => 'Expenses', 'invoice' => 'Invoice Toggled'];
 
     // the most rows one tab shows (the counts above are complete)
     const LIMIT = 500;
@@ -60,6 +63,8 @@ class PaymentExceptionService
         $add('edited', $this->editsQuery($accountId, $from, $to)->groupBy('user_id')->selectRaw('user_id, COUNT(*) AS n')->pluck('n', 'user_id'));
         $add('expenses', $this->bigExpensesQuery($accountId, $from, $to)
             ->groupBy('creatable_id')->selectRaw('creatable_id, COUNT(*) AS n')->pluck('n', 'creatable_id'));
+        $add('invoice', $this->invoiceTogglesQuery($accountId, $from, $to)
+            ->groupBy('creatable_id')->selectRaw('creatable_id, COUNT(*) AS n')->pluck('n', 'creatable_id'));
 
         return $counts;
     }
@@ -87,6 +92,8 @@ class PaymentExceptionService
                 ->sortByDesc('deleted_at')->take(self::LIMIT)->values(),
             'expenses' => $this->withRecorder($forUser($this->bigExpensesQuery($accountId, $from, $to))
                 ->with('expenseCategory', 'paymentMethod')->latest()->limit(self::LIMIT)->get()),
+            'invoice' => $this->withRecorder($forUser($this->invoiceTogglesQuery($accountId, $from, $to))
+                ->with('loggable.member')->latest()->limit(self::LIMIT)->get()),
         };
     }
 
@@ -124,6 +131,12 @@ class PaymentExceptionService
     {
         return ShiftEvent::where('account_id', $accountId)->whereIn('action', ['payment_edit', 'expense_edit', 'payment_move'])
             ->where('created_at', '>=', $from)->where('created_at', '<', $to->copy()->addDay());
+    }
+
+    // "Invoice requested" changed after the row's first payment (paid at that moment > 0), by a login
+    private function invoiceTogglesQuery(int $accountId, Carbon $from, Carbon $to)
+    {
+        return $this->recorded(InvoiceRequestLog::query(), $accountId, $from, $to)->where('paid_amount', '>', 0);
     }
 
     // employees' cash outs from the review amount (the account's own are not exceptions)

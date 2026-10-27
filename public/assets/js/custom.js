@@ -697,6 +697,198 @@ function reservationCalculate(form, source) {
     if (source !== "net") netEl.value = round2(amount - value);
 }
 
+// ------------------------------------------------------------------
+// Taxes (docs/payments-plan.md §1): the same split as PaymentModule TaxCalculator — whole cents, each tax half up, VAT on
+// net + table tax, discount before tax; an inclusive price is worked back to the nearest net (± 2 cents) that adds up, else the
+// rounding option (vat | net | extra_discount). Display only: the server recalculates on save.
+// rule = {vat: hundredths of a percent (1400 = 14%; 0 = exempt), table: (100 = 1%; 0 = none), inclusive: bool, rounding}
+// ------------------------------------------------------------------
+function taxPercent(cents, basisPoints) {
+    var value = Math.floor((Math.abs(cents) * basisPoints + 5000) / 10000);
+    return cents < 0 ? -value : value;
+}
+
+function taxPair(net, rule) {
+    var table = taxPercent(net, rule.table);
+    return [table, taxPercent(net + table, rule.vat)];
+}
+
+// [net, table tax, VAT, extra discount, adjusted] of an inclusive total (cents)
+function taxSplit(total, rule) {
+    var sign = total < 0 ? -1 : 1;
+    total = Math.abs(total);
+    if (!rule.table && !rule.vat) return [sign * total, 0, 0, 0, false];
+    var den = BigInt((10000 + rule.table) * (10000 + rule.vat));
+    var guess = Number((BigInt(2) * BigInt(total) * BigInt(100000000) + den) / (BigInt(2) * den));
+    var steps = [0, -1, 1, -2, 2];
+    for (var i = 0; i < steps.length; i++) {
+        var pair = taxPair(guess + steps[i], rule);
+        if (guess + steps[i] + pair[0] + pair[1] === total) return [sign * (guess + steps[i]), sign * pair[0], sign * pair[1], 0, false];
+    }
+    var taxes = taxPair(guess, rule), net = guess;
+    if (rule.rounding === "net") {
+        net = total - taxes[0] - taxes[1];
+    } else if (rule.rounding === "extra_discount") {
+        net = guess - 3;
+        do {
+            taxes = taxPair(++net, rule);
+        } while (net + taxes[0] + taxes[1] < total);
+        return [sign * net, sign * taxes[0], sign * taxes[1], sign * (net + taxes[0] + taxes[1] - total), true];
+    } else if (!rule.vat) {
+        taxes[0] = total - net;
+    } else {
+        taxes[1] = total - net - taxes[0];
+    }
+    return [sign * net, sign * taxes[0], sign * taxes[1], 0, true];
+}
+
+// {net, table, vat, extra, total} in cents of a price and its discount (cents)
+function taxCalculate(price, discount, rule) {
+    var after = price - discount, parts;
+    if (rule.inclusive) {
+        parts = taxSplit(after, rule);
+    } else {
+        var pair = taxPair(after, rule);
+        parts = [after, pair[0], pair[1], 0, false];
+    }
+    return { net: parts[0], table: parts[1], vat: parts[2], extra: parts[3], total: parts[0] + parts[1] + parts[2] - parts[3] };
+}
+
+function moneyText(cents) {
+    return (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// the reservation form's taxes ([data-tax-box]): "Invoice requested" (a new form: ticked by the plan's "Invoice by default"
+// when the plan changes), the breakdown line, and on a saved one with payments the "will owe X more / less" warning when the
+// checkbox changed. The type: the stored one while the plan is the saved plan, else the plan's flags + the account's rates.
+function reservationTax(form, planChanged) {
+    var box = form.querySelector("[data-tax-box]");
+    if (!box) return;
+    var check = box.querySelector('input[type="checkbox"][name="invoice_requested"]');
+    var out = box.querySelector("[data-tax-breakdown]");
+    var warn = box.querySelector("[data-tax-warning]");
+    var planEl = formField(form, "plan_id");
+    var option = planEl && planEl.selectedOptions && planEl.selectedOptions[0];
+    if (planChanged && check && box.dataset.keep !== "1" && option && option.dataset.invoiceDefault !== undefined) {
+        check.checked = option.dataset.invoiceDefault === "1";
+    }
+
+    var rate = function (percent) { return Math.round((parseFloat(percent) || 0) * 100); };
+    var rule = null;
+    if (box.dataset.stored && planEl && planEl.value === box.dataset.storedPlan) {
+        rule = JSON.parse(box.dataset.stored);
+    } else if (option && option.dataset.inclusive !== undefined) {
+        rule = {
+            vat: option.dataset.vatExempt === "1" ? 0 : rate(box.dataset.vatRate),
+            table: option.dataset.tableTax === "1" ? rate(box.dataset.tableRate) : 0,
+            inclusive: option.dataset.inclusive === "1",
+            rounding: box.dataset.rounding,
+        };
+    }
+    var cents = function (name) {
+        var field = formField(form, name);
+        return Math.round((Number(field && field.value) || 0) * 100);
+    };
+    var price = Math.max(0, cents("amount"));
+    var discount = Math.min(Math.max(0, cents("discount_value")), price);
+    var bookFor = formField(form, "book_for");
+    var inPackage = box.dataset.inPackage === "1" || (bookFor && bookFor.value === "package");
+    var invoice = !!(check && check.checked);
+    var owed = price - discount;
+
+    out.innerHTML = "";
+    var line = function (label, value) {
+        var span = document.createElement("span");
+        span.textContent = label + " ";
+        var b = document.createElement("b");
+        b.textContent = value;
+        span.appendChild(b);
+        out.appendChild(span);
+        out.appendChild(document.createTextNode("  ·  "));
+    };
+    if (inPackage) {
+        out.textContent = "In a package: the invoice and its taxes follow the package.";
+    } else if (!invoice) {
+        out.textContent = "No invoice: no taxes, the customer pays " + moneyText(owed) + ".";
+    } else if (!rule) {
+        out.textContent = "Choose the plan to see the taxes.";
+    } else {
+        var result = taxCalculate(price, discount, rule);
+        owed = result.total;
+        line("Net", moneyText(result.net));
+        if (rule.table) line("Table tax " + rule.table / 100 + "%", moneyText(result.table));
+        line(rule.vat ? "VAT " + rule.vat / 100 + "%" : "VAT", rule.vat ? moneyText(result.vat) : "exempt");
+        if (result.extra) line("Extra discount", moneyText(result.extra));
+        line("Total", moneyText(result.total));
+        out.lastChild.remove();
+        out.appendChild(document.createTextNode(rule.inclusive ? " (price includes tax)" : " (taxes added to the price)"));
+    }
+
+    // a saved reservation with payments whose checkbox changed: what it changes for the customer
+    var diff = owed - Math.round((Number(box.dataset.due) || 0) * 100);
+    var changed = box.dataset.was !== undefined && (invoice ? "1" : "0") !== box.dataset.was;
+    var show = !inPackage && changed && (Number(box.dataset.paid) || 0) > 0 && Math.abs(diff) >= 1;
+    warn.hidden = !show;
+    warn.textContent = show ? (diff > 0 ? "The customer will owe " + moneyText(diff) + " more (taxes)."
+        : "The customer will owe " + moneyText(-diff) + " less (no taxes): what was paid above it becomes credit.") : "";
+
+    reservationManualVat(form, box, invoice && !inPackage);
+}
+
+// the double-tax guard ([data-tax-vat], 2026-10-28): while "Invoice requested" is ticked, the member's VAT (manual) cash ins
+// dated in the period ± 7 days ({area}.reservations.manual-vat); newest answer only, the same query is not asked twice
+function reservationManualVat(form, box, active) {
+    var out = box.querySelector("[data-tax-vat]");
+    if (!out) return;
+    var value = function (name) {
+        var field = formField(form, name);
+        return field ? field.value : "";
+    };
+    var query = active && value("member_id") && value("start_at") && value("end_at")
+        ? "member_id=" + encodeURIComponent(value("member_id")) + "&start_at=" + encodeURIComponent(value("start_at")) + "&end_at=" + encodeURIComponent(value("end_at"))
+        : "";
+    if (!query) {
+        out._query = "";
+        out.hidden = true;
+        return;
+    }
+    if (query === out._query) return;
+    out._query = query;
+    fetch(out.dataset.url + "?" + query, { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(function (json) {
+            if (out._query !== query) return;
+            var payments = (json && json.payments) || [];
+            out.hidden = payments.length === 0;
+            out.textContent = payments.length ? "VAT was already paid manually — check before adding taxes: "
+                + payments.map(function (p) { return "#" + p.no + " · " + p.date + " · " + p.amount; }).join(";  ") : "";
+        })
+        .catch(function () {});
+}
+
+// Settings › General, Tax Start Date ([data-tax-count-url]): a new date → the save confirmation says how many reservations
+// were created since then (they can have an invoice; a past date = back-dated, the owner's only)
+function taxStartConfirm(input) {
+    var form = input.form;
+    if (form.dataset.confirmBase === undefined) form.dataset.confirmBase = form.dataset.confirm || "";
+    if (!input.value || input.value === input.defaultValue) {
+        form.dataset.confirm = form.dataset.confirmBase;
+        return;
+    }
+    var token = (input._count = (input._count || 0) + 1);
+    fetch(input.dataset.taxCountUrl + "?date=" + encodeURIComponent(input.value), { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(function (json) {
+            if (token !== input._count) return;
+            form.dataset.confirm = json && json.message ? json.message + " " + form.dataset.confirmBase : form.dataset.confirmBase;
+        })
+        .catch(function () {});
+}
+
+document.addEventListener("change", function (e) {
+    if (e.target.matches && e.target.matches("[data-tax-count-url]")) taxStartConfirm(e.target);
+});
+
 // the package member is used and can not be changed
 function reservationLockMember(form) {
     var packageEl = formField(form, "package_id");
@@ -1310,6 +1502,7 @@ function initForms(root) {
             reservationTimeBased(form);
             reservationAutoSingle(form);
             reservationAvailability(form);
+            reservationTax(form, false);
         }
     });
 }
@@ -1354,6 +1547,10 @@ document.addEventListener("change", function (e) {
         if (["plan_id", "start_at", "start_time", "end_at", "end_time"].indexOf(name) >= 0) reservationPlanAmount(form);
         // the live availability line (after the end was set from the plan above)
         if (["unit_id", "plan_id", "start_at", "start_time", "end_at", "end_time"].indexOf(name) >= 0) reservationAvailability(form);
+        // the taxes follow the price, the plan's tax type / "Invoice by default", the checkbox, Book For
+        if (["plan_id", "start_at", "start_time", "end_at", "end_time", "invoice_requested", "book_for", "package_id", "member_id"].indexOf(name) >= 0) {
+            reservationTax(form, name === "plan_id");
+        }
     }
 });
 
@@ -1383,7 +1580,10 @@ document.addEventListener("input", function (e) {
     if (e.target.matches("[data-name-suggest]")) e.target.dataset.touched = e.target.value ? "1" : "";
     if (form.matches("[data-reservation-form]")) {
         var sources = { amount: "amount", discount_percentage: "percentage", discount_value: "value", net_amount: "net" };
-        if (sources[e.target.name]) reservationCalculate(form, sources[e.target.name]);
+        if (sources[e.target.name]) {
+            reservationCalculate(form, sources[e.target.name]);
+            reservationTax(form, false);
+        }
         if (e.target.name === "start_at") reservationEndAfterStart(form);
         if (["start_at", "start_time", "end_at", "end_time"].indexOf(e.target.name) >= 0) reservationAvailability(form);
     }

@@ -62,7 +62,7 @@
     @else
         {{-- the period's net amount (a renewal starts from the same amount); muted once renewed and paid; + its own debt --}}
         <td class="today-renewals__amount {{ $renewal && !$renewalOwes ? 'text-slate-400' : '' }}">
-            {{ number_format($reservation->net_amount, 2) }}
+            {{ number_format($reservation->dueAmount(), 2) }}
             @if ($kind === 'overdue' && $owes($reservation))
                 <div class="text-xs text-danger">Due {{ number_format($reservation->remaining, 2) }}</div>
             @endif

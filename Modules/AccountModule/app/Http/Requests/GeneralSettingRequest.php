@@ -25,15 +25,11 @@ class GeneralSettingRequest extends FormRequest
             'renewal_days' => 'required|integer|min:1|max:90',
             'late_entry_hours' => 'required|integer|min:0|max:720',
             'expense_review_amount' => 'required|numeric|min:0|max:99999999',
-            // Taxes (docs/payments-plan.md §3); the start date can't be moved into the past (rows already saved keep their taxes)
+            // Taxes (docs/payments-plan.md §3); a past start date is allowed (2026-10-28): the rows created since then are
+            // "back-dated" (Account::isBackdated(): the owner's invoice only), the form confirms with their count
             'vat_rate' => 'required|numeric|min:0|max:100',
             'table_tax_rate' => 'required|numeric|min:0|max:100',
-            'tax_start_date' => ['nullable', 'date', function ($attribute, $value, $fail) {
-                $current = $this->user()->userable->tax_start_date?->format('Y-m-d');
-                if ($value && $value !== $current && $value < now()->format('Y-m-d')) {
-                    $fail('The tax start date can\'t be in the past.');
-                }
-            }],
+            'tax_start_date' => 'nullable|date|after_or_equal:2000-01-01',
             'tax_rounding' => ['required', Rule::in(array_keys(TaxRule::ROUNDINGS))],
             'tax_report_basis' => ['required', Rule::in(array_keys(Account::TAX_REPORT_BASES))],
             'withholding_rate' => 'nullable|numeric|min:0|max:100',

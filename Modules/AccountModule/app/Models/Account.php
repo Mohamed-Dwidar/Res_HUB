@@ -51,6 +51,7 @@ class Account extends Model implements Userable
         'late_entry_hours', 'expense_review_amount',
         'vat_rate', 'table_tax_rate', 'tax_start_date', 'tax_rounding', 'tax_report_basis', 'withholding_rate',
     ];
+    // tax_start_set_at: set by Settings › General when the start date changes (not mass assigned)
 
     // the month of a tax in the tax report (Settings › General › Taxes; accountant to confirm)
     const TAX_REPORT_BASES = ['eta_date' => 'ETA document date', 'created' => 'Created date'];
@@ -67,6 +68,7 @@ class Account extends Model implements Userable
         'vat_rate' => 'float',
         'table_tax_rate' => 'float',
         'tax_start_date' => 'date',
+        'tax_start_set_at' => 'datetime',
         'withholding_rate' => 'float',
     ];
 
@@ -131,6 +133,15 @@ class Account extends Model implements Userable
     public function taxesApplyTo(?Carbon $createdAt): bool
     {
         return $this->vatEnabled() && $this->tax_start_date && $createdAt && $createdAt->gte($this->tax_start_date->copy()->startOfDay());
+    }
+
+    /**
+     * A row created from the start date but BEFORE the start date was set (a back-dated start date, 2026-10-28): "Invoice
+     * requested" for the owner only, never pre-ticked; employees keep its stored value. Rows created after = the normal rule.
+     */
+    public function isBackdated(?Carbon $createdAt): bool
+    {
+        return $this->taxesApplyTo($createdAt) && $this->tax_start_set_at && $createdAt->lt($this->tax_start_set_at);
     }
 
     // the customer's withholding rate in percent (the base = the net before tax); null until the accountant gives it

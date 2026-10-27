@@ -67,6 +67,9 @@ class ReservationRequest extends FormRequest
             'discount_value' => 'nullable|numeric|min:0|lte:amount',
             'net_amount' => 'nullable|numeric|min:0|lte:amount',
             'notes' => 'nullable|string|max:5000',
+            // taxes only with an invoice (docs/payments-plan.md §3): the checkbox is on the form only once taxes apply (absent =
+            // kept / the plan's "Invoice by default"); account AND employees; inside a package the package's (ReservationService)
+            'invoice_requested' => 'sometimes|boolean',
             // the period it renews: the Renew form (hidden, both areas) / "Renewal of #" in the account's edit form; employees'
             // edits keep it; checked by ReservationService::renewalError()
             'renewal_of' => $this->route('id') && !$this->routeIs('account.*') ? ['exclude'] : ['nullable', 'integer', 'min:1'],

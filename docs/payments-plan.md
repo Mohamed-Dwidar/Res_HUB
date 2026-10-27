@@ -492,6 +492,29 @@ taken when it is saved. **Taxes are calculated only when the customer requests a
 - **Withholding:** base = the stored net (§1); hint in the Cash In form (base × `withholding_rate`) when the payable is taxed.
 - **Payments / shifts / Daily Summary:** unchanged.
 
+### Back-dated start date (user 2026-10-28)
+- The owner may set the start date in the past; saving confirms with the count ("X reservations created since <date> will be
+  able to have an invoice. Their amounts don't change unless 'Invoice requested' is ticked.", `account.settings.general.tax-count`).
+  `accounts.tax_start_set_at` = when it was set.
+- **Back-dated rows** (created from the start date, before `tax_start_set_at`; `Account::isBackdated()`): the checkbox only for
+  the OWNER, never pre-ticked (the stored value, 0); employees don't see it and their edits keep the stored value (the service
+  ignores theirs). Amounts change only when the owner ticks it (logged). Rows created after = the normal rule.
+
+### Double-tax guard (user 2026-10-28)
+- While "Invoice requested" is ticked, the form lists the member's VAT paid by hand — other-income cash ins in a category not
+  counted as income ("VAT (manual)") dated in the period ± 7 days (`{area}.reservations.manual-vat`): "VAT was already paid
+  manually — check before adding taxes: #no · date · amount".
+- **Data (2026-10-28): the 16 "VAT (manual)" cash ins of October have NO member** (the customer is in the notes only) → the
+  guard can't match them. Proposed: Member required on cash ins of a category not counted as income; the old ones linked by the
+  owner (the move below picks the reservation directly).
+- **Proposed, not built — apply a VAT (manual) cash in to a reservation** (owner only): from the Cash In view ("Apply to
+  reservation…", a reservation search) or from the guard line after saving: the payment's payable = the reservation,
+  `income_category_id` 0, member = the reservation's; amount / date / method / shift unchanged (shift totals per method don't
+  move); a required reason; logged as `shift_events` `payment_move` (before / after); `PaymentService::refresh()` → the remaining
+  drops by the VAT already paid. Allowed only when the reservation is taxed (invoice requested), paid on its own (not in a
+  package), the payment has no refunds and its amount ≤ the remaining; undo = move it back (owner, logged). The tax report then
+  counts the VAT once (the snapshot), and "VAT (manual)" drops by that amount.
+
 ### Controls
 - **Log:** every change of "Invoice requested" → `invoice_request_logs` (row, before → after, the paid amount at that moment, who,
   when); the Payment Exceptions report gets an **"Invoice toggled"** tab = the changes made after the row's first payment (paid
@@ -536,7 +559,7 @@ Per month: net, table tax, VAT of the rows with invoice requested; taxable vs ex
 
 ### Build order
 - **A — done 2026-10-28:** settings, plan / category flags (+ `placeTree()`), calculator + tests.
-- **B — reservations:** migrations; "Invoice by default" on plans; the reservation snapshot (create / edit / renew / repeat, the
+- **B — reservations: built 2026-10-28 (uncommitted, tested HTTP kernel + headless Chrome, not by the user):** migrations; "Invoice by default" on plans; the reservation snapshot (create / edit / renew / repeat, the
   toggle); `payableAmount()`; form toggle + live breakdown; view; list / Schedule amounts; `invoice_request_logs` + the Payment
   Exceptions "Invoice toggled" tab.
 - **C — packages, extras, other income:** package toggle (reservations follow), groups + discount, extras by category type,

@@ -171,7 +171,7 @@ trait ReservationActions
             ->selectRaw('COALESCE(SUM(CASE WHEN reservations.package_id = 0 AND reservations.remaining > 0 THEN reservations.remaining ELSE 0 END), 0) AS own_due')
             ->selectRaw('COALESCE(SUM((SELECT COALESCE(SUM(next_period.remaining), 0) ' . $renewalOf . ' AND next_period.package_id = 0 AND next_period.remaining > 0)), 0) AS renewal_due')
             ->selectRaw('COALESCE(SUM(CASE WHEN NOT EXISTS (SELECT 1 ' . $renewalOf . ') THEN 1 ELSE 0 END), 0) AS not_created')
-            ->selectRaw('COALESCE(SUM(CASE WHEN NOT EXISTS (SELECT 1 ' . $renewalOf . ') THEN reservations.net_amount ELSE 0 END), 0) AS not_created_amount')
+            ->selectRaw('COALESCE(SUM(CASE WHEN NOT EXISTS (SELECT 1 ' . $renewalOf . ') THEN ' . Reservation::DUE_SQL . ' ELSE 0 END), 0) AS not_created_amount')
             ->first();
 
         return view('reservationmodule::Reservation.partials.renewal-summary', [
@@ -222,7 +222,8 @@ trait ReservationActions
             ->addColumn('renewal_html', fn ($reservation) => $renewal ? view('reservationmodule::Reservation.partials.row-renewal', compact('reservation'))->render() : '')
             // the reservation status + the payment status (two badges)
             ->addColumn('status', fn ($reservation) => view('reservationmodule::Reservation.partials.row-status', compact('reservation'))->render())
-            ->editColumn('net_amount', fn ($reservation) => '<span class="font-bold text-success">' . number_format($reservation->net_amount, 2) . '</span>')
+            // what it costs (with its taxes when an invoice is requested) + the Invoice badge
+            ->editColumn('net_amount', fn ($reservation) => view('reservationmodule::Reservation.partials.row-amount', compact('reservation'))->render())
             ->editColumn('paid_amount', fn ($reservation) => number_format($reservation->paid_amount, 2))
             // red when owed, a credit (negative) in blue
             ->addColumn('remaining_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-remaining', compact('reservation'))->render())
@@ -245,6 +246,19 @@ trait ReservationActions
 
     // the form's live availability line: ?unit_id, plan_id, start_at, end_at, start_time, end_time, ignore (edit: itself) —
     // {state: free | busy | shared, ...ReservationService::availability()} or {state: null} when not enough is chosen yet
+    // the double-tax guard of the form (custom.js reservationTax(), "Invoice requested" ticked): the member's VAT (manual) cash
+    // ins in the dates ± 7 days
+    public function manualVat(Request $request)
+    {
+        $valid = fn ($date) => is_string($date) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date);
+        if (!$request->integer('member_id') || !$valid($request->input('start_at')) || !$valid($request->input('end_at'))) {
+            return response()->json(['payments' => []]);
+        }
+
+        return response()->json(['payments' => $this->reservationService->manualVatPayments($this->accountId(), $request->integer('member_id'),
+            \Illuminate\Support\Carbon::parse($request->input('start_at')), \Illuminate\Support\Carbon::parse($request->input('end_at')))]);
+    }
+
     public function availability(Request $request)
     {
         $data = $request->only(['unit_id', 'plan_id', 'start_at', 'end_at', 'start_time', 'end_time']);
@@ -377,7 +391,7 @@ trait ReservationActions
 
     public function update(ReservationRequest $request, $id)
     {
-        $this->reservationService->update($this->accountId(), $id, $request->validated());
+        $this->reservationService->update($this->accountId(), $id, $request->validated(), Auth::user());
 
         return response()->json([
             'message' => 'The reservation has been updated successfully.',

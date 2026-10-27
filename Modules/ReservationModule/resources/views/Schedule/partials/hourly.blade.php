@@ -121,7 +121,7 @@
                                         <span class="badge badge-status-slate badge-small">from yesterday</span>
                                     @endunless
                                 </td>
-                                <td class="whitespace-nowrap"><span class="font-bold text-success">{{ number_format($reservation->net_amount, 2) }}</span></td>
+                                <td class="whitespace-nowrap">@include('reservationmodule::Reservation.partials.row-amount')</td>
                                 <td class="whitespace-nowrap">{{ number_format($reservation->paid_amount, 2) }}</td>
                                 <td class="whitespace-nowrap">@include('reservationmodule::Reservation.partials.row-remaining')</td>
                                 <td>{{ $reservation->creatable?->userable?->displayName() ?? '-' }}</td>

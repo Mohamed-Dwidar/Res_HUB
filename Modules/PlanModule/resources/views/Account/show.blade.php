@@ -24,7 +24,7 @@
         <div><dt>Capacity</dt><dd>{{ $plan->capacity ?: '-' }}</dd></div>
         <div><dt>Time Based</dt><dd>{{ $plan->is_time_based ? 'Yes (start / end time)' : 'No' }}</dd></div>
         @if (($taxAccount = \Modules\AccountModule\app\Models\Account::current())?->vatEnabled())
-            <div><dt>Taxes</dt><dd>{{ $plan->taxSummary($taxAccount) }}</dd></div>
+            <div><dt>Taxes</dt><dd>{{ $plan->taxSummary($taxAccount) }}<div class="text-xs text-slate-500">{{ $plan->invoice_by_default ? 'Invoice by default' : 'No invoice by default' }} (taxes only with an invoice)</div></dd></div>
         @endif
         <div><dt>Added At</dt><dd>{{ $plan->created_at->format('Y-m-d H:i') }}</dd></div>
         <div class="wide"><dt>Facilities</dt><dd class="whitespace-pre-line">{{ $plan->facilities ?: '-' }}</dd></div>

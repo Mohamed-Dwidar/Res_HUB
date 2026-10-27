@@ -1344,6 +1344,33 @@ tr.row-removing {
     font-size: 0.875rem;
 }
 
+/* Reservation form taxes (reservationmodule::Reservation.partials.form, custom.js reservationTax()): "Invoice requested", the
+   live breakdown line, the "will owe X more" warning of a paid reservation */
+.tax-box {
+    margin-top: 1.25rem;
+}
+
+.tax-breakdown {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    color: rgb(100 116 139);
+}
+
+.tax-breakdown b {
+    color: rgb(30 41 59);
+}
+
+.tax-warning {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgb(161 98 7);
+}
+
+.tax-warning[hidden] {
+    display: none !important;
+}
+
 .member-quick-link {
     display: inline-flex;
     align-items: center;

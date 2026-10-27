@@ -17,6 +17,8 @@ $reservationRoutes = function ($controller) {
     Route::get('data', [$controller, 'data'])->name('data');
     // the form's live availability check (unit + dates + times; custom.js reservationAvailability())
     Route::get('availability', [$controller, 'availability'])->name('availability');
+    // the double-tax guard: the member's VAT (manual) cash ins near the dates (custom.js reservationTax())
+    Route::get('manual-vat', [$controller, 'manualVat'])->name('manual-vat');
     Route::get('create', [$controller, 'create'])->name('create');
     Route::post('/', [$controller, 'store'])->name('store');
     Route::get('{id}', [$controller, 'show'])->name('show');

@@ -24,6 +24,7 @@ Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' .
     // Settings › General: withholding tax / VAT switches
     Route::get('settings/general', [GeneralSettingAccountModuleController::class, 'edit'])->name('settings.general.edit');
     Route::put('settings/general', [GeneralSettingAccountModuleController::class, 'update'])->name('settings.general.update');
+    Route::get('settings/general/tax-count', [GeneralSettingAccountModuleController::class, 'taxCount'])->name('settings.general.tax-count');
 });
 
 /**

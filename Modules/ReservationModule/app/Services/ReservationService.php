@@ -8,8 +8,11 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\PackageModule\app\Models\Package;
+use Modules\AccountModule\app\Models\Account;
 use Modules\PackageModule\app\Services\PackageService;
+use Modules\PaymentModule\app\Models\InvoiceRequestLog;
 use Modules\PaymentModule\app\Services\PaymentService;
+use Modules\PaymentModule\app\Services\Tax\TaxSnapshot;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Models\ReservationStatus;
 use Modules\ReservationModule\app\Repositories\ReservationRepository;
@@ -77,6 +80,8 @@ class ReservationService
             if ($renewalOf && ($error = $this->renewalError($accountId, $reservation, $renewalOf))) {
                 throw ValidationException::withMessages(['renewal_of' => $error]);
             }
+            // "Invoice requested" + the tax snapshot from the plan's current flags (the repeat copies replicate it)
+            $this->applyTax($reservation, $accountId, $data, true, $renewalOf ? ($period ?? null) : null);
             $reservation->creatable()->associate($creator);
             $reservation->save();
 
@@ -94,12 +99,15 @@ class ReservationService
         });
     }
 
-    public function update($accountId, $id, array $data)
+    // $by: the logged in user (the "Invoice requested" log)
+    public function update($accountId, $id, array $data, ?Model $by = null)
     {
         $reservation = $this->findOne($accountId, $id);
 
-        return DB::transaction(function () use ($reservation, $accountId, $data) {
+        return DB::transaction(function () use ($reservation, $accountId, $data, $by) {
             $oldPackageId = $reservation->package_id;
+            $oldPlanId = (int) $reservation->plan_id;
+            $wasInvoice = (bool) $reservation->invoice_requested;
             // the repeat is chosen on create only, it is kept as it is; the anchor day (subscription_day) is kept as saved, the
             // account's edit form may change it ("Billing day", sent only then; 2026-10-23)
             $reservation->fill(Arr::except($this->reservationData($accountId, $data), ['is_repeat', 'repeat_frequency', 'repeat_interval', 'subscription_day']));
@@ -115,7 +123,12 @@ class ReservationService
                     throw ValidationException::withMessages(['renewal_of' => $error]);
                 }
             }
+            // the stored tax type, the plan's current flags only when the plan changed
+            $this->applyTax($reservation, $accountId, $data, (int) $reservation->plan_id !== $oldPlanId, null, $by);
             $reservation->save();
+            if ($wasInvoice !== (bool) $reservation->invoice_requested) {
+                $this->logInvoiceChange($reservation, $wasInvoice, $by);
+            }
 
             // moved into a package (it was paid on its own): its payments go to the package (paid through it now)
             if (!$oldPackageId && $reservation->package_id && ($package = $reservation->load('package')->package)) {
@@ -207,6 +220,69 @@ class ReservationService
     }
 
     /**
+     * "Invoice requested" + the tax snapshot (docs/payments-plan.md §3; TaxSnapshot): inside a package = the package's toggle
+     * (its taxes are the package's, Phase C: no amounts here); else the form's checkbox; a new row without it (taxes not
+     * started: no checkbox) = the renewed period's / the plan's "Invoice by default". $freshType: the plan's CURRENT flags
+     * (new, Renew, plan changed), else the stored type. Then what it costs = tax_total (dueAmount()).
+     * A back-dated row (created before the start date was set, Account::isBackdated()): only the owner's checkbox counts
+     * ($by), an employee's edit keeps the stored value.
+     */
+    private function applyTax(Reservation $reservation, $accountId, array $data, bool $freshType, ?Reservation $renewed = null, ?Model $by = null): void
+    {
+        $plan = Plan::find($reservation->plan_id);
+        $account = Account::settingsOf($accountId);
+        if ($reservation->exists && $account?->isBackdated($reservation->created_at) && !($by && $this->paymentService->isOwner($by))) {
+            unset($data['invoice_requested']);
+        }
+        if ($reservation->package_id) {
+            $reservation->invoice_requested = (bool) Package::find($reservation->package_id)?->invoice_requested;
+        } elseif (array_key_exists('invoice_requested', $data)) {
+            $reservation->invoice_requested = !empty($data['invoice_requested']);
+        } elseif (!$reservation->exists) {
+            $reservation->invoice_requested = $renewed ? (bool) $renewed->invoice_requested : (bool) $plan?->invoice_by_default;
+        }
+
+        if ($account && $plan) {
+            app(TaxSnapshot::class)->fill($reservation, $account, $plan, $freshType, (float) $reservation->amount,
+                (float) $reservation->discount_value, !$reservation->package_id);
+        }
+    }
+
+    /**
+     * The double-tax guard (2026-10-28): the member's VAT paid by hand — other-income cash ins in a category not counted as
+     * income ("VAT (manual)") dated in the period ± 7 days; [[id, no, date, amount]] (newest first, at most 20).
+     */
+    public function manualVatPayments($accountId, $memberId, Carbon $start, Carbon $end): array
+    {
+        if (!$memberId) {
+            return [];
+        }
+        $categories = \Modules\PaymentModule\app\Models\IncomeCategory::where('account_id', $accountId)->where('is_revenue', false)->pluck('id');
+
+        return \Modules\PaymentModule\app\Models\Payment::where('account_id', $accountId)->where('member_id', $memberId)
+            ->where('type', 'payment')->where(fn ($query) => $query->whereNull('payable_type')->orWhere('payable_id', 0))
+            ->whereIn('income_category_id', $categories)
+            ->whereBetween('paid_at', [$start->copy()->subDays(7)->toDateString(), $end->copy()->addDays(7)->toDateString()])
+            ->orderByDesc('paid_at')->orderByDesc('id')->limit(20)->get()
+            ->map(fn ($payment) => ['id' => $payment->id, 'no' => $payment->payment_no, 'date' => $payment->paid_at->format(Reservation::DATE_FORMAT),
+                'amount' => number_format((float) $payment->amount, 2)])->all();
+    }
+
+    // a change of "Invoice requested" (Payment Exceptions › Invoice Toggled = changed after a payment)
+    private function logInvoiceChange(Reservation $reservation, bool $from, ?Model $by): void
+    {
+        $log = new InvoiceRequestLog([
+            'account_id' => $reservation->account_id, 'from_value' => $from, 'to_value' => (bool) $reservation->invoice_requested,
+            'paid_amount' => (float) $reservation->paid_amount,
+        ]);
+        $log->loggable()->associate($reservation);
+        if ($by) {
+            $log->creatable()->associate($by);
+        }
+        $log->save();
+    }
+
+    /**
      * The next period of a subscription (the "Renew" form, not saved): same member, package, type, space, unit, plan,
      * amounts; no notes; renewal_of = the subscription. A date plan: its last day = the DATE of its end (an imported end at 00:00
      * is that day, an app end is 23:59:59 of it — the next period of the imported data starts the day after in 501 / 544 cases,
@@ -286,6 +362,7 @@ class ReservationService
                 'leasePeriod' => (string) $plan->lease_period,
                 // its taxes (docs/payments-plan.md §3): the form's breakdown once taxes start (Phase B)
                 'vatExempt' => (int) $plan->vat_exempt, 'tableTax' => (int) $plan->table_tax, 'inclusive' => (int) $plan->price_includes_tax,
+                'invoiceDefault' => (int) $plan->invoice_by_default,
             ])->values()->all();
         }
 

@@ -14,7 +14,8 @@
 {{--
     Payment Exceptions (2026-10-27, fraud prevention, the account only, read only — PaymentExceptionService): a date range (the
     recording / change day, default this month) and a login (who recorded the rows); per login counts, then one tab:
-    Late Entries | Edited | Deleted | Expenses (employees' cash outs from the review amount, Settings › General).
+    Late Entries | Edited | Deleted | Expenses (employees' cash outs from the review amount, Settings › General) | Invoice Toggled
+    ("Invoice requested" changed on a paid reservation, 2026-10-28).
 --}}
 @section('title')
     Payment Exceptions
@@ -78,6 +79,7 @@
             @case('edited') Edits of cash in / refunds / cash out and payments moved into a package (every edit is logged since 27-10-2026; before, only edits after a shift was closed). @break
             @case('deleted') Deleted cash in / refunds / cash out (only the account deletes). @break
             @case('expenses') Cash outs recorded by employees from {{ number_format($reviewAmount, 2) }} (Settings › General). @break
+            @case('invoice') "Invoice requested" ticked / unticked on a reservation that was already paid (part or all): what the customer owes changed with its taxes. @break
         @endswitch
         @if ($rows->count() >= \Modules\PaymentModule\app\Services\PaymentExceptionService::LIMIT)
             The newest {{ $rows->count() }} rows.
@@ -118,6 +120,32 @@
                         </tr>
                     @empty
                         <tr><td colspan="6" class="text-slate-500">Nothing in this range.</td></tr>
+                    @endforelse
+                </tbody>
+            @elseif ($tab === 'invoice')
+                <thead>
+                    <tr><th>Changed</th><th>Reservation</th><th>Member</th><th>Invoice</th><th class="text-right">Paid Then</th><th class="text-right">Costs Now</th><th>Changed By</th></tr>
+                </thead>
+                <tbody>
+                    @forelse ($rows as $log)
+                        @php($record = $log->loggable)
+                        <tr>
+                            <td class="whitespace-nowrap">{{ $log->created_at->format($dateFormat) }}<div class="text-xs text-slate-500">{{ $log->created_at->format($timeFormat) }}</div></td>
+                            <td class="whitespace-nowrap">
+                                @if ($record)
+                                    <a href="{{ route('account.reservations.show', $record->id) }}" data-modal class="font-medium">Reservation #{{ $record->id }}</a>
+                                @else
+                                    #{{ $log->loggable_id }} <span class="badge badge-status-danger">Deleted</span>
+                                @endif
+                            </td>
+                            <td>{{ $record?->member?->name ?? '-' }}</td>
+                            <td class="whitespace-nowrap">{{ $log->from_value ? 'Yes' : 'No' }} → <span class="font-medium">{{ $log->to_value ? 'Yes' : 'No' }}</span></td>
+                            <td class="whitespace-nowrap text-right">{{ number_format($log->paid_amount, 2) }}</td>
+                            <td class="whitespace-nowrap text-right font-medium">{{ $record ? number_format($record->dueAmount(), 2) : '-' }}</td>
+                            <td>{{ $log->recorder_name }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="7" class="text-slate-500">Nothing in this range.</td></tr>
                     @endforelse
                 </tbody>
             @else
