@@ -16,7 +16,7 @@ Then suggest a commit message.
 
 ## Stack
 - Framework: Laravel 12, PHP ^8.2 (local CLI 8.4), modular with `nwidart/laravel-modules` (14 modules in `Modules/`)
-- Database: MySQL `dwidar_res_portal` (timezone Africa/Cairo, locale en; `name_ar` / `name_en` fields ready for ar)
+- Database: MySQL (timezone Africa/Cairo, locale en; `name_ar` / `name_en` fields ready for ar). **LIVE on the server since 2026-10-27** — production DB never touched by Claude; locally `dwidar_res_portal` = the working copy, restored from a live backup by the user when needed (employees work on the server, not on it): audits and fix tests run there
 - Frontend: Blade + Tailwise "dagger" template (compiled `public/assets/css/app.css`, theme class `theme-6` on `<html>`), vanilla JS in `public/assets/js/custom.js`; jQuery only for DataTables (`jQuery.noConflict`). Vite/Tailwind 4 in package.json is NOT used by the pages.
 - Auth: custom, 2 guards — `admin` (table `admins`, login `/admin`) and `web` (table `users`, morph `userable` → Account | Employee, login `/login`)
 - Permissions: none (user type checked by middleware `user.active:{Model}`)
@@ -25,7 +25,7 @@ Then suggest a commit message.
 ## Commands
 - Dev server: `php artisan serve` (user runs http://127.0.0.1:8000; Apache also serves `/mdwidar_dev/Pivot/Pivot_Sys_New/public`)
 - Assets: none to build — edit `public/assets/css/custom.css` / `public/assets/js/custom.js` directly (loaded with `?v=filemtime`)
-- Migrate: `php artisan migrate` (user usually changes columns by hand, see Conventions)
+- Migrate: `php artisan migrate` (new migrations only, reviewed by the user, see Rules)
 - Tests: `php artisan test` (only Laravel example tests exist)
 - Clear caches: `php artisan optimize:clear` (views: `php artisan view:clear`)
 
@@ -36,7 +36,8 @@ Then suggest a commit message.
 - `app/Providers/AppServiceProvider.php` — `Str::humanize()` macro (drop-menu option texts)
 - `public/assets/css/custom.css` — ALL custom CSS (except PDF views: `pdf.css`); `public/assets/js/custom.js` — modal, ajax forms, dynamic forms, toggles; `public/assets/js/datatables.js` — DataTables + `window.dataTables` row API
 - `Template_Source/` — the purchased template HTML (reference for markup/classes)
-- `to_run` — the data transfer script `dwidar_pivot_api` (old system, READ ONLY) → `dwidar_res_portal` (steps 1–6: backup, pre-check, truncate target tables, inserts, recalculation, refresh, checks); re-runnable for go-live (GO-LIVE CHECKLIST at its top, one-time steps in its ARCHIVE section; full trial re-run 2026-10-19); tracked by git (old notes: `storage/app/backups/to_run.before-2026-10-11`)
+- `docs/archive/to_run` — ARCHIVED 2026-10-27 (was `to_run`): the old system → new DB transfer script, history only; never run it, never add to it
+- `database/fixes/` — data fix SQL files (`YYYY-MM-DD-<what>.sql`), written by Claude, tested on the local `dwidar_res_portal`, run by the user on the server
 
 ## Conventions
 - Controllers: `{Module}{UserType}ModuleController` in `Controllers/{UserType}/`; a feature used by account AND employee = `Controllers/Concerns/{X}Actions` trait + 2 thin controllers (`area()` = account|employee)
@@ -50,7 +51,7 @@ Then suggest a commit message.
 - Forms: `layoutmodule::partials.field` with template classes from `config('layoutmodule.form.*')`; `searchable`, `width`, `wrapperClass` options; no inline CSS
 - Display formats: dates `d-m-Y`, times `h:i A` (`Reservation::DATE_FORMAT/TIME_FORMAT`); date/time INPUT values must stay `Y-m-d` / `H:i`
 - DB columns: snake_case, `{x}_ar/{x}_en` for translated text, `account_id` on every account-owned table, `0` = none for non-nullable foreign ids, soft deletes on most tables
-- Schema changes: in practice the user edits the module `create_*_table` migration and alters the DB by hand (new add/rename migrations were deleted) — conflicts with the Rules line below, confirm which to follow
+- Schema changes (since go-live, 2026-10-27): a NEW migration in the module's `database/Migrations` (never edit a `create_*_table` that already ran, never ALTER by hand); the user reviews it before it runs
 - Language: UI English now; Arabic names stored, RTL not done yet
 - Layout: pages `@extends` their area layout (`layoutmodule::admin.main` / `account.main` / `employee.main`), never `main` directly; fill `title`, `actions`, `content`; page JS/CSS via `@push('scripts')` / `@push('styles')`
 - Layout: template markup + classes copied from `Template_Source/dagger-*.html`; custom styles = named classes in `custom.css` (no `style=""`, no `<style>`); template overrides in `custom.js`, never edit template files (`app.css`, `themes/dagger.js`, `vendors/*`)
@@ -86,8 +87,10 @@ Then suggest a commit message.
 
 ## Rules
 - Before renaming anything shared (routes, components, config keys), search the whole project for references and update them all.
-- The current database is a TRIAL migration; the real go-live migration will be run later from to_run. Every manual data or schema change (ALTER, UPDATE, backfill, merge, cleanup) must also be added to to_run in the right step, idempotent, with expected counts — so the go-live run reproduces the exact same state.
-- Never edit migrations that already ran — create a new migration.
+- The system is LIVE (2026-10-27). NEVER connect to the production / server DB (no credentials, no tunnels, no remote commands) — work on the local copy only (`dwidar_res_portal`, restored from live by the user). The live data keeps changing after a dump: a fix file re-checks each row's condition before updating it, skips the rows that no longer match and reports them.
+- `to_run` is archived (`docs/archive/to_run`): don't run it, don't add to it.
+- Schema changes = proper new migrations, reviewed by the user before they run. Never edit migrations that already ran.
+- Data fixes = one SQL file in `database/fixes/`: a transaction, idempotent (safe twice), UPDATEs limited by explicit ids, a SELECT of the expected counts before and after each block, the follow-up commands named (e.g. `payments:refresh`). Claude runs it only on the local `dwidar_res_portal`; the user runs it on the server after a backup.
 - Ask before deleting files or changing shared layouts.
 - Keep changes minimal and scoped to the task.
 - Don't commit — the user commits; suggest the commit message only.

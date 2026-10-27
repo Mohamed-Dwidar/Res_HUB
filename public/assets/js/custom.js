@@ -1396,6 +1396,37 @@ document.addEventListener("input", function (e) {
 document.addEventListener("click", function (e) {
     var option = e.target.closest && e.target.closest("[data-status-option]");
     if (!option) return;
+    reservationStatusSend(option, "");
+});
+
+// cancelling a reservation with payments (errors.cancel_paid, 2026-10-27): the owner (data-can-force) may confirm it with a
+// reason (sent again as force_reason); employees only see the message
+function reservationStatusForce(option, message) {
+    if (!window.Swal) return toast(message, "error");
+    if (!("canForce" in option.dataset)) {
+        Swal.fire({ icon: "error", title: "Can't change the status", text: message });
+        return;
+    }
+    Swal.fire({
+        icon: "warning",
+        title: "It has payments",
+        text: message + " Or cancel it anyway (the payments stay; the reason is added to its notes):",
+        input: "textarea",
+        inputPlaceholder: "Reason",
+        inputAttributes: { maxlength: 255 },
+        showCancelButton: true,
+        confirmButtonText: "Cancel Anyway",
+        cancelButtonText: "Back",
+        confirmButtonColor: "#dc2626",
+        inputValidator: function (value) {
+            if (!value || value.trim().length < 3) return "Write why it is cancelled with its payments.";
+        },
+    }).then(function (answer) {
+        if (answer.isConfirmed) reservationStatusSend(option, answer.value.trim());
+    });
+}
+
+function reservationStatusSend(option, forceReason) {
     var toggle = document.getElementById(option.dataset.toggle);
     if (!toggle || toggle.classList.contains("is-sending")) return;
 
@@ -1403,6 +1434,7 @@ document.addEventListener("click", function (e) {
     data.append("_method", "PATCH");
     data.append("_token", document.querySelector('meta[name="csrf-token"]').content);
     data.append("reservation_status_id", option.dataset.statusId);
+    if (forceReason) data.append("force_reason", forceReason);
     // the list filters: the row leaves the list when it does not match them any more
     if (window.dataTables) {
         var filters = window.dataTables.filters(option.dataset.row);
@@ -1418,6 +1450,13 @@ document.addEventListener("click", function (e) {
         .then(function (result) {
             var json = result.json;
             if (!result.ok || !json.status) {
+                if (json.errors && json.errors.cancel_paid) {
+                    var paidMessage = [].concat(json.errors.cancel_paid)[0];
+                    // a refused reason (too short / not the owner) is shown as is
+                    if (forceReason) toast(paidMessage, "error");
+                    else reservationStatusForce(option, paidMessage);
+                    return;
+                }
                 // "html_" errors (built and escaped by the server, with links: e.g. the slot is taken) stay open until closed
                 if (json.errors && Object.keys(json.errors)[0].indexOf("html_") === 0 && window.Swal) {
                     Swal.fire({ icon: "error", title: "Can't change the status", html: [].concat(Object.values(json.errors)[0])[0] });
@@ -1450,7 +1489,7 @@ document.addEventListener("click", function (e) {
             toggle.classList.remove("is-sending");
             toggle.disabled = false;
         });
-});
+}
 
 // Colors drop menu (unitmodule::partials.color-select): pick the clicked color and show it + its name on the button.
 function pickColorOption(option) {

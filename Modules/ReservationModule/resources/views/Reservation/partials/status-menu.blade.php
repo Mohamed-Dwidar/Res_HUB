@@ -1,6 +1,7 @@
 {{--
     The status of the reservation as a drop menu styled like its badge (the reservation view header).
     Choosing a status saves it by ajax (custom.js [data-status-option]): loading on the badge, then the new badge + the list row.
+    Cancelling one with payments is refused ("Refund first"); the account owner (data-can-force) may confirm it with a reason.
     $reservation, $statuses (ReservationStatus models: the active ones + the current one)
 --}}
 @php
@@ -19,7 +20,7 @@
             @forelse ($statuses as $status)
                 <button type="button" data-tw-dismiss="dropdown" data-status-option class="{{ config('layoutmodule.menu.item') }}"
                     data-url="{{ route($area . '.reservations.status', $reservation->id) }}" data-status-id="{{ $status->id }}"
-                    data-toggle="{{ $menuId }}" data-row="{{ $reservation->id }}">
+                    data-toggle="{{ $menuId }}" data-row="{{ $reservation->id }}" @if ($area === 'account') data-can-force @endif>
                     <span class="{{ $status->badge_class }}">{{ $status->name }}</span>
                     @if ($status->id == $reservation->reservation_status_id)
                         <i data-lucide="check" class="ml-auto h-4 w-4 text-slate-500"></i>

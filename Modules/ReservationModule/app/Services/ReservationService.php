@@ -133,24 +133,41 @@ class ReservationService
         });
     }
 
-    // the status menu of the reservation view; the package is calculated again (a not counted status is not in its price).
-    // Not counted → counted (cancelled → confirmed ...): the slot must be free again, the same check as a new booking
-    public function changeStatus($accountId, $id, $statusId)
+    /**
+     * The status menu of the reservation view; the package is calculated again (a not counted status is not in its price).
+     * Not counted → counted (cancelled → confirmed ...): the slot must be free again, the same check as a new booking; a
+     * period without renewal_of is linked to the period it renews (renewalCandidate(), 2026-10-27: Heba Essam #22049 was
+     * confirmed but stayed unlinked → its old period showed as Not renewed); the relation `linkedRenewal` tells the caller.
+     * Counted → not counted with own payments (net paid > 0): refused ("Refund first"); the account owner may force it with
+     * $forceReason (kept in the notes); employees can't ($user = who changes it; null = no force).
+     */
+    public function changeStatus($accountId, $id, $statusId, ?string $forceReason = null, ?Model $user = null)
     {
         $reservation = $this->findOne($accountId, $id);
         $status = ReservationStatus::where('account_id', $accountId)->find($statusId);
-        if ($status?->is_counted && !$reservation->isCounted() && ($error = $this->restoreError($reservation))) {
+        $restoring = $status?->is_counted && !$reservation->isCounted();
+        $cancelling = $status && !$status->is_counted && $reservation->isCounted();
+        if ($restoring && ($error = $this->restoreError($reservation))) {
             throw ValidationException::withMessages(['html_status' => $error]);
         }
         // a cancelled renewal back to counted: its period must not have another counted renewal meanwhile
-        if ($status?->is_counted && !$reservation->isCounted() && $reservation->renewal_of
+        if ($restoring && $reservation->renewal_of
             && ($other = $this->renewedByOther($reservation->renewal_of, $reservation->id))) {
             throw ValidationException::withMessages(['html_status' => 'The period #' . $reservation->renewal_of . ' is already renewed by '
                 . $this->reservationLink($other) . '. Change that one first.']);
         }
+        $note = $cancelling ? $this->cancelPaidNote($reservation, $status, $forceReason, $user) : null;
+        // never overwrites a link
+        $link = $restoring && !$reservation->renewal_of ? $this->renewalCandidate($reservation) : null;
 
-        return DB::transaction(function () use ($reservation, $statusId) {
-            $reservation->update(['reservation_status_id' => $statusId]);
+        return DB::transaction(function () use ($reservation, $statusId, $note, $link) {
+            $reservation->update(array_filter([
+                'reservation_status_id' => $statusId,
+                'renewal_of' => $link?->id,
+                'notes' => $note !== null ? trim($reservation->notes . "\n" . $note) : null,
+            ], fn ($value) => $value !== null));
+            // for the answer: "Linked as renewal of #…" (a relation: never saved)
+            $reservation->setRelation('linkedRenewal', $link);
             $this->packageService->recalculate($reservation->package_id);
             // a not counted status (cancelled ...): nothing is due
             $this->paymentService->refresh($reservation->load('status'));
@@ -324,6 +341,60 @@ class ReservationService
             return 'Reservation #' . $periodId . ' is already renewed by #' . $other->id . '.';
         }
         return null;
+    }
+
+    /**
+     * The period $reservation most likely renews (null = none), the rule of reservations:link-renewals and the 2026-10-27 audit:
+     * a counted, not deleted period of the same account + member + type + space, starting before it, its last day 7 days
+     * before … 15 days after its start, not renewed by another counted reservation; same unit first, then the nearest gap,
+     * then the newest. Only for a period type with a member.
+     */
+    public function renewalCandidate(Reservation $reservation): ?Reservation
+    {
+        if (!$reservation->isPeriod() || $reservation->member_id <= 0 || !$reservation->start_at) {
+            return null;
+        }
+        $start = $reservation->start_at->toDateString();
+        $gap = 'DATEDIFF(?, ' . Reservation::END_DATE_SQL . ')';
+
+        return Reservation::query()->counted()
+            ->where('account_id', $reservation->account_id)->where('member_id', $reservation->member_id)
+            ->where('subscription_type_id', $reservation->subscription_type_id)->where('space_id', $reservation->space_id)
+            ->whereKeyNot($reservation->id)->where('start_at', '<', $reservation->start_at)
+            ->whereRaw("$gap BETWEEN -7 AND 15", [$start])
+            ->whereNotExists(fn ($query) => $query->selectRaw(1)->from('reservations as next')
+                ->whereColumn('next.renewal_of', 'reservations.id')->where('next.id', '<>', $reservation->id)->whereNull('next.deleted_at')
+                ->whereNotIn('next.reservation_status_id', ReservationStatus::notCountedIds() ?: [0]))
+            ->orderByRaw('unit_id = ? DESC', [(int) $reservation->unit_id])
+            ->orderByRaw("ABS($gap)", [$start])->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * Cancelling (counted → not counted) a reservation that kept its own payments (net paid > 0): refused with "Refund first";
+     * the account owner may force it with a reason → the line added to the notes (null = no payments, nothing to add).
+     * Payments of a package reservation are on the package: not checked here.
+     */
+    private function cancelPaidNote(Reservation $reservation, ReservationStatus $status, ?string $reason, ?Model $user): ?string
+    {
+        $paid = $reservation->paymentsTotal();
+        if ($paid <= 0) {
+            return null;
+        }
+        $message = 'This reservation has payments of ' . number_format($paid, 2) . '. Refund first.';
+        $reason = trim((string) $reason);
+        if ($reason === '') {
+            throw ValidationException::withMessages(['cancel_paid' => $message]);
+        }
+        if (!$user || !$this->paymentService->isOwner($user)) {
+            throw ValidationException::withMessages(['cancel_paid' => $message . ' Only the account owner can cancel it with its payments.']);
+        }
+        if (mb_strlen($reason) < 3 || mb_strlen($reason) > 255) {
+            throw ValidationException::withMessages(['cancel_paid' => 'Write why it is cancelled with its payments (3 to 255 characters).']);
+        }
+
+        return '[' . now()->format(Reservation::DATE_FORMAT . ' ' . Reservation::TIME_FORMAT) . '] ' . $status->name
+            . ' with payments of ' . number_format($paid, 2) . ' by ' . ($user->userable?->displayName() ?? 'the account owner') . ': ' . $reason;
     }
 
     // the counted reservation (not $ignoreId) that already renews the period, null when none

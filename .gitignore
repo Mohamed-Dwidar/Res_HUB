@@ -30,3 +30,6 @@ composer.lock
 /.vscode
 *___*
 Template_Source
+
+# archived data transfer script (password hashes, customer data) — local only, never commit
+/docs/archive/to_run

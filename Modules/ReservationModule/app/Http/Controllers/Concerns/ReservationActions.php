@@ -190,9 +190,9 @@ trait ReservationActions
     {
         $tab = $this->tab($filters);
         $renewal = $this->renewalFilter($filters);
-        // the not counted ones (cancelled, pending ...) always after the counted ones
-        // + who added it (the "By" column)
-        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy')->countedFirst();
+        // by period only: the not counted ones (cancelled, pending ...) stay in their date place, muted (user 2026-10-27; they were
+        // always after the counted ones) + who added it (the "By" column)
+        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy');
         if ($id) {
             $query->whereKey($id);
         } elseif (!request()->filled('order')) {
@@ -301,15 +301,25 @@ trait ReservationActions
         $request->validate([
             'reservation_status_id' => ['required', 'integer', \Illuminate\Validation\Rule::exists('reservation_statuses', 'id')
                 ->where('account_id', $this->accountId())->where('is_active', true)->whereNull('deleted_at')],
+            // cancelling a reservation with payments: the owner's reason (the service refuses employees)
+            'force_reason' => ['nullable', 'string', 'max:255'],
         ], ['reservation_status_id.exists' => 'This status is not available, choose another one.']);
 
-        $reservation = $this->reservationService->changeStatus($this->accountId(), $id, (int) $request->input('reservation_status_id'));
+        $reservation = $this->reservationService->changeStatus($this->accountId(), $id, (int) $request->input('reservation_status_id'),
+            $request->input('force_reason'), Auth::user());
 
         return response()->json([
-            'message' => 'The status has been changed to "' . $reservation->status?->name . '".',
+            'message' => 'The status has been changed to "' . $reservation->status?->name . '".' . $this->linkedMessage($reservation),
             'status' => ['id' => $reservation->reservation_status_id, 'name' => $reservation->status?->name, 'class' => $reservation->status?->badge_class],
             'row' => $this->row($request, $id),
         ]);
+    }
+
+    // " Linked as renewal of #…" when changeStatus() linked it (a period confirmed / restored without renewal_of)
+    private function linkedMessage($reservation): string
+    {
+        $link = $reservation->getRelationValue('linkedRenewal');
+        return $link ? ' Linked as renewal of #' . $link->id . '.' : '';
     }
 
     // the Restore popup (a not counted reservation back to the default counted status): the slot is checked first
@@ -329,7 +339,8 @@ trait ReservationActions
         $reservation = $this->reservationService->restore($this->accountId(), $id);
 
         return response()->json([
-            'message' => 'The reservation has been restored to "' . $reservation->status?->name . '", its amount is due again.',
+            'message' => 'The reservation has been restored to "' . $reservation->status?->name . '", its amount is due again.'
+                . $this->linkedMessage($reservation),
             'row' => $this->row($request, $id),
             'modal' => $request->boolean('back_to_view') ? route($this->area() . '.reservations.show', $id) : null,
         ]);

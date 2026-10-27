@@ -473,13 +473,6 @@ class Reservation extends Model implements Payable
             : $query->orderByDesc('start_at')->orderByDesc('id');
     }
 
-    // the counted reservations first, the not counted ones (cancelled, pending ...) after: always the first order key
-    public function scopeCountedFirst($query)
-    {
-        $ids = ReservationStatus::notCountedIds();
-        return $ids ? $query->orderByRaw('reservation_status_id IN (' . implode(',', array_map('intval', $ids)) . ')') : $query;
-    }
-
     public function scopeCounted($query)
     {
         return $query->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds());
