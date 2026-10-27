@@ -16,7 +16,15 @@
         'attrs' => 'min="0.01" step="0.01" max="99999999"'])
     @include('layoutmodule::partials.field', ['name' => 'payment_method_id', 'label' => 'Paid By', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $methods, 'value' => $expense->payment_method_id ?: null])
-    @include('layoutmodule::partials.field', ['name' => 'spent_at', 'label' => 'Date', 'type' => 'date', 'required' => true, 'value' => $expense->spent_at?->format('Y-m-d')])
+    {{-- add: the recording date (employees can't change it); edit (the account): the saved date --}}
+    @if ($expense->exists)
+        @include('layoutmodule::partials.field', ['name' => 'spent_at', 'label' => 'Date', 'type' => 'date', 'required' => true, 'value' => $expense->spent_at?->format('Y-m-d')])
+    @else
+        @include('paymentmodule::Payment.partials.date-field', ['name' => 'spent_at', 'value' => $expense->spent_at])
+    @endif
+</div>
+<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
+    @include('paymentmodule::Payment.partials.reference-field', ['value' => $expense->reference])
 </div>
 <div class="mt-5">
     @include('layoutmodule::partials.field', ['name' => 'notes', 'label' => 'Notes', 'type' => 'textarea', 'value' => $expense->notes])

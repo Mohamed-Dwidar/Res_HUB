@@ -2,6 +2,7 @@
 
 namespace Modules\PaymentModule\app\Services;
 
+use Modules\PaymentModule\app\Models\PaymentMethod;
 use Modules\PaymentModule\app\Repositories\PaymentMethodRepository;
 
 /**
@@ -28,6 +29,13 @@ class PaymentMethodService
         return $this->methodRepository->forAccount($accountId)
             ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $currentId))
             ->ordered()->get()->pluck('name', 'id')->all();
+    }
+
+    // the names of the methods that need a reference no. (the forms' Reference hint)
+    public function referenceNames($accountId): array
+    {
+        return PaymentMethod::where('account_id', $accountId)->where('requires_reference', true)->where('is_active', true)
+            ->ordered()->get()->pluck('name')->all();
     }
 
     // the list filters: [id => ['name', 'active']], the active ones first (the account sees the inactive ones too, marked;
@@ -87,6 +95,7 @@ class PaymentMethodService
             'name_ar' => $data['name_ar'],
             'name_en' => $data['name_en'] ?? null,
             'is_active' => !empty($data['is_active']),
+            'requires_reference' => !empty($data['requires_reference']),
             'sort_order' => (int) ($data['sort_order'] ?? 0),
         ];
     }

@@ -499,6 +499,30 @@ class ShiftClosingService
             : $this->log($closing, $action, $by, $reason, $record->getKey(), $changes);
     }
 
+    /**
+     * The audit log of a change OUTSIDE a closed shift (2026-10-27: every edit / delete is logged, not only after closing):
+     * payment_edit / payment_delete / expense_edit / expense_delete of a row still in its recorder's open shift, payment_move
+     * (a reservation's payments moved into a package). shift_closing_id 0, user_id = the recorder; no totals. Inside the change's
+     * transaction.
+     */
+    public function logOpenChange(string $action, Payment|Expense $record, Model $by, ?string $reason, array $changes): void
+    {
+        if (!in_array($action, ['payment_edit', 'payment_delete', 'payment_move', 'expense_edit', 'expense_delete'], true)) {
+            abort(500, 'Unknown payment change.');
+        }
+        ShiftEvent::create([
+            'account_id' => $record->account_id,
+            'user_id' => (int) $record->creatable_id,
+            'shift_closing_id' => (int) $record->shift_closing_id,
+            'payment_id' => $record instanceof Payment ? $record->getKey() : 0,
+            'expense_id' => $record instanceof Expense ? $record->getKey() : 0,
+            'by_user_id' => $by->getKey(),
+            'action' => $action,
+            'reason' => $reason,
+            'changes' => $changes,
+        ]);
+    }
+
     private function log(ShiftClosing $closing, string $action, Model $by, ?string $reason = null, int $paymentId = 0, ?array $changes = null, int $expenseId = 0): void
     {
         ShiftEvent::create([

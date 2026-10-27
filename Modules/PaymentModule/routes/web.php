@@ -10,6 +10,7 @@ use Modules\PaymentModule\app\Http\Controllers\Account\ExtraAccountModuleControl
 use Modules\PaymentModule\app\Http\Controllers\Account\IncomeCategoryAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\MyShiftAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\PaymentAccountModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Account\PaymentExceptionAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\PaymentMethodAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\ShiftClosingAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\WithholdingCertificateAccountModuleController;
@@ -123,6 +124,12 @@ Route::prefix('account/withholding-certificates')->name('account.withholding-cer
 Route::prefix('account/daily-summary')->name('account.daily-summary.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     // ?date= (default today)
     Route::get('/', [DailySummaryAccountModuleController::class, 'index'])->name('index');
+});
+
+// Payment Exceptions (2026-10-27, the account only, read only): late entries, edits, deletions, employees' big cash outs
+Route::prefix('account/payment-exceptions')->name('account.payment-exceptions.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
+    // ?tab= late | edited | deleted | expenses, ?from= / ?to= (default this month), ?user_id=
+    Route::get('/', [PaymentExceptionAccountModuleController::class, 'index'])->name('index');
 });
 
 // the account's own shift (MyShiftActions, the same page as the employees')

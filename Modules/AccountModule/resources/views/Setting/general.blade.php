@@ -40,6 +40,17 @@
                 'hint' => 'Subscriptions ending within these days are listed under "Next days".'])
         </div>
 
+        {{-- fraud prevention (2026-10-27): the "Late entry" badge + the Payment Exceptions report --}}
+        <div class="form-section mt-8">Payment Controls</div>
+        <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
+            @include('layoutmodule::partials.field', ['name' => 'late_entry_hours', 'label' => 'Late Entry After (hours)', 'type' => 'number', 'required' => true,
+                'value' => $account->lateEntryHours(), 'attrs' => 'min=0 max=720 step=1',
+                'hint' => 'A cash in / refund / cash out recorded this long after the end of its business date is marked "Late entry".'])
+            @include('layoutmodule::partials.field', ['name' => 'expense_review_amount', 'label' => 'Review Cash Out From', 'type' => 'number', 'required' => true,
+                'value' => $account->expenseReviewAmount(), 'attrs' => 'min=0 step=0.01',
+                'hint' => 'Employees\' cash outs from this amount are listed in Payment Exceptions › Expenses.'])
+        </div>
+
         @include('layoutmodule::partials.form-actions', ['cancel' => route('account.dashboard')])
     </form>
 @endsection

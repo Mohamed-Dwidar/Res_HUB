@@ -70,8 +70,7 @@
     @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'value' => $payment->amount,
         'attrs' => 'min="0.01" step="0.01" max="' . (($payable ?? null) && $payableKind === 'reservation' ? max(0.01, (float) $payable->remaining) : 99999999) . '"',
         'hint' => ($payable ?? null) ? ($payableKind === 'reservation' ? 'Not more than the remaining ' . number_format(max(0, (float) $payable->remaining), 2) . '.' : ((float) $payable->remaining > 0 ? 'Remaining ' . number_format((float) $payable->remaining, 2) . ' — more becomes the member\'s credit.' : 'Nothing owed — the amount is added to the member\'s credit.')) : 'A reservation: not more than its remaining. A package: more becomes credit.'])
-    @include('layoutmodule::partials.field', ['name' => 'paid_at', 'label' => 'Date', 'type' => 'date', 'required' => true,
-        'value' => $payment->paid_at?->format('Y-m-d')])
+    @include('paymentmodule::Payment.partials.date-field', ['name' => 'paid_at', 'value' => $payment->paid_at])
 </div>
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
     <div data-show-if="type=payment">
@@ -79,8 +78,7 @@
             'options' => ['' => '- Select -'] + $methods, 'value' => $payment->payment_method_id ?: null,
             'hint' => empty($methods) ? 'No payment methods yet, add them from Settings > Payment Methods.' : null])
     </div>
-    @include('layoutmodule::partials.field', ['name' => 'reference', 'label' => 'Reference', 'value' => $payment->reference,
-        'hint' => 'Transfer / card reference (optional).', 'attrs' => 'maxlength="255"'])
+    @include('paymentmodule::Payment.partials.reference-field', ['value' => $payment->reference])
 </div>
 
 <div class="mt-5">

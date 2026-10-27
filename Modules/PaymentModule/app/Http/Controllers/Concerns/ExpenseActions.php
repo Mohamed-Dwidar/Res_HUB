@@ -11,7 +11,6 @@ use Modules\PaymentModule\app\Models\Expense;
 use Modules\PaymentModule\app\Services\ExpenseCategoryService;
 use Modules\PaymentModule\app\Services\ExpenseService;
 use Modules\PaymentModule\app\Services\PaymentMethodService;
-use Modules\ReservationModule\app\Models\Reservation;
 use Yajra\DataTables\Facades\DataTables;
 
 /**
@@ -117,8 +116,7 @@ trait ExpenseActions
             ->orderColumn('spent_at', fn ($query, $order) => $query->orderBy('spent_at', $order)->orderBy('expense_no', $order))
             ->addColumn('item_html', fn ($expense) => view('paymentmodule::Expense.partials.row-item', compact('expense'))->render())
             ->addColumn('category', fn ($expense) => e($expense->expenseCategory?->name ?? '-'))
-            ->editColumn('spent_at', fn ($expense) => e($expense->spent_at?->format(Reservation::DATE_FORMAT) ?? '-')
-                . '<div class="text-xs text-slate-500">' . e($expense->created_at?->format(Reservation::TIME_FORMAT)) . '</div>')
+            ->editColumn('spent_at', fn ($expense) => view('paymentmodule::Payment.partials.record-date', ['record' => $expense])->render())
             ->addColumn('method', fn ($expense) => e($expense->method_name))
             ->editColumn('amount', fn ($expense) => view('paymentmodule::Expense.partials.row-amount', compact('expense'))->render())
             ->addColumn('by', fn ($expense) => e($expense->creatable?->userable?->displayName() ?? '-'))

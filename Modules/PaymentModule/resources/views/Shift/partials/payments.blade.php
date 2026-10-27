@@ -3,8 +3,6 @@
     (Payment/partials/row-*): Member | For | Date (time) | Method | Amount | row menu. Rendered here (a popup has no DataTables).
     $payments: with payable (+ space / unit.color / plan of a reservation), member, paymentMethod, incomeCategory
 --}}
-@php($dateFormat = \Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT)
-@php($timeFormat = \Modules\ReservationModule\app\Models\Reservation::TIME_FORMAT)
 
 @if (isset($closing) && $closing->count > $payments->count())
     <div class="mb-2 text-xs text-slate-500">The newest {{ $payments->count() }} of {{ number_format($closing->count) }} cash in entries.</div>
@@ -19,7 +17,7 @@
                 <tr id="row-{{ $payment->id }}">
                     <td>@include('paymentmodule::Payment.partials.row-member')</td>
                     <td>@include('paymentmodule::Payment.partials.row-source')</td>
-                    <td class="whitespace-nowrap">{{ $payment->paid_at?->format($dateFormat) ?? '-' }}<div class="text-xs text-slate-500">{{ $payment->created_at?->format($timeFormat) }}</div></td>
+                    <td class="whitespace-nowrap">@include('paymentmodule::Payment.partials.record-date', ['record' => $payment])</td>
                     <td>{{ $payment->paymentMethod?->name ?? '-' }}</td>
                     <td class="whitespace-nowrap">@include('paymentmodule::Payment.partials.row-amount')</td>
                     <td>@include('paymentmodule::Payment.partials.row-actions')</td>

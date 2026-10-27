@@ -26,13 +26,12 @@
                 'value' => max(0, min($refundable, $payment->amount)) ?: null,
                 'attrs' => 'min="0.01" step="0.01" max="' . max(0, $refundable) . '"',
                 'hint' => 'Up to ' . number_format(max(0, $refundable), 2) . ' (this cash in, less its earlier refunds).'])
-            @include('layoutmodule::partials.field', ['name' => 'paid_at', 'label' => 'Date', 'type' => 'date', 'required' => true, 'value' => today()->format('Y-m-d')])
+            @include('paymentmodule::Payment.partials.date-field', ['name' => 'paid_at'])
             @include('layoutmodule::partials.field', ['name' => 'payment_method_id', 'label' => 'Paid Back By', 'type' => 'select', 'required' => true, 'searchable' => true,
                 'options' => ['' => '- Select -'] + $methods, 'value' => $payment->payment_method_id ?: null])
         </div>
         <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
-            @include('layoutmodule::partials.field', ['name' => 'reference', 'label' => 'Reference', 'attrs' => 'maxlength="255"',
-                'hint' => 'Empty: "Refund of #' . $payment->payment_no . '".'])
+            @include('paymentmodule::Payment.partials.reference-field', ['hint' => 'Cash: empty = "Refund of #' . $payment->payment_no . '".'])
         </div>
         <div class="mt-5">
             @include('layoutmodule::partials.field', ['name' => 'reason', 'label' => 'Reason', 'type' => 'textarea', 'required' => true,

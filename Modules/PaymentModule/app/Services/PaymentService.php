@@ -182,9 +182,12 @@ class PaymentService
             $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
         }
 
-        $paidAt = Carbon::parse($data['paid_at'] ?? today())->startOfDay();
+        $paidAt = $this->recordDate($accountId, $data['paid_at'] ?? null, $creator);
 
         return DB::transaction(function () use ($accountId, $data, $creator, $type, $payable, $amount, $paidAt) {
+            // the number first: its lock (nextNumber()) keeps two saves of the same reference apart
+            $number = $this->nextNumber($accountId);
+            $this->assertReference($accountId, $type === 'payment' ? (int) $data['payment_method_id'] : 0, $data['reference'] ?? null);
             // a reservation: never more than what it still owes (cash in or withholding); a package may be paid
             // beyond its due (the rest = the member's credit, user 2026-10-21)
             if ($payable instanceof Reservation) {
@@ -192,7 +195,7 @@ class PaymentService
             }
             $payment = new Payment([
                 'account_id' => $accountId,
-                'payment_no' => $this->nextNumber($accountId),
+                'payment_no' => $number,
                 'payable_type' => $payable ? $payable->getMorphClass() : null,
                 'payable_id' => $payable ? $payable->getKey() : 0,
                 // other income only (a reservation / package gives its member)
@@ -236,6 +239,12 @@ class PaymentService
             $this->assertCategory($accountId, $data['income_category_id'] ?? 0);
         }
         $paidAt = Carbon::parse($data['paid_at'] ?? $payment->paid_at)->startOfDay();
+        // Reference no.: checked when the method or the reference changes (old rows without one stay as they are)
+        $methodId = $payment->type === 'withholding' ? 0 : (int) $data['payment_method_id'];
+        $reference = trim((string) ($data['reference'] ?? ''));
+        if ($methodId !== (int) $payment->payment_method_id || ($reference !== '' && $reference !== (string) $payment->reference)) {
+            $this->assertReference($accountId, $methodId, $reference, $payment->getKey());
+        }
         $closing = $this->closedShiftOf($payment);
         $reason = $closing ? $this->assertReason($data['change_reason'] ?? '', 'change_reason', 'Write why this payment of a closed shift is changed.') : null;
         // a refund: still not more than its payment's amount (linked), or the money received of its reservation / package (imported)
@@ -254,9 +263,10 @@ class PaymentService
                 'notes' => $data['notes'] ?? null,
             ]);
             $this->refreshPayableOf($payment);
-            if ($closing) {
-                $this->shifts()->paymentChanged($closing, 'payment_edit', $payment, $user, $reason, ['before' => $before, 'after' => $this->snapshot($payment)]);
-            }
+            // the audit log: every edit (2026-10-27), a closed shift also gets its totals recalculated
+            $changes = ['before' => $before, 'after' => $this->snapshot($payment)];
+            $closing ? $this->shifts()->paymentChanged($closing, 'payment_edit', $payment, $user, $reason, $changes)
+                : $this->shifts()->logOpenChange('payment_edit', $payment, $user, trim((string) ($data['change_reason'] ?? '')) ?: null, $changes);
 
             return $payment;
         });
@@ -275,9 +285,9 @@ class PaymentService
             $payment->update(['delete_reason' => $reason, 'deleted_by' => $user->getKey()]);
             $payment->delete();
             $this->refreshPayableOf($payment);
-            if ($closing) {
-                $this->shifts()->paymentChanged($closing, 'payment_delete', $payment, $user, $reason, ['before' => $this->snapshot($payment), 'after' => null]);
-            }
+            $changes = ['before' => $this->snapshot($payment), 'after' => null];
+            $closing ? $this->shifts()->paymentChanged($closing, 'payment_delete', $payment, $user, $reason, $changes)
+                : $this->shifts()->logOpenChange('payment_delete', $payment, $user, $reason, $changes);
 
             return $payment;
         });
@@ -301,13 +311,16 @@ class PaymentService
         $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
         $reason = $this->assertReason($data['reason'] ?? '', 'reason', 'Write why the money is given back.');
         $this->assertRefundable($payment, $amount);
-        $paidAt = Carbon::parse($data['paid_at'] ?? today())->startOfDay();
+        $paidAt = $this->recordDate($accountId, $data['paid_at'] ?? null, $user);
         $closing = $this->closedShiftOf($payment);
 
         return DB::transaction(function () use ($accountId, $payment, $data, $user, $amount, $paidAt, $reason, $closing) {
+            // the number first (its lock); a method that needs a reference: the real one (the transfer no.), not "Refund of #N"
+            $number = $this->nextNumber($accountId);
+            $this->assertReference($accountId, (int) $data['payment_method_id'], $data['reference'] ?? null);
             $refund = new Payment([
                 'account_id' => $accountId,
-                'payment_no' => $this->nextNumber($accountId),
+                'payment_no' => $number,
                 'payable_type' => $payment->payable_type,
                 'payable_id' => $payment->payable_id,
                 'income_category_id' => $payment->income_category_id,
@@ -361,8 +374,18 @@ class PaymentService
      */
     public function movePayments(Payable $from, Payable $to): int
     {
-        $moved = Payment::withTrashed()->where('payable_type', $from->getMorphClass())->where('payable_id', $from->getKey())
+        $payments = Payment::withTrashed()->where('payable_type', $from->getMorphClass())->where('payable_id', $from->getKey())->get();
+        $moved = Payment::withTrashed()->whereKey($payments->modelKeys())
             ->update(['payable_type' => $to->getMorphClass(), 'payable_id' => $to->getKey()]);
+        // the audit log (2026-10-27): one payment_move per payment (from → to), by the login that changed the reservation
+        if ($by = Auth::user()) {
+            foreach ($payments as $payment) {
+                $this->shifts()->logOpenChange('payment_move', $payment, $by, null, [
+                    'before' => ['payable_type' => class_basename($from), 'payable_id' => $from->getKey()],
+                    'after' => ['payable_type' => class_basename($to), 'payable_id' => $to->getKey()],
+                ]);
+            }
+        }
 
         $this->refresh($from instanceof Reservation ? $from->load('status') : $from);
         $this->refresh($to);
@@ -452,6 +475,39 @@ class PaymentService
             throw ValidationException::withMessages(['amount' => 'The amount must be more than 0.']);
         }
         return $amount;
+    }
+
+    /**
+     * The date of a new cash in / refund (2026-10-27, fraud prevention): the business date of the recording time for everyone
+     * but the account owner, who may give another date (reports only: the row always joins the recorder's open shift).
+     */
+    public function recordDate($accountId, $date, Model $user): Carbon
+    {
+        return $date && $this->isOwner($user)
+            ? Carbon::parse($date)->startOfDay()
+            : (Account::settingsOf($accountId)?->businessDate() ?? today())->copy();
+    }
+
+    /**
+     * Reference no. (2026-10-27): a method with "needs reference" (every method but cash) → required, and unique per account +
+     * method among the payments not deleted (cash in, refunds); $ignoreId = the payment being edited. Throws under "reference".
+     */
+    public function assertReference($accountId, int $methodId, ?string $reference, $ignoreId = null): void
+    {
+        $method = $methodId ? PaymentMethod::where('account_id', $accountId)->find($methodId) : null;
+        if (!$method?->requires_reference) {
+            return;
+        }
+        $reference = trim((string) $reference);
+        if ($reference === '') {
+            throw ValidationException::withMessages(['reference' => 'Write the reference no. of this ' . $method->name . ' payment.']);
+        }
+        $taken = Payment::where('account_id', $accountId)->where('payment_method_id', $methodId)->where('reference', $reference)
+            ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))->first(['id', 'payment_no', 'type']);
+        if ($taken) {
+            throw ValidationException::withMessages(['reference' => 'This ' . $method->name . ' reference is already used by '
+                . ($taken->type === 'refund' ? 'refund' : 'cash in') . ' #' . $taken->payment_no . '.']);
+        }
     }
 
     private function assertMethod($accountId, $methodId): void

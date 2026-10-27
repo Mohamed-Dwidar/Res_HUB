@@ -36,7 +36,7 @@
                 @include('layoutmodule::partials.field', ['name' => 'income_category_id', 'label' => 'Income Category', 'type' => 'select', 'required' => true, 'searchable' => true,
                     'options' => ['' => '- Select -'] + $categories, 'value' => $payment->income_category_id ?: null])
             @endunless
-            @include('layoutmodule::partials.field', ['name' => 'reference', 'label' => 'Reference', 'value' => $payment->reference, 'attrs' => 'maxlength="255"'])
+            @include('paymentmodule::Payment.partials.reference-field', ['value' => $payment->reference, 'hint' => 'Checked when the method or the reference changes.'])
         </div>
         <div class="mt-5">
             @include('layoutmodule::partials.field', ['name' => 'notes', 'label' => 'Notes', 'type' => 'textarea', 'value' => $payment->notes])

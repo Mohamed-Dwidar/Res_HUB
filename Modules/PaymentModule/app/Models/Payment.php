@@ -2,6 +2,7 @@
 
 namespace Modules\PaymentModule\app\Models;
 
+use Modules\PaymentModule\app\Models\Concerns\LateEntry;
 use App\Helpers\SafeMorphHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,7 +22,10 @@ use Modules\UserModule\app\Models\User;
  */
 class Payment extends Model
 {
-    use SafeMorphHelper, SoftDeletes;
+    use SafeMorphHelper, SoftDeletes, LateEntry;
+
+    // the date checked by "Late entry" (Concerns\LateEntry)
+    const LATE_DATE = 'paid_at';
 
     // the UI names (2026-10-14): money in = "Cash In" (+ withholding), money out = refunds (and expenses: "Cash Out")
     const TYPES = [

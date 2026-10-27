@@ -62,6 +62,12 @@
             'url' => route('account.daily-summary.index'),
             'active' => request()->routeIs('account.daily-summary.*', 'account.shifts.*'),
         ],
+        [
+            'title' => 'Payment Exceptions',
+            'icon' => 'shield-alert',
+            'url' => route('account.payment-exceptions.index'),
+            'active' => request()->routeIs('account.payment-exceptions.*'),
+        ],
         ...($withholdingOn ? [[
             'title' => 'Withholding Certificates',
             'icon' => 'file-badge',

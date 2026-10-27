@@ -48,6 +48,7 @@ class Account extends Model implements Userable
     protected $fillable = [
         'name_ar', 'name_en', 'phone', 'address', 'description_ar', 'description_en', 'logo', 'status', 'approved_at',
         'withholding_enabled', 'vat_enabled', 'today_hours_from', 'today_hours_to', 'renewal_days',
+        'late_entry_hours', 'expense_review_amount',
     ];
 
     protected $casts = [
@@ -57,6 +58,8 @@ class Account extends Model implements Userable
         'today_hours_from' => 'integer',
         'today_hours_to' => 'integer',
         'renewal_days' => 'integer',
+        'late_entry_hours' => 'integer',
+        'expense_review_amount' => 'decimal:2',
     ];
 
     // Settings › General, loaded once per request by account id (settingsOf())
@@ -132,6 +135,18 @@ class Account extends Model implements Userable
     public function renewalDays(): int
     {
         return min(90, max(1, (int) ($this->renewal_days ?? 7)));
+    }
+
+    // Payment Controls (2026-10-27): recorded more than these hours after the end of its business date = "Late entry"
+    public function lateEntryHours(): int
+    {
+        return min(720, max(0, (int) ($this->late_entry_hours ?? 12)));
+    }
+
+    // cash outs of employees from this amount = the Payment Exceptions report's Expenses tab
+    public function expenseReviewAmount(): float
+    {
+        return max(0, (float) ($this->expense_review_amount ?? 500));
     }
 
     // the account login (email, password)

@@ -12,6 +12,7 @@ class PaymentMethodRequest extends FormRequest
             'name_ar' => 'required|string|max:255',
             'name_en' => 'nullable|string|max:255',
             'is_active' => 'boolean',
+            'requires_reference' => 'boolean',
             'sort_order' => 'nullable|integer|min:0|max:65535',
         ];
     }

@@ -154,9 +154,8 @@ trait PaymentActions
             ->setRowId(fn ($payment) => 'row-' . $payment->id)
             ->orderColumn('paid_at', fn ($query, $order) => $query->orderBy('paid_at', $order)->orderBy('payment_no', $order))
             ->addColumn('member_html', fn ($payment) => view('paymentmodule::Payment.partials.row-member', compact('payment'))->render())
-            // the date + the time it was added (paid_at has no time)
-            ->editColumn('paid_at', fn ($payment) => e($payment->paid_at?->format(Reservation::DATE_FORMAT) ?? '-')
-                . '<div class="text-xs text-slate-500">' . e($payment->created_at?->format(Reservation::TIME_FORMAT)) . '</div>')
+            // the date + the time it was added (paid_at has no time) + "Late entry"
+            ->editColumn('paid_at', fn ($payment) => view('paymentmodule::Payment.partials.record-date', ['record' => $payment])->render())
             ->addColumn('source', fn ($payment) => view('paymentmodule::Payment.partials.row-source', compact('payment'))->render())
             ->addColumn('method', fn ($payment) => e($payment->paymentMethod?->name ?? '-'))
             ->editColumn('amount', fn ($payment) => view('paymentmodule::Payment.partials.row-amount', compact('payment'))->render())
@@ -219,8 +218,7 @@ trait PaymentActions
 
         return [
             'DT_RowId' => 'row-' . $kind . '-' . $model->id,
-            'at_date' => e(($kind === 'payment' ? $model->paid_at : $model->spent_at)?->format(Reservation::DATE_FORMAT) ?? '-')
-                . '<div class="text-xs text-slate-500">' . e($model->created_at?->format(Reservation::TIME_FORMAT)) . '</div>',
+            'at_date' => view('paymentmodule::Payment.partials.record-date', ['record' => $model])->render(),
             'type' => $cell('type'),
             'party' => $cell('party'),
             'what' => $cell('what'),

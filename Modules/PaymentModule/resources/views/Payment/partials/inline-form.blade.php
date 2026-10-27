@@ -29,8 +29,7 @@
         @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true,
             'value' => max(0, (float) $payable->remaining) ?: null, 'attrs' => 'min="0.01" step="0.01" max="' . $payable->remaining . '"',
             'hint' => 'Not more than the remaining ' . number_format($payable->remaining, 2) . '.'])
-        @include('layoutmodule::partials.field', ['name' => 'paid_at', 'label' => 'Date', 'type' => 'date', 'required' => true,
-            'value' => today()->format('Y-m-d')])
+        @include('paymentmodule::Payment.partials.date-field', ['name' => 'paid_at'])
     </div>
     <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
         <div data-show-if="type=payment">
@@ -38,7 +37,7 @@
                 'options' => ['' => '- Select -'] + $methods,
                 'hint' => empty($methods) ? 'No payment methods yet, add them from Settings > Payment Methods.' : null])
         </div>
-        @include('layoutmodule::partials.field', ['name' => 'reference', 'label' => 'Reference', 'attrs' => 'maxlength="255"'])
+        @include('paymentmodule::Payment.partials.reference-field')
         @include('layoutmodule::partials.field', ['name' => 'notes', 'label' => 'Notes'])
     </div>
 

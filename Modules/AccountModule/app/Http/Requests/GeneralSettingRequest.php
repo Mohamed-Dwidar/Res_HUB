@@ -20,6 +20,8 @@ class GeneralSettingRequest extends FormRequest
             'today_hours_from' => 'required|integer|min:0|max:23',
             'today_hours_to' => 'required|integer|gt:today_hours_from|max:30',
             'renewal_days' => 'required|integer|min:1|max:90',
+            'late_entry_hours' => 'required|integer|min:0|max:720',
+            'expense_review_amount' => 'required|numeric|min:0|max:99999999',
         ];
     }
 
@@ -28,6 +30,7 @@ class GeneralSettingRequest extends FormRequest
         return [
             'withholding_enabled' => 'withholding tax', 'vat_enabled' => 'VAT',
             'today_hours_from' => 'timeline from', 'today_hours_to' => 'timeline to', 'renewal_days' => 'renewals window',
+            'late_entry_hours' => 'late entry hours', 'expense_review_amount' => 'expenses to review from',
         ];
     }
 }

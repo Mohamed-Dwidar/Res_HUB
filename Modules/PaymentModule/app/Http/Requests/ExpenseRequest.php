@@ -23,6 +23,7 @@ class ExpenseRequest extends FormRequest
             'amount' => 'required|numeric|min:0.01|max:99999999',
             'payment_method_id' => ['required', 'integer', $ownedBy('payment_methods', $expense?->payment_method_id)],
             'spent_at' => 'required|date',
+            'reference' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:5000',
             'attachment' => 'nullable|file|max:5120|mimes:pdf,jpg,jpeg,png,webp',
             'delete_attachment' => 'boolean',

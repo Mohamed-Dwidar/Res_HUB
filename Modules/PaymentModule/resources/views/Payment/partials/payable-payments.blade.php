@@ -69,7 +69,7 @@
                     @foreach ($payments as $payment)
                         <tr>
                             <td class="font-medium {{ $payment->type === 'refund' ? 'text-danger' : '' }}">{{ number_format($payment->signed_amount, 2) }}</td>
-                            <td class="whitespace-nowrap">{{ $payment->paid_at?->format($dateFormat) }}</td>
+                            <td class="whitespace-nowrap">@include('paymentmodule::Payment.partials.record-date', ['record' => $payment, 'time' => false])</td>
                             <td><a href="{{ route($area . '.payments.show', $payment->id) }}" data-modal class="font-medium">#{{ $payment->payment_no }}</a></td>
                             <td>{{ $payment->paymentMethod?->name ?? '-' }}</td>
                             <td><span class="badge {{ $payment->type_badge_class }}">{{ $payment->type_label }}</span></td>

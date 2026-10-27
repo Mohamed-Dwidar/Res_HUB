@@ -2,6 +2,7 @@
 
 namespace Modules\PaymentModule\app\Models;
 
+use Modules\PaymentModule\app\Models\Concerns\LateEntry;
 use App\Helpers\SafeMorphHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,7 +18,10 @@ use Modules\UserModule\app\Models\User;
  */
 class Expense extends Model
 {
-    use SafeMorphHelper, SoftDeletes;
+    use SafeMorphHelper, SoftDeletes, LateEntry;
+
+    // the date checked by "Late entry" (Concerns\LateEntry)
+    const LATE_DATE = 'spent_at';
 
     // the list tabs (account): today (default) | this month | all, on spent_at — same as the payments list
     const TABS = [
@@ -30,7 +34,7 @@ class Expense extends Model
     const NO_METHOD = 'No method (withholding notice)';
 
     protected $fillable = [
-        'account_id', 'expense_no', 'expense_category_id', 'item', 'amount', 'payment_method_id', 'spent_at', 'notes', 'attachment',
+        'account_id', 'expense_no', 'expense_category_id', 'item', 'amount', 'payment_method_id', 'reference', 'spent_at', 'notes', 'attachment',
         'delete_reason', 'deleted_by',
     ];
 

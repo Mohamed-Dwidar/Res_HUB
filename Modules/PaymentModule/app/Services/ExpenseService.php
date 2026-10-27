@@ -61,9 +61,14 @@ class ExpenseService
     public function create($accountId, array $data, Model $creator): Expense
     {
         $values = $this->values($accountId, $data);
+        // the date (2026-10-27): the business date of the recording time; only the account owner gives another one (reports only)
+        $values['spent_at'] = app(PaymentService::class)->recordDate($accountId, $data['spent_at'] ?? null, $creator)->toDateString();
 
         return DB::transaction(function () use ($accountId, $data, $creator, $values) {
-            $expense = new Expense($values + ['account_id' => $accountId, 'expense_no' => $this->nextNumber($accountId)]);
+            // the number first: its lock keeps two saves of the same reference apart
+            $number = $this->nextNumber($accountId);
+            $this->assertReference($accountId, $values['payment_method_id'], $values['reference']);
+            $expense = new Expense($values + ['account_id' => $accountId, 'expense_no' => $number]);
             $expense->creatable()->associate($creator);
             $expense->save();
             $this->storeAttachment($expense, $data['attachment'] ?? null);
@@ -81,6 +86,11 @@ class ExpenseService
         $this->assertOwner($user);
         $expense = $this->findOne($accountId, $id);
         $values = $this->values($accountId, $data, $expense);
+        // Reference no.: checked when the method or the reference changes (old rows without one stay as they are)
+        if ($values['payment_method_id'] !== (int) $expense->payment_method_id
+            || ($values['reference'] !== null && $values['reference'] !== $expense->reference)) {
+            $this->assertReference($accountId, $values['payment_method_id'], $values['reference'], $expense->getKey());
+        }
         $closing = $this->closedShiftOf($expense);
         $reason = $closing ? $this->assertReason($data['change_reason'] ?? '', 'change_reason', 'Write why this expense of a closed shift is changed.') : null;
 
@@ -91,9 +101,10 @@ class ExpenseService
                 $this->deleteAttachment($expense);
             }
             $this->storeAttachment($expense, $data['attachment'] ?? null);
-            if ($closing) {
-                $this->shiftService->paymentChanged($closing, 'expense_edit', $expense, $user, $reason, ['before' => $before, 'after' => $this->snapshot($expense->fresh())]);
-            }
+            // the audit log: every edit (2026-10-27), a closed shift also gets its totals recalculated
+            $changes = ['before' => $before, 'after' => $this->snapshot($expense->fresh())];
+            $closing ? $this->shiftService->paymentChanged($closing, 'expense_edit', $expense, $user, $reason, $changes)
+                : $this->shiftService->logOpenChange('expense_edit', $expense, $user, trim((string) ($data['change_reason'] ?? '')) ?: null, $changes);
 
             return $expense;
         });
@@ -110,9 +121,9 @@ class ExpenseService
         return DB::transaction(function () use ($expense, $reason, $user, $closing) {
             $expense->update(['delete_reason' => $reason, 'deleted_by' => $user->getKey()]);
             $expense->delete();
-            if ($closing) {
-                $this->shiftService->paymentChanged($closing, 'expense_delete', $expense, $user, $reason, ['before' => $this->snapshot($expense), 'after' => null]);
-            }
+            $changes = ['before' => $this->snapshot($expense), 'after' => null];
+            $closing ? $this->shiftService->paymentChanged($closing, 'expense_delete', $expense, $user, $reason, $changes)
+                : $this->shiftService->logOpenChange('expense_delete', $expense, $user, $reason, $changes);
 
             return $expense;
         });
@@ -164,9 +175,28 @@ class ExpenseService
             'item' => trim($data['item']),
             'amount' => $amount,
             'payment_method_id' => $methodId,
+            'reference' => trim((string) ($data['reference'] ?? '')) ?: null,
             'spent_at' => Carbon::parse($data['spent_at'] ?? today())->toDateString(),
             'notes' => $data['notes'] ?? null,
         ];
+    }
+
+    // Reference no. (2026-10-27): a method with "needs reference" → required, unique per account + method among the expenses
+    // not deleted ($ignoreId = the one being edited); throws under "reference"
+    private function assertReference($accountId, int $methodId, ?string $reference, $ignoreId = null): void
+    {
+        $method = PaymentMethod::where('account_id', $accountId)->find($methodId);
+        if (!$method?->requires_reference) {
+            return;
+        }
+        if ($reference === null || $reference === '') {
+            throw ValidationException::withMessages(['reference' => 'Write the reference no. of this ' . $method->name . ' payment.']);
+        }
+        $taken = Expense::where('account_id', $accountId)->where('payment_method_id', $methodId)->where('reference', $reference)
+            ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))->value('expense_no');
+        if ($taken) {
+            throw ValidationException::withMessages(['reference' => 'This ' . $method->name . ' reference is already used by cash out #' . $taken . '.']);
+        }
     }
 
     private function assertOwner(Model $user): void
@@ -196,6 +226,7 @@ class ExpenseService
             'amount' => (float) $expense->amount,
             'payment_method_id' => (int) $expense->payment_method_id,
             'method' => $expense->method_name,
+            'reference' => $expense->reference,
             'spent_at' => $expense->spent_at?->format('Y-m-d'),
             'notes' => $expense->notes,
         ];
