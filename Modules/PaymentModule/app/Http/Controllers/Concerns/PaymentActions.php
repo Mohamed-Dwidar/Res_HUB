@@ -90,6 +90,9 @@ trait PaymentActions
             'categories' => $this->categoryService->filterOptions($accountId, $activeOnly),
             // Cash Out: the category filter (+ Refunds)
             'expenseCategories' => $type === 'out' ? $this->expenseCategoryService->filterOptions($accountId, $activeOnly) : [],
+            // ?member_id= (the Members list, the account only): that member's cash in, the All date tab
+            'member' => $type === 'in' && !$this->collectorId() && $request->filled('member_id')
+                ? \Modules\MemberModule\app\Models\Member::where('account_id', $accountId)->find((int) $request->input('member_id')) : null,
         ]);
     }
 
@@ -113,7 +116,8 @@ trait PaymentActions
         }
 
         // direction=in: the Cash In tab (no refunds, they are Cash Out)
-        return ['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['for', 'method', 'date_from', 'date_to', 'direction']);
+        // member_id: the Members list's Payments (account)
+        return ['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['for', 'method', 'date_from', 'date_to', 'direction', 'member_id']);
     }
 
     // DataTables server side: tab + search + for / method / dates filters, + the summary line of those rows

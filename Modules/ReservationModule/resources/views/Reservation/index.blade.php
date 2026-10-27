@@ -15,7 +15,7 @@
         count of the counted ones) | Upcoming | All; under them ONE row of filters, all visible:
         search | date (one field: Today / All synced, Upcoming = "From <tomorrow>"; picked days = running on them, the Today rule) | type | space | unit | payment | status | renewal | Clear.
         Today / Upcoming hide the contract periods unless the type filter is chosen (a contract type shows its rows).
-        Not counted reservations (cancelled ...) = muted, last.
+        Not counted reservations (cancelled ...) = muted, in their date place (2026-10-27; were last).
     --}}
     <form id="reservations-filters" class="filter-bar">
         {{-- opened from the Members list (?member_id=): the All tab --}}

@@ -1613,6 +1613,8 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
 .money-box__item--paid b { color: rgb(var(--color-success)); }
 .money-box__item--owed b { color: rgb(var(--color-danger)); }
 .money-box__item--credit b { color: rgb(var(--color-info)); }
+/* counts, not amounts (the member view's Confirmed | Cancelled): centered */
+.money-box--center .money-box__item { align-items: center; }
 
 /* a table that scrolls inside a fixed height (e.g. the reservations of a package), the header row stays visible */
 .table-wrap--scroll {

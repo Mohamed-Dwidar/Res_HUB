@@ -9,6 +9,7 @@ use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\JobModule\app\Services\JobService;
 use Modules\MemberModule\app\Http\Requests\MemberRequest;
 use Modules\MemberModule\app\Services\MemberService;
+use Modules\ReservationModule\app\Models\ReservationStatus;
 use Yajra\DataTables\Facades\DataTables;
 
 /**
@@ -62,8 +63,8 @@ trait MemberActions
     // the list columns, for data() and for one row after a change (row())
     private function table(array $filters, $id = null)
     {
-        // + how many reservations (not deleted; cancelled included), one subquery
-        $query = $this->memberService->listQuery($this->accountId())->withCount('reservations');
+        // + how many reservations (not deleted, counted: no cancelled / pending ..., user 2026-10-27), one subquery
+        $query = $this->memberService->listQuery($this->accountId())->withCount(['reservations' => fn ($query) => $query->counted()]);
         if ($id) {
             $query->whereKey($id);
         }
@@ -83,7 +84,7 @@ trait MemberActions
             ->addColumn('actions', fn ($member) => view('membermodule::Account.partials.row-actions', compact('member'))->render())
             ->rawColumns(['name_html', 'reservations_html', 'actions'])
             // send only the table columns (not all the member fields)
-            ->only(['DT_RowId', 'name_html', 'phone', 'company', 'job', 'reservations_html', 'created_at', 'actions']);
+            ->only(['DT_RowId', 'name_html', 'company', 'job', 'reservations_html', 'created_at', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -135,7 +136,13 @@ trait MemberActions
     public function show($id)
     {
         $member = $this->memberService->findOne($this->accountId(), $id);
-        return view('membermodule::Account.show', compact('member'));
+        // the top block: Confirmed (counted) | Cancelled (not counted: cancelled, pending ...) reservations, not deleted
+        $counts = $member->reservations()->toBase()
+            ->selectRaw('SUM(reservation_status_id NOT IN (' . implode(',', array_map('intval', ReservationStatus::notCountedIds() ?: [0])) . ')) AS confirmed, COUNT(*) AS total')
+            ->first();
+        $confirmed = (int) $counts->confirmed;
+        $cancelled = (int) $counts->total - $confirmed;
+        return view('membermodule::Account.show', compact('member', 'confirmed', 'cancelled'));
     }
 
     public function edit($id)

@@ -42,11 +42,19 @@
     <form id="payments-filters" class="filter-bar">
         {{-- employees: no tabs, the date field only (one day, today by default, × / Clear = today) --}}
         @if ($area === 'account')
-            @include('layoutmodule::partials.filter-tabs', ['tabs' => \Modules\PaymentModule\app\Models\Payment::TABS, 'default' => 'today', 'dates' => \Modules\PaymentModule\app\Models\Payment::tabDates()])
+            {{-- opened from the Members list (?member_id=): the All tab --}}
+            @include('layoutmodule::partials.filter-tabs', ['tabs' => \Modules\PaymentModule\app\Models\Payment::TABS, 'default' => 'today', 'initial' => $member ? 'all' : null, 'dates' => \Modules\PaymentModule\app\Models\Payment::tabDates()])
         @endif
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}"
             placeholder="{{ $type === 'in' ? 'No., reference, member name or phone' : 'No., reference, item, member name or phone' }}" autocomplete="off">
         @include('layoutmodule::partials.date-range-filter', $area === 'employee' ? ['single' => true, 'default' => today()->toDateString()] : [])
+        {{-- ?member_id= (the Members list): this member only, chosen when the list opens; Clear / "All Members" = everyone --}}
+        @if ($member)
+            <select name="member_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Member" data-initial="{{ $member->id }}">
+                <option value="">All Members</option>
+                <option value="{{ $member->id }}">{{ $member->name }}</option>
+            </select>
+        @endif
         @if ($type === 'in')
             <select name="for" class="{{ config('layoutmodule.form.select') }}" aria-label="For">
                 <option value="">All (For)</option>
