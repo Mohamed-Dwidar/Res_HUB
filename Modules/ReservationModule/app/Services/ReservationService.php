@@ -284,6 +284,8 @@ class ReservationService
                 'periodHours' => Plan::PERIOD_HOURS[$plan->lease_period] ?? 1,
                 // the form sets the end from the start for one lease period (custom.js reservationEndFromPlan())
                 'leasePeriod' => (string) $plan->lease_period,
+                // its taxes (docs/payments-plan.md §3): the form's breakdown once taxes start (Phase B)
+                'vatExempt' => (int) $plan->vat_exempt, 'tableTax' => (int) $plan->table_tax, 'inclusive' => (int) $plan->price_includes_tax,
             ])->values()->all();
         }
 

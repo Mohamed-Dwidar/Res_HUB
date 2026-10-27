@@ -3,12 +3,13 @@
 namespace Modules\PaymentModule\app\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Modules\PaymentModule\app\Models\IncomeCategory;
 
 class IncomeCategoryRequest extends FormRequest
 {
     public function rules(): array
     {
-        return [
+        return IncomeCategory::taxFlagRules() + [
             'name_ar' => 'required|string|max:255',
             'name_en' => 'nullable|string|max:255',
             'is_active' => 'boolean',

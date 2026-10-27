@@ -3,7 +3,7 @@
 {{--
     Settings › General (the account only, docs/payments-plan.md): two switches stored on the account + the Schedule page settings (timeline hours, renewals window).
     Withholding tax OFF: no new withholding anywhere (payment type, Method filter, certificates page + menu); existing withholding
-    records stay and are still shown. VAT: for Phase 2 (OFF = prices tax free); nothing else changes now.
+    records stay and are still shown. VAT (docs/payments-plan.md §3): the rates, the tax start date (empty = no taxes), the rounding option, the tax report month.
 --}}
 @section('title')
     General Settings
@@ -22,8 +22,28 @@
         <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
             @include('layoutmodule::partials.checkbox', ['name' => 'withholding_enabled', 'label' => 'Withholding tax', 'checked' => $account->withholdingEnabled(),
                 'hint' => 'Off: "Withholding" is no longer offered when adding payments or in the filters, and the Withholding Certificates page is hidden. Existing withholding records stay and are still shown. Turning it on again restores everything.'])
+            @include('layoutmodule::partials.field', ['name' => 'withholding_rate', 'label' => 'Withholding Rate %', 'type' => 'number',
+                'value' => $account->withholding_rate, 'attrs' => 'min=0 max=100 step=0.01',
+                'hint' => 'The customer\'s withholding, on the net before tax. Empty until the accountant gives it.'])
+        </div>
+        <div class="mt-5">
             @include('layoutmodule::partials.checkbox', ['name' => 'vat_enabled', 'label' => 'VAT', 'checked' => $account->vatEnabled(),
-                'hint' => 'For invoices (coming next): off = all prices are tax free, no tax rates or tax lines. Nothing changes today.'])
+                'hint' => 'Off: all prices are tax free, no taxes are calculated and the plan / income category tax fields are hidden.'])
+        </div>
+        <div data-show-if="vat_enabled" class="mt-5 grid grid-cols-1 gap-5 md:grid-cols-3">
+            @include('layoutmodule::partials.field', ['name' => 'vat_rate', 'label' => 'VAT Rate %', 'type' => 'number', 'required' => true,
+                'value' => $account->vatRate(), 'attrs' => 'min=0 max=100 step=0.01'])
+            @include('layoutmodule::partials.field', ['name' => 'table_tax_rate', 'label' => 'Table Tax Rate %', 'type' => 'number', 'required' => true,
+                'value' => $account->tableTaxRate(), 'attrs' => 'min=0 max=100 step=0.01',
+                'hint' => 'Only for the plans / income categories with "Table tax". VAT is calculated on net + table tax.'])
+            @include('layoutmodule::partials.field', ['name' => 'tax_start_date', 'label' => 'Tax Start Date', 'type' => 'date',
+                'value' => $account->tax_start_date?->format('Y-m-d'),
+                'hint' => 'Empty = no taxes yet. Reservations, packages and extras created on or after this date get their taxes; older ones are never changed.'])
+            @include('layoutmodule::partials.field', ['name' => 'tax_rounding', 'label' => 'Rounding', 'type' => 'select', 'required' => true,
+                'options' => \Modules\PaymentModule\app\Services\Tax\TaxRule::ROUNDINGS, 'value' => $account->taxRounding(), 'width' => 'long',
+                'hint' => 'Some tax-inclusive prices can\'t be split exactly into net + taxes: who takes the 0.01 difference.'])
+            @include('layoutmodule::partials.field', ['name' => 'tax_report_basis', 'label' => 'Tax Report Month By', 'type' => 'select', 'required' => true,
+                'options' => \Modules\AccountModule\app\Models\Account::TAX_REPORT_BASES, 'value' => $account->taxReportBasis()])
         </div>
 
         <div class="form-section mt-8">Schedule Page</div>

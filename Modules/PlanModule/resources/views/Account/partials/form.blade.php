@@ -16,3 +16,5 @@
     @include('layoutmodule::partials.field', ['name' => 'facilities', 'label' => 'Facilities', 'type' => 'textarea', 'value' => $plan?->facilities,
         'hint' => 'What the plan includes, e.g. Wi-Fi, coffee, meeting room hours.'])
 </div>
+
+@include('paymentmodule::Tax.partials.flags', ['model' => $plan, 'what' => 'reservations'])

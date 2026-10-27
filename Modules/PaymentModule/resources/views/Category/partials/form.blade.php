@@ -5,3 +5,6 @@
     @include('layoutmodule::partials.checkbox', ['name' => 'is_active', 'label' => 'Active', 'checked' => $category?->is_active ?? true, 'hint' => 'Inactive categories are hidden from the payment form.'])
     @include('layoutmodule::partials.checkbox', ['name' => 'is_revenue', 'label' => 'Counts as income', 'checked' => $category?->is_revenue ?? true, 'hint' => 'Off for money collected for others (e.g. VAT): left out of the income reports.'])
 </div>
+
+{{-- a category not counted as income (VAT collected ...) is never taxed --}}
+@include('paymentmodule::Tax.partials.flags', ['model' => $category, 'what' => 'extras', 'showIf' => 'is_revenue'])

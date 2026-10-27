@@ -2,6 +2,7 @@
 
 namespace Modules\PaymentModule\app\Services;
 
+use Modules\PaymentModule\app\Models\IncomeCategory;
 use Modules\PaymentModule\app\Repositories\IncomeCategoryRepository;
 
 /**
@@ -83,6 +84,6 @@ class IncomeCategoryService
             'name_en' => $data['name_en'] ?? null,
             'is_active' => !empty($data['is_active']),
             'is_revenue' => !empty($data['is_revenue']),
-        ];
+        ] + IncomeCategory::taxFlagsFrom($data);
     }
 }

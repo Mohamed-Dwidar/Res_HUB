@@ -2,6 +2,7 @@
 
 namespace Modules\PlanModule\app\Services;
 
+use Modules\PlanModule\app\Models\Plan;
 use Modules\PlanModule\app\Repositories\PlanRepository;
 
 /**
@@ -74,6 +75,6 @@ class PlanService
             'amount' => $data['amount'],
             'is_time_based' => !empty($data['is_time_based']),
             'is_active' => !empty($data['is_active']),
-        ];
+        ] + Plan::taxFlagsFrom($data);
     }
 }

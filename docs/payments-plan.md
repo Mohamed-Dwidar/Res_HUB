@@ -1,7 +1,7 @@
 # Payments, Invoices & ETA — Module Plan
 
 > Status: Phase 1 done (old data transferred 2026-10-11); §2b shift closing (two levels) built 2026-10-11; Phase 2 not started.
-> Phases: (1) payments + withholding certificates + day closing + old data import · (2) tax rates + invoices / receipts + ETA entry view · (3) reports.
+> Phases: (1) payments + withholding certificates + day closing + old data import · (2) taxes on reservations / packages / extras + ETA to-do (redesigned 2026-10-28; Phase A built) · (3) reports.
 
 ---
 
@@ -19,98 +19,65 @@
 | Expenses | Separate table later, no `direction` column. |
 | Invoices | Simplified, ETA-ready (no API now). Created on demand; one builder, so auto-creation can be added later. Issued = read-only; corrections via credit / debit note. |
 | E-receipts (B2C) | Same tables and flow as invoices (`document_type = receipt`), entered manually on the ETA portal, UUID pasted back. |
-| Taxes | `tax_rates` table (T1 VAT, T2 / T3 table tax, others), several per plan / income category, several per invoice line (`invoice_item_taxes`). One `TaxCalculator` used everywhere. |
-| Prices | VAT-inclusive by default (`prices_include_tax = 1` per account); the calculator also supports exclusive. |
+| Taxes | (2026-10-28) VAT 14% or exempt + table tax 1%, rates in Settings › General › Taxes; per plan / income category flags = the tax TYPE (VAT / Exempt, table tax, price includes tax). Taxed ONLY when the customer requests an invoice: "Invoice requested" per reservation / package / other-income cash in (default no; pre-ticked by the plan's / category's "Invoice by default"), from the tax start date; a snapshot is stored on save. One `TaxCalculator` (§1, §3). |
+| Prices | Inclusive or exclusive PER plan / income category (`price_includes_tax`, default inclusive). Invoice requested + exclusive = the member owes net + taxes; no invoice = the discounted price as before. |
 
 ### Further decisions (approved 2026-10-10)
 1. **Day closing (REPLACED 2026-10-11 by two levels, then 2026-10-13 by the ONE shift level in §2b; original text kept):** one closing per account per day (not per shift). Account and employees can close; only the owner can reopen, with a reason (logged). The totals are broken down **by employee AND by payment method** (cash handover per employee). Withholding payments are **excluded from the cash totals** and shown on a separate line.
 2. **Reservation moved into a package after being paid:** its payments move to the package (the payable changes; the amount and date don't).
 3. **Old payment method 5 "إشعار خصم"** (8 payments, 20–270 EGP): **confirmed as withholding**. Imported as `type = withholding`, no certificate attached yet.
-4. **Withholding tax (T4) on invoices:** not shown by default; the account setting `withholding_on_invoices` turns it on (still being confirmed with the accountant). The customer's withholding is recorded through payments of type withholding + certificates.
+4. **Withholding tax (T4):** on the net before tax (2026-10-28); rate = Settings `withholding_rate` (accountant). On ETA documents: not shown by default; the account setting `withholding_on_invoices` turns it on (still being confirmed with the accountant). The customer's withholding is recorded through payments of type withholding + certificates.
 5. **`creatable` of old rows:** set to the account's user (`User` id 1), the same as the reservations SQL in `to_run`.
 6. **Reservation view 500 (old `creatable_type` classes):** fix **both** ways — SQL to fix the existing data + a code guard for unknown or missing creators. Done before Phase 1.
 7. **Receiver id:** one `receiver_id_no` column whose meaning follows `receiver_type` (tax id / national id / passport), not separate columns.
-8. **Rounding to the exact price (extra discount):** waiting for the accountant's approval. It doesn't block Phase 1. The strategy is isolated in one class so it's easy to switch (§1).
+8. **Rounding to the exact price:** decided 2026-10-28 — VAT absorbs the 0.01 (`tax_rounding` = `vat`, a setting: net / extra discount are the other options, §1).
 
 ---
 
-## 1. Tax calculation (ETA rule) + worked example
+## 1. Tax calculation (decided with the accountant 2026-10-28; built: Phase A)
 
-### The ETA formula (from the official SDK "Document validation rules")
-Per invoice line:
-```
-SalesTotal       = Quantity × UnitValue
-NetTotal         = SalesTotal − Discount.Amount                 (taxable discount, before tax)
-TotalTaxableFees = Σ amounts of T5…T12                           (stamp, entertainment, service charge, …)
-T3 (table, fixed)= fixed amount, rate = 0
-T2 (table, %)    = (NetTotal + TotalTaxableFees + ValueDifference + T3) × rate
-T1 (VAT)         = (NetTotal + TotalTaxableFees + ValueDifference + T2 + T3) × rate
-T4 (withholding) = (NetTotal − ItemsDiscount) × rate             (subtracted)
-T13…T20          = non-taxable fees (added, not in the VAT base)
-Total            = NetTotal + TotalTaxableFees + T2 + T3 + T1 + non-taxable fees − ItemsDiscount − T4
-```
-Invoice level: `TotalSales = Σ SalesTotal`, `NetAmount = Σ NetTotal`, `TotalItemsDiscount = Σ ItemsDiscount`, `TotalAmount = Σ line Total − ExtraDiscount`.
-All amounts allow up to 5 decimals.
+### Rules
+- **Rates** in Settings › General › Taxes, never hard-coded: `accounts.vat_rate` (14), `accounts.table_tax_rate` (1). ETA codes in
+  `config('paymentmodule.tax')`: VAT T1 / V009, table tax T2 / Tbl01, VAT exempt subtype = **null until the accountant gives it**.
+- **When:** only on rows with "Invoice requested" (§3), created on / after the tax start date; otherwise no tax lines at all.
+- **Per plan and per income category** (the extras' item type) = the tax TYPE, set by the owner (`HasTaxFlags`): VAT 14% / Exempt
+  (`vat_exempt`), Table tax yes / no (`table_tax`), Price includes tax yes / no (`price_includes_tax`, default yes). A category not
+  counted as income (`is_revenue` = 0, e.g. "VAT (manual)") is never taxed. Which services are VAT exempt / have table tax changes
+  over time → the owner edits the flags; saved rows keep their snapshot (§3).
+- **Formula** (ETA order, 2 decimals, half up, whole cents — no float rounding):
+  `table tax = net × table rate` · `VAT = (net + table tax) × VAT rate` · `total = net + table tax + VAT`.
+- **Discount before tax.** Exclusive price: `net = price − discount`. Inclusive price: the member pays `price − discount`, the net is
+  worked back from it; `sales` / `discount` are reported before tax (`sales` = the net of the full price, `discount` = the gap).
+- **Inclusive back-calculation:** `net ≈ total ÷ ((1 + table) × (1 + VAT))`, then the nearest net (± 2 cents) whose taxes add up to
+  the total exactly. Some totals can't be reached by any net (each cent of net moves the total ~1.15 cents). Every price 0.01 …
+  2,000.00: **26,298 (13%)** with table tax + VAT, **24,561** VAT only, **1,980** table tax only — real ones too (plans 5,000 and
+  15,000). Then the rounding option (`accounts.tax_rounding`, Settings) decides who absorbs the 0.01:
+  - `vat` — **chosen (2026-10-28, default)**: net and table tax exact, VAT = total − net − table tax (0.01 off its formula); on a
+    VAT exempt line the table tax takes it (never a VAT on an exempt line).
+  - `net`: the taxes from the nearest net, net = total − taxes.
+  - `extra_discount`: the smallest net above, every tax exact, the excess (≤ 0.02) = an after-tax extra discount (ETA field).
+- **Negative amounts** (returns) = the same split, negated.
+- **Withholding (T4)** is on the **net before tax** (the stored snapshot net), never on the total; rate = `accounts.withholding_rate`
+  (null until the accountant gives it). The withholding payment still lowers `remaining` like cash; T4 lines on ETA documents stay
+  off by default.
 
-→ **The accountant is right: VAT is calculated on (net + table tax)**, plus any taxable fees and fixed table tax.
+### Worked example — 1,000.00, table tax 1% + VAT 14%
 
-### Order inside `TaxCalculator`
-1. Taxable fees T5–T12 (on net)
-2. T3 fixed
-3. T2 on (net + fees + T3)
-4. T1 on (net + fees + T3 + T2)
-5. Non-taxable fees T13–T20 (on net)
-6. T4 on (net − items discount), subtracted
-
-Every step is rounded to 5 decimals.
-
-### Reverse calculation (VAT-inclusive prices)
-The total is linear in net: `Total = net × a + b`, where
-- `a = (1 + Σ taxable-fee %) × (1 + T2%) × (1 + T1%) + Σ non-taxable % − T4%`
-- `b = (fixed fees + T3) × (1 + T2%) × (1 + T1%) + fixed non-taxable fees`
-
-So `net = (price − b) / a`, rounded to 5 decimals, then the taxes are calculated forward with the rule above.
-
-**Rounding:** with 5-decimal steps, about 13% of prices can't land exactly on the price; the total is then off by at most **0.00001**. I tested every price from 0.01 to 2,000.00 for 1% table tax + 14% VAT. The total is always correct at 2 decimals.
-
-To make the total exactly equal the price, the calculator picks the smallest net whose total is ≥ the price. It puts the excess (≤ 0.00002) in the invoice `extra_discount_amount` (a non-taxable, after-tax discount, allowed by the ETA total formula). → **Waiting for the accountant's approval.**
-
-The strategy is isolated behind `Tax/Rounding/RoundingStrategy`:
-- `ExtraDiscountRounding`: exact total, tiny extra discount
-- `NearestRounding`: accept the ≤ 0.00001 difference
-
-The account setting `rounding_strategy` (default `nearest` until the accountant approves) picks one. The calculator never rounds anywhere else.
-
-### Worked example — 1000 EGP, table tax 1% (T2 / Tbl01) + VAT 14% (T1 / V009)
-
-**A) Price exclusive (1000 = net)**
-
-| Line field | Calculation | Amount |
+| | Exclusive (1,000 = net) | Inclusive (1,000 = what the member pays) |
 |---|---|---|
-| Net total | 1 × 1000 | 1,000.00000 |
-| T2 table tax 1% | 1000 × 1% | 10.00000 |
-| T1 VAT 14% | (1000 + 10) × 14% | 141.40000 |
-| **Total** | 1000 + 10 + 141.40 | **1,151.40000** |
+| Net | 1,000.00 | 868.50 (1000 ÷ 1.1514 = 868.5079; 868.50 is the net that adds up exactly) |
+| Table tax 1% | 10.00 | 8.69 (8.685 half up) |
+| VAT 14% on net + table tax | 141.40 (on 1,010.00) | 122.81 (877.19 × 14% = 122.8066) |
+| **Total** | **1,151.40** | **1,000.00** |
 
-(VAT on net alone would be 140.00; the difference is 1.40.)
+Discount 10% before tax: exclusive 900.00 + 9.00 + 127.26 = 1,036.26; inclusive the member pays 900.00 (sales 868.50 before tax).
 
-**B) Price inclusive (1000 = what the member pays)**
-
-| Line field | Calculation | Amount |
-|---|---|---|
-| Factor | 1.01 × 1.14 | 1.1514 |
-| Net total | 1000 ÷ 1.1514 | 868.50790 |
-| T2 table tax 1% | 868.50790 × 1% | 8.68508 |
-| T1 VAT 14% | (868.50790 + 8.68508) × 14% = 877.19298 × 14% | 122.80702 |
-| **Total** | 868.50790 + 8.68508 + 122.80702 | **1,000.00000** |
-
-Effective tax inside an inclusive price: 131.49 of 1000 = **13.15%** (not 14% or 15%).
-
-### Impact of VAT-inclusive (chosen default)
-- Plan / reservation / package amounts, `Plan::amountBetween`, package totals, `remaining` and payments: **no change**. They all stay "what the member pays".
-- A tax rate change reduces your margin; members' prices don't change.
-- Revenue reports split net / table tax / VAT from **invoice lines**. Reservation amounts are gross.
-- Business customers wanting exclusive quotes: the account setting `prices_include_tax = 0` makes plan amounts net. Only the calculator reads the setting.
+### Code (PaymentModule, Phase A)
+- `app/Services/Tax/TaxCalculator` (`calculate($price, $discount, TaxRule)` → `TaxResult`), `TaxRule` (rates + flags + rounding;
+  `TaxRule::for($account, $planOrCategory)`), `TaxResult` (sales, discount, net, table tax, VAT, extra discount, total, adjusted;
+  `toArray()` = the snapshot incl. the rates / flags used).
+- `tests/Unit/TaxCalculatorTest.php`: the worked example, exempt / untaxed, discount before tax, negatives, every price 0.01 …
+  2,000.00 for the 3 combinations exclusive and inclusive × the 3 rounding options (the unreachable counts above are asserted).
 
 ---
 
@@ -418,7 +385,7 @@ UI names only (labels, titles, buttons, popups, PDFs, docs); code, tables, route
   its sidebar item and the Payments header button hidden; withholding lines / columns (shift close popup, My Shift and shift
   totals, Daily Summary totals + shifts column, payments summary line) hidden ONLY when there is none. Existing withholding
   payments / certificates are never changed or deleted and stay visible (rows, badges, totals). ON again = everything back.
-- **VAT:** stored + switch only for now; the Phase 2 rule is in §3 Rules.
+- **VAT:** the switch + Taxes (rates, start date, rounding, report month; 2026-10-28) — the rules are in §1 / §3.
 
 ### Expenses (2026-10-14, built; user answers 2026-10-14)
 - **Rule:** an expense always joins the OPEN shift of whoever records it (cash leaves their drawer), like a refund. Fields: category
@@ -469,121 +436,114 @@ UI names only (labels, titles, buttons, popups, PDFs, docs); code, tables, route
 
 ---
 
-## 3. Phase 2 — Tax rates, invoices / receipts, ETA entry view
+## 3. Phase 2 — Taxes when an invoice is requested, ETA to-do (redesigned 2026-10-28; invoice-requested model 2026-10-28)
 
-### New module `InvoiceModule`
-```
-Modules/InvoiceModule/
-  app/Models/{AccountTaxSetting, TaxRate, EtaItem, Invoice, InvoiceItem, InvoiceItemTax}.php
-  app/Models/Concerns/HasTaxes.php            morphToMany tax_rates via `taxables` (Plan, IncomeCategory, …)
-  app/Services/Tax/TaxCalculator.php          line(qty, unitPrice|grossPrice, discount, taxes, inclusive) → LineResult (§1)
-  app/Services/Tax/LineResult.php             value object (sales_total, net_total, taxes[], total, …)
-  app/Services/Tax/Rounding/{RoundingStrategy, NearestRounding, ExtraDiscountRounding}.php   the only place rounding to the price happens
-  app/Services/InvoiceBuilder.php             fromReservation / fromPackage (one line per plan) / fromPayment (other income) / blank
-  app/Services/InvoiceService.php             saveDraft, issue (number + issuer snapshot + lock), void (draft / unsubmitted), creditNote / debitNote(from)
-  app/Services/Eta/EtaDocumentMapper.php      Invoice → ETA JSON array (invoice, credit, debit, receipt); used by the entry view now, the API later
-  app/Services/Eta/EtaGateway.php             interface: submit, status, cancel
-  app/Services/Eta/ManualEtaGateway.php       now: register(uuid, long_id) → eta_status = registered
-  (later) app/Services/Eta/ApiEtaGateway.php  ETA API + signing — no schema change
-  app/Http/Requests/{TaxSetting, TaxRate, EtaItem, Invoice, EtaRegister, InvoiceVoid}Request.php
-  app/Http/Controllers/Account/{TaxSetting, TaxRate, EtaItem}AccountModuleController.php
-  app/Http/Controllers/Concerns/InvoiceActions.php + Account/Employee Invoice controllers (void / credit / debit note = account only)
-  app/Http/Controllers/Account/EtaEntryAccountModuleController.php   entry view + register form
-  resources/views/{Settings/form, TaxRate/{index,form}, EtaItem/{index,form}}.blade.php
-  resources/views/Invoice/{index, form, _lines, show, pdf}.blade.php
-  resources/views/Eta/{entry, register-form}.blade.php
-  tests/Unit/TaxCalculatorTest.php            worked example (§1) + sweep of prices 0.01–2000 (inclusive total = price)
-```
+Replaces the 2026-10-10 design (taxes only on invoice lines, one `prices_include_tax` per account). Some prices are exclusive, so
+what the member OWES can include the taxes → the taxes live on the reservation / package / other-income cash in, as a snapshot
+taken when it is saved. **Taxes are calculated only when the customer requests an invoice** (accountant 2026-10-28: fine for us).
 
-**ETA entry view:** the invoice laid out in the ETA portal's field order (issuer, receiver, each line with item code / unit / qty / unit value / discount / each tax type + subtype + rate + amount, totals), with a copy button per value. The view ends with a "Paste ETA UUID (+ long id)" form → `eta_status = registered`. Lists filter by `eta_status` (pending / registered).
+### When taxes apply
+- A row is taxed when ALL hold: VAT switch ON (Settings › General), `accounts.tax_start_date` set, the row's `created_at` ≥ that
+  date (`Account::taxesApplyTo()`), and **"Invoice requested" = yes** on it. Before the start date nothing is taxed whatever the
+  toggle (the toggle is not shown on those rows).
+- **Invoice requested = no** (the default): no tax lines, not in the ETA to-do; the member owes the discounted price as today
+  (`net_amount` / `after_discount` + extras), whether the plan is inclusive or exclusive.
+- **Invoice requested = yes:** the snapshot (§1) → the member owes its total (exclusive: net + taxes; inclusive: the price).
+- The tax TYPE comes from the plan / income category flags (Phase A): VAT 14% / exempt, table tax, price includes tax.
 
-### Changes in other modules
-- **PlanModule:** plan form gets ETA item (select) + taxes (multi select). `Plan` uses `HasTaxes`.
-- **PaymentModule:** income category form gets ETA item + taxes.
-- **CompanyModule:** company gets tax id + address (for business receivers).
-- **ReservationModule / PackageModule / PaymentModule:** "Create invoice / receipt" button in the view, plus an invoices block.
-- **LayoutModule:** sidebar items Invoices, ETA pending (counter), Settings → Tax settings, Tax rates, ETA items.
+### "Invoice requested" — where it is set
+- **Reservation:** checkbox on the form (account AND employees, add and edit). New reservation: pre-ticked by the plan's
+  "Invoice by default" (`plans.invoice_by_default`, default off; re-applied when the plan changes on a new form, never on an edit).
+  No member / company flag.
+- **Package:** ONE toggle for the whole package (Add / Edit; account AND employees). Its reservations follow it (their own checkbox is hidden and locked
+  while in a package, like the member); moving a reservation into a package takes the package's value; out of it, keeps it.
+- **Extras:** they only exist on packages (2026-10-28: all 183) → they follow their package; no toggle of their own. Their tax
+  TYPE = their income category's flags; adjustments (balance moves) are never taxed.
+- **Other-income cash in:** its own toggle (account AND employees), pre-ticked by the category's "Invoice by default"
+  (`income_categories.invoice_by_default`). The cash amount stays the money collected: with an invoice, an inclusive category splits
+  the amount; an exclusive category asks the price before tax and the amount = its total (read only).
+- **Renew / repeat:** copy "Invoice requested" from the period being renewed / the original; tax TYPE and rates from the plan's
+  CURRENT flags.
 
-### DB — new tables
+### Snapshot on save (Phase B / C)
+- On every save of a row created on / after the start date, the tax TYPE is stored (flags + rates + rounding used) even when no
+  invoice is requested — so ticking "Invoice requested" later uses the type of the day it was created, not today's plan
+  ("changing a plan's tax affects only new ones"). The amounts (net, table tax, VAT, extra discount, total) are filled only while
+  the invoice is requested (else NULL).
+- **Reservation** (`ReservationService` price step, after `amountBetween()` + `Reservation::calculate()`): `TaxRule::for(account,
+  plan)` → `TaxCalculator`. `net_amount` keeps its meaning (the price after discount, as typed); the snapshot's net is before tax.
+  Edit: the stored type; the plan's current flags only when the edit changes the plan.
+- **Package** (`Package::recalculate()`, invoice requested): the reservations' prices summed **per tax group** (the stored type of
+  each: VAT rate / exempt × table tax × inclusive; reservations created before the start date = an untaxed group), the package
+  discount % on each group, the taxes per group, + the extras per their category type; total = Σ. Stored: groups (json) + totals.
+  Not requested: today's formula.
+- **What is owed:** `payableAmount()` = the total when invoice requested and taxed, else today's amounts.
+  `PaymentService::refresh()`, `remaining`, Schedule "Due" / Pay, `assertNotMoreThanOwed()`: no change (they read
+  `payableAmount()` / `remaining`). Screens that print `net_amount` as "the amount" switch to "what is owed" (Schedule renewal row,
+  hourly list, cancelled popup, reservations list Amount, `amount-lines`, package view / list / statement PDF).
+- **Toggling** = a save: recalculated at once, `refresh()`; after payments the remaining may go up (owes the tax) or below 0
+  (credit, e.g. no → after paying an exclusive total) — shown as today.
+- **Warning (user 2026-10-28):** ticking "Invoice requested" on a row that already has payments, with an exclusive plan /
+  category → the form shows "The customer will owe X more (taxes)." before saving (X = the new total − the current due).
+- **Forms:** "Invoice requested" + a live breakdown Net / Table tax / VAT / Total (custom.js, plan flags from `placeTree()` + the
+  account's rates; the same integer rule as the calculator); the server recalculates on save.
+- **Views / PDFs:** reservation / package view and the package statement show "Invoice requested" and, when yes, the breakdown;
+  the Cash In receipt unchanged.
+- **Withholding:** base = the stored net (§1); hint in the Cash In form (base × `withholding_rate`) when the payable is taxed.
+- **Payments / shifts / Daily Summary:** unchanged.
 
-**account_tax_settings**: `id`, `account_id` (unique), `tax_id` (RIN), `tax_name`, `activity_code`, `branch_id` (varchar, default '0'), `country` (char 2, 'EG'), `governorate`, `city`, `street`, `building_no`, `postal_code` (null), `floor` (null), `room` (null), `prices_include_tax` (bool, 1), `withholding_on_invoices` (bool, 0 — T4 lines on invoices), `rounding_strategy` (varchar, 'nearest' | 'extra_discount'), `invoice_prefix` (null), `receipt_prefix` (null), timestamps
+### Controls
+- **Log:** every change of "Invoice requested" → `invoice_request_logs` (row, before → after, the paid amount at that moment, who,
+  when); the Payment Exceptions report gets an **"Invoice toggled"** tab = the changes made after the row's first payment (paid
+  amount > 0 at that moment). Not `shift_events`: it is not a shift / payment change.
+- After its ETA document is recorded (Phase D), only the owner can change "Invoice requested" or the price fields (a credit note
+  is needed — warning).
 
-**tax_rates**: `id`, `account_id` (index), `name_ar`, `name_en`, `tax_type` (varchar 4: T1…T20), `tax_subtype` (varchar 10: V009, Tbl01, Tbl02, …), `calc` enum('rate','fixed'), `rate` decimal(8,5) default 0, `fixed_amount` decimal(18,5) default 0, `is_active` (bool, 1), timestamps, softDeletes
-*(no separate `eta_code`: `tax_type` + `tax_subtype` are the ETA codes)*
+### VAT recorded by hand until the start date
+- The ONE category = income category #6 "VAT (manual)" (the imported "VAT", renamed + active, `is_revenue` 0 → never income, never
+  taxed; fix `database/fixes/2026-10-28-vat-manual-income-category.sql`). Found 2026-10-28: Cash In #100015 980.00 "VAT 14%" in
+  category "extra" (counted as income) — to move by the owner's Edit (logged).
+- After the start date: "VAT (manual)" cash ins are refused for reservations / packages created on or after it (their VAT comes
+  from "Invoice requested" → never counted twice).
 
-**taxables**: `tax_rate_id`, `taxable_type`, `taxable_id` — primary (`tax_rate_id`, `taxable_type`, `taxable_id`)
-*(one polymorphic pivot instead of `plan_tax_rates` + `income_category_tax_rates` + …)*
+### ETA to-do + documents (Phase D)
+- `eta_documents`: account, `documentable` morph (reservation / package / other-income payment), type invoice / receipt /
+  credit_note / debit_note, `eta_uuid`, `issued_at`, the amounts copied (net, table tax, VAT, total), creatable, timestamps.
+- To-do = rows with invoice requested and taxed, without a document, by created date; "Mark entered" = UUID + date + type.
+- Entered by hand on the ETA portal; the ETA API later — the full invoice tables (`invoices`, `invoice_items`,
+  `invoice_item_taxes`, `eta_items`, issuer snapshot, numbering, void / credit / debit notes; 2026-10-10 design, in git history)
+  only when the API is built, fed from the snapshots.
 
-**eta_items** (the account's ETA-registered codes): `id`, `account_id` (index), `name_ar`, `name_en`, `item_type` enum('EGS','GS1'), `item_code` (e.g. `EG-{RIN}-001`), `internal_code`, `unit_type` (ETA unit code, e.g. `EA`), `is_active` (bool, 1), timestamps, softDeletes
+### Tax report (Phase E)
+Per month: net, table tax, VAT of the rows with invoice requested; taxable vs exempt, with vs without table tax. Month by
+`accounts.tax_report_basis`: `eta_date` (the ETA document date, default, the official report) or `created` — the accountant confirms.
 
-**invoices**
+### DB
+- **Phase A (run locally 2026-10-28):** `accounts` + `vat_rate` 14, `table_tax_rate` 1, `tax_start_date` null, `tax_rounding`
+  'vat', `tax_report_basis` 'eta_date', `withholding_rate` null; `plans` + `income_categories`: `vat_exempt` 0, `table_tax` 0,
+  `price_includes_tax` 1.
+- **Phase B / C (proposed 2026-10-28, waiting for review):**
+  - `plans` / `income_categories` + `invoice_by_default` bool 0.
+  - `reservations`, `payments` (other income only): `invoice_requested` bool 0 + the tax type (`tax_vat_rate`, `tax_table_rate`
+    decimal(5,2) null, `tax_vat_exempt`, `tax_inclusive` bool null, `tax_rounding` varchar(20) null) + the amounts (`tax_net`,
+    `table_tax`, `vat`, `tax_extra_discount` decimal(12,2) null; reservations + `tax_total`; payments: the amount = the total).
+    NULL = no snapshot (created before the start date). Index (`account_id`, `invoice_requested`, `created_at`) for the to-do.
+  - `packages`: `invoice_requested` bool 0, `tax_groups` json null (the type per group), `tax_net`, `table_tax`, `vat`,
+    `tax_extra_discount`, `tax_total` decimal(12,2) null, the same index.
+  - `extras`: the tax type + amounts + `tax_total` (no toggle: they follow the package).
+  - `invoice_request_logs`.
+- **Phase D:** `eta_documents`.
 
-| column | type |
-|---|---|
-| `id`, `account_id` (index) | |
-| `document_type` | enum('invoice','credit_note','debit_note','receipt','return_receipt') |
-| `invoice_no` | varchar — unique (`account_id`, `document_type`, `invoice_no`) |
-| `original_invoice_id` | bigint default 0 |
-| `status` | enum('draft','issued','void') default 'draft' |
-| `issued_at` | datetime null (Cairo; converted to UTC for ETA) |
-| issuer snapshot | `issuer_tax_id`, `issuer_name`, `issuer_branch_id`, `activity_code`, `issuer_address` (json) |
-| `member_id`, `company_id` | bigint default 0 |
-| `receiver_type` | enum('business','person','foreigner') |
-| `receiver_name`, `receiver_id_no` | varchar null |
-| receiver address | `receiver_country` (char 2, 'EG'), `receiver_governorate`, `receiver_city`, `receiver_street`, `receiver_building_no`, `receiver_postal_code`, `receiver_floor`, `receiver_room` (all null) |
-| `currency` | char 3 'EGP' |
-| `exchange_rate` | decimal(12,5) default 1 |
-| `total_sales` | decimal(18,5) — Σ sales_total |
-| `total_discount` | decimal(18,5) — Σ taxable line discounts |
-| `net_amount` | decimal(18,5) — Σ net_total |
-| `total_items_discount` | decimal(18,5) — Σ non-taxable discounts |
-| `extra_discount` | decimal(18,5) — invoice level, after tax |
-| `tax_total` | decimal(18,5) |
-| `total` | decimal(18,5) |
-| `eta_status` | enum('pending','registered','rejected','cancelled') null |
-| ETA ids | `eta_uuid`, `eta_long_id`, `eta_submission_uuid` (varchar null) |
-| `eta_submitted_at` | datetime null |
-| `eta_response` | json null |
-| `external_ref` | varchar null |
-| `void_reason`, `notes` | null |
-| creatable morphs, timestamps, softDeletes | |
-
-**invoice_items**: `id`, `invoice_id` (index), `itemable_type` (null), `itemable_id` (default 0), `eta_item_id` (default 0), `description`, `item_type`, `item_code`, `internal_code`, `unit_type`, `quantity` decimal(18,5), `unit_price` decimal(18,5), `sales_total`, `discount_rate` decimal(8,5), `discount_amount`, `net_total`, `value_difference`, `total_taxable_fees`, `items_discount`, `tax_total`, `total` (amounts decimal(18,5)), `sort_order`, timestamps
-
-**invoice_item_taxes**: `id`, `invoice_item_id` (index), `tax_rate_id` (default 0), `tax_type`, `tax_subtype`, `rate` decimal(8,5), `amount` decimal(18,5)
-
-### DB — existing tables (by hand + `create_*` migration)
-```sql
-ALTER TABLE plans              ADD eta_item_id BIGINT NOT NULL DEFAULT 0 AFTER is_time_based;
-ALTER TABLE income_categories  ADD eta_item_id BIGINT NOT NULL DEFAULT 0 AFTER name_en;
-ALTER TABLE companies
-  ADD tax_id VARCHAR(30) NULL, ADD country CHAR(2) NOT NULL DEFAULT 'EG',
-  ADD governorate VARCHAR(100) NULL, ADD city VARCHAR(100) NULL,
-  ADD street VARCHAR(255) NULL, ADD building_no VARCHAR(50) NULL;
-```
-
-### Rules
-- Issued documents can't be changed. A credit / debit note copies the receiver and references `original_invoice_id` (ETA needs the original's UUID).
-- Void is only allowed for drafts, or issued documents with `eta_status` not registered. After registration → credit note.
-- The issuer snapshot is taken on issue, so changes to the tax settings don't alter old invoices.
-- A package invoice = one line per plan (sum of the package's counted reservations), each with that plan's ETA item + taxes. The package discount = line `discount_amount`, split by share.
-- Auto-creation later = listen to reservation / package / payment events → `InvoiceBuilder` → `InvoiceService::issue()`. No schema change.
-- **VAT switch (Settings › General, `accounts.vat_enabled`, default ON; decided 2026-10-13, apply when Phase 2 is built):** when OFF the
-  account is not VAT registered → ALL prices are tax free: no tax rates are used or offered (`tax_rates` / `taxables` ignored, the
-  tax settings screens and the plan / income category tax pickers hidden), `TaxCalculator` returns net = price with no tax lines,
-  invoices / receipts carry no tax lines and no tax totals (ETA document without T1 / T2 / T3 taxes). Turning it ON again affects
-  only documents issued after that (issued documents never change).
-
-### Phase 2 build order
-1. Tables + `AccountTaxSetting` form
-2. `TaxRate` + `EtaItem` CRUD, `taxables`, plan / income category form fields
-3. **`TaxCalculator` + unit tests** (worked example and the 200k-price sweep) — before any UI
-4. `InvoiceBuilder` + `InvoiceService` (draft, issue, numbering, snapshot)
-5. Invoice form (lines editor with live totals → server recalculates) + show + PDF
-6. Create from reservation / package / payment
-7. `EtaDocumentMapper` + ETA entry view + register UUID + pending list / counter
-8. Void, credit note, debit note, receipt / return receipt
-9. Company tax fields, sidebar items (confirm)
+### Build order
+- **A — done 2026-10-28:** settings, plan / category flags (+ `placeTree()`), calculator + tests.
+- **B — reservations:** migrations; "Invoice by default" on plans; the reservation snapshot (create / edit / renew / repeat, the
+  toggle); `payableAmount()`; form toggle + live breakdown; view; list / Schedule amounts; `invoice_request_logs` + the Payment
+  Exceptions "Invoice toggled" tab.
+- **C — packages, extras, other income:** package toggle (reservations follow), groups + discount, extras by category type,
+  "Invoice by default" on categories, the other-income toggle in Cash In, package view / statement PDF, the withholding hint, the
+  "VAT (manual)" refusal after the start date.
+- **D:** ETA to-do + `eta_documents` + the owner-only lock. **E:** tax report + Excel.
+- Waiting for the accountant: the exempt ETA subtype, the withholding rate, the report month basis (confirm), the start date.
 
 ---
 
@@ -605,8 +565,8 @@ Modules/ReportModule/
 | Outstanding & credits | reservations, packages | remaining > 0 (owed), < 0 (credit), by member |
 | Member statement | reservations, packages, payments | due / paid / balance timeline |
 | Withholding | payments, certificates | withheld amounts, certificates received / missing, differences |
-| Tax | invoices, invoice_item_taxes | per month: net, each tax type (T1, T2, …), credit notes deducted |
-| ETA status | invoices | pending / registered / rejected, by document type |
+| Tax | tax snapshots (invoice requested), eta_documents | per month (ETA date or created date): net, table tax, VAT; taxable vs exempt (§3) |
+| ETA status | eta_documents | the ETA to-do: taxed rows without a document (§3) |
 | Audit | payments (trashed), day_closings | deleted payments with reason + who, reopened days |
 
 ### Build order
@@ -616,7 +576,7 @@ Daily cash → Outstanding & credits → Member statement → Income → Withhol
 
 ## 5. Questions — status (2026-10-10)
 1. ~~Reservation view 500~~ → **both** (SQL data fix + code guard), before Phase 1.
-2. **Rounding to the exact price** (extra discount) → **waiting for the accountant**. Doesn't block anything; switch = the `rounding_strategy` setting.
+2. ~~Rounding to the exact price~~ → **VAT absorbs the 0.01** (2026-10-28), setting `tax_rounding`.
 3. ~~Old method 5 "إشعار خصم"~~ → **confirmed withholding**, imported as planned.
 4. ~~Defaults in §0~~ → **approved**, with two changes: day closing totals by employee × payment method (withholding excluded from cash), and T4 on invoices = setting `withholding_on_invoices` (default off).
 5. **T4 on invoices** → **waiting for the accountant** (only changes the setting's default).

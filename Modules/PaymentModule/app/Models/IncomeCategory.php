@@ -8,11 +8,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\AccountModule\app\Models\Account;
+use Modules\PaymentModule\app\Models\Concerns\HasTaxFlags;
 
 // other income categories of an account (payments without a reservation / package; only the account manages it)
 class IncomeCategory extends Model
 {
-    use LocalizedHelper, SoftDeletes;
+    // + vat_exempt, table_tax, price_includes_tax: the taxes of its extras (docs/payments-plan.md §3)
+    use HasTaxFlags, LocalizedHelper, SoftDeletes;
 
     // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
     protected array $localizedFields = ['name'];

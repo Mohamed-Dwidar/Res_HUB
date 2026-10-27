@@ -11,4 +11,14 @@ return [
     // "close your shift" popup; after "I'm still working" (a reason is required) it comes back after the snooze
     'shift_reminder_hours' => 12,
     'shift_snooze_hours' => 4,
+
+    // the ETA tax codes (docs/payments-plan.md §1; the rates are in Settings › General › Taxes): VAT standard, VAT exempt
+    // (null until the accountant gives the exempt subtype), table tax %
+    'tax' => [
+        'vat_type' => 'T1',
+        'vat_subtype' => 'V009',
+        'exempt_subtype' => null,
+        'table_type' => 'T2',
+        'table_subtype' => 'Tbl01',
+    ],
 ];

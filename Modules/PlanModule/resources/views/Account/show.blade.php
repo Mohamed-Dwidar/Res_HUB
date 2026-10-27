@@ -23,6 +23,9 @@
         <div><dt>Lease Period</dt><dd>{{ $plan->lease_period_label ?? '-' }}</dd></div>
         <div><dt>Capacity</dt><dd>{{ $plan->capacity ?: '-' }}</dd></div>
         <div><dt>Time Based</dt><dd>{{ $plan->is_time_based ? 'Yes (start / end time)' : 'No' }}</dd></div>
+        @if (($taxAccount = \Modules\AccountModule\app\Models\Account::current())?->vatEnabled())
+            <div><dt>Taxes</dt><dd>{{ $plan->taxSummary($taxAccount) }}</dd></div>
+        @endif
         <div><dt>Added At</dt><dd>{{ $plan->created_at->format('Y-m-d H:i') }}</dd></div>
         <div class="wide"><dt>Facilities</dt><dd class="whitespace-pre-line">{{ $plan->facilities ?: '-' }}</dd></div>
     </dl>

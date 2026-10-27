@@ -49,7 +49,11 @@ class Account extends Model implements Userable
         'name_ar', 'name_en', 'phone', 'address', 'description_ar', 'description_en', 'logo', 'status', 'approved_at',
         'withholding_enabled', 'vat_enabled', 'today_hours_from', 'today_hours_to', 'renewal_days',
         'late_entry_hours', 'expense_review_amount',
+        'vat_rate', 'table_tax_rate', 'tax_start_date', 'tax_rounding', 'tax_report_basis', 'withholding_rate',
     ];
+
+    // the month of a tax in the tax report (Settings › General › Taxes; accountant to confirm)
+    const TAX_REPORT_BASES = ['eta_date' => 'ETA document date', 'created' => 'Created date'];
 
     protected $casts = [
         'approved_at' => 'datetime',
@@ -60,6 +64,10 @@ class Account extends Model implements Userable
         'renewal_days' => 'integer',
         'late_entry_hours' => 'integer',
         'expense_review_amount' => 'decimal:2',
+        'vat_rate' => 'float',
+        'table_tax_rate' => 'float',
+        'tax_start_date' => 'date',
+        'withholding_rate' => 'float',
     ];
 
     // Settings › General, loaded once per request by account id (settingsOf())
@@ -93,6 +101,42 @@ class Account extends Model implements Userable
     public function vatEnabled(): bool
     {
         return (bool) ($this->vat_enabled ?? true);
+    }
+
+    /**
+     * Taxes (Settings › General › Taxes, docs/payments-plan.md §3): the rates in percent, the start date, the rounding option
+     * (TaxRule::ROUNDINGS), the report month basis. A reservation / package / extra gets a tax snapshot only when VAT is on and
+     * it was created on or after the start date (NULL = no taxes yet); older rows are never touched.
+     */
+    public function vatRate(): float
+    {
+        return (float) ($this->vat_rate ?? 14);
+    }
+
+    public function tableTaxRate(): float
+    {
+        return (float) ($this->table_tax_rate ?? 1);
+    }
+
+    public function taxRounding(): string
+    {
+        return $this->tax_rounding ?: 'vat';
+    }
+
+    public function taxReportBasis(): string
+    {
+        return $this->tax_report_basis ?: 'eta_date';
+    }
+
+    public function taxesApplyTo(?Carbon $createdAt): bool
+    {
+        return $this->vatEnabled() && $this->tax_start_date && $createdAt && $createdAt->gte($this->tax_start_date->copy()->startOfDay());
+    }
+
+    // the customer's withholding rate in percent (the base = the net before tax); null until the accountant gives it
+    public function withholdingRate(): ?float
+    {
+        return $this->withholding_rate !== null ? (float) $this->withholding_rate : null;
     }
 
     // the account (its settings) of the logged in user (the account or its employee), null for an admin / a guest

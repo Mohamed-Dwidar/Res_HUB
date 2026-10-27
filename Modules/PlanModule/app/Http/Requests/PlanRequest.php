@@ -10,7 +10,7 @@ class PlanRequest extends FormRequest
 {
     public function rules(): array
     {
-        return [
+        return Plan::taxFlagRules() + [
             'name' => 'required|string|max:255',
             'capacity' => 'nullable|integer|min:1|max:100000',
             'lease_period' => ['required', Rule::in(array_keys(Plan::LEASE_PERIODS))],

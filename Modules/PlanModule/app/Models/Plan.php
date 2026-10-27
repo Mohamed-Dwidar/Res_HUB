@@ -7,12 +7,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\AccountModule\app\Models\Account;
+use Modules\PaymentModule\app\Models\Concerns\HasTaxFlags;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\UnitModule\app\Models\Unit;
 
 class Plan extends Model
 {
-    use SoftDeletes;
+    // vat_exempt, table_tax, price_includes_tax (docs/payments-plan.md §3)
+    use HasTaxFlags, SoftDeletes;
 
     // lease_period values => labels (same as the units)
     const LEASE_PERIODS = Unit::LEASE_PERIODS;
