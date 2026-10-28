@@ -39,9 +39,10 @@ class PlanService
         ])->findOrFail($id);
     }
 
+    // a new plan's price excludes the tax unless the form says otherwise (user 2026-10-28; the column default stays 1)
     public function create($accountId, array $data)
     {
-        return $this->planRepository->create($this->planData($data) + ['account_id' => $accountId]);
+        return $this->planRepository->create($this->planData($data) + ['account_id' => $accountId, 'price_includes_tax' => false]);
     }
 
     public function update($accountId, $id, array $data)

@@ -3,6 +3,7 @@
     absent fields keep their stored values. $model = the plan / category (null on create), $showIf = optional data-show-if rule.
     @include('paymentmodule::Tax.partials.flags', ['model' => $plan, 'what' => 'reservations', 'invoiceDefault' => true])
     $invoiceDefault: + "Invoice by default" (pre-ticks "Invoice requested" on new rows)
+    $inclusiveDefault (default true): "Price includes tax" on a new one (plans: false, user 2026-10-28)
 --}}
 @php($account = \Modules\AccountModule\app\Models\Account::current())
 @if ($account?->vatEnabled())
@@ -15,7 +16,7 @@
             @include('layoutmodule::partials.checkbox', ['name' => 'table_tax', 'label' => 'Table tax ' . $rate($account->tableTaxRate()),
                 'checked' => $model?->table_tax ?? false])
             @include('layoutmodule::partials.checkbox', ['name' => 'price_includes_tax', 'label' => 'Price includes tax',
-                'checked' => $model?->price_includes_tax ?? true,
+                'checked' => $model?->price_includes_tax ?? ($inclusiveDefault ?? true),
                 'hint' => 'On: the amount is what the member pays. Off: the taxes are added to it.'])
             @if (!empty($invoiceDefault))
                 @include('layoutmodule::partials.checkbox', ['name' => 'invoice_by_default', 'label' => 'Invoice by default',
