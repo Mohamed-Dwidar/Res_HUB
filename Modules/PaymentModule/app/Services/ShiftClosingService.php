@@ -440,6 +440,18 @@ class ShiftClosingService
             ->latest('created_at')->latest('id')->limit(self::POPUP_LIMIT)->get();
     }
 
+    // an OPEN shift in the popup (Daily Summary, 2026-10-28): its payments / expenses like a closing's (newest POPUP_LIMIT first)
+    public function popupOpen($accountId, $userId): array
+    {
+        return [
+            'payments' => $this->openPayments($accountId, $userId)->with('member', 'paymentMethod', 'incomeCategory')
+                ->with(['payable' => fn ($morph) => $morph->morphWith([\Modules\ReservationModule\app\Models\Reservation::class => ['space', 'unit.color', 'plan']])])
+                ->latest('created_at')->latest('id')->limit(self::POPUP_LIMIT)->get(),
+            'expenses' => $this->openExpenses($accountId, $userId)->with('expenseCategory', 'paymentMethod')
+                ->latest('created_at')->latest('id')->limit(self::POPUP_LIMIT)->get(),
+        ];
+    }
+
     // the shift popup's expenses: the newest POPUP_LIMIT first
     public function popupExpenses(ShiftClosing $closing): Collection
     {

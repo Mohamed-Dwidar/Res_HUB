@@ -47,6 +47,18 @@ class ShiftClosingAccountModuleController extends Controller
         return view('paymentmodule::Shift.show', compact('closing'));
     }
 
+    // an OPEN shift (the Daily Summary name of an open row, 2026-10-28; ?user_id=&date=): its totals + payments / expenses like a
+    // closing's popup, + Close on Behalf (an employee) / Close My Shift (the account's own)
+    public function open(Request $request)
+    {
+        $own = (int) $request->input('user_id') === (int) Auth::id();
+        $user = $own ? Auth::user()->load('userable') : $this->employee($request->input('user_id'));
+        $period = $this->shiftService->openPeriod($this->accountId(), $user->id);
+
+        return view('paymentmodule::Shift.open', ['user' => $user, 'own' => $own, 'period' => $period]
+            + $this->shiftService->popupOpen($this->accountId(), $user->id));
+    }
+
     // close on behalf: the employee's open shift + "Confirm closing" (?user_id=&date=)
     public function confirm(Request $request)
     {

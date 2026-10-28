@@ -145,6 +145,8 @@ Route::prefix('account/shift')->name('account.shift.')->middleware(['auth', 'use
 Route::prefix('account/shifts')->name('account.shifts.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     Route::get('confirm', [ShiftClosingAccountModuleController::class, 'confirm'])->name('confirm');
     Route::post('close', [ShiftClosingAccountModuleController::class, 'close'])->name('close');
+    // an open shift in the popup (the Daily Summary names, 2026-10-28)
+    Route::get('open', [ShiftClosingAccountModuleController::class, 'open'])->name('open');
     Route::get('{id}', [ShiftClosingAccountModuleController::class, 'show'])->name('show');
     // reopen = the closing is removed, its rows go back to the open shift (DELETE: the popup does not go back to it)
     Route::get('{id}/reopen', [ShiftClosingAccountModuleController::class, 'reopenForm'])->name('reopen');

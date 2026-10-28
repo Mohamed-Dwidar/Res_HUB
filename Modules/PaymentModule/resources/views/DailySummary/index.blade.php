@@ -32,11 +32,12 @@
         <div class="form-section">Long Open Shifts</div>
         <div class="table-wrap">
             <table class="data-table">
-                <thead><tr><th>Employee</th><th>Open Since</th><th>Cash In</th><th>Collected</th><th>"Still Working"</th><th></th></tr></thead>
+                {{-- the name opens the open shift's popup (account.shifts.open, 2026-10-28); Cash Out header added (the cell was there) --}}
+                <thead><tr><th>Employee</th><th>Open Since</th><th>Cash In</th><th>Collected</th><th>Cash Out</th><th>"Still Working"</th><th></th></tr></thead>
                 <tbody>
                     @foreach ($longOpen as $userId => $period)
                         <tr>
-                            <td>{{ $period['user']?->userable?->displayName() ?? 'User #' . $userId }}</td>
+                            <td><a href="{{ route('account.shifts.open', ['user_id' => $userId, 'date' => $dateValue]) }}" data-modal class="font-medium">{{ $period['user']?->userable?->displayName() ?? 'User #' . $userId }}</a></td>
                             <td class="whitespace-nowrap">{{ $period['since']->format('d-m-Y h:i A') }} <span class="text-xs text-slate-500">({{ $period['since']->diffForHumans(null, true) }})</span></td>
                             <td>{{ $period['count'] }}</td>
                             <td>{{ number_format($period['cash_total'], 2) }}</td>
@@ -71,7 +72,8 @@
                             $rowIn = $period['cash_total'] + $period['refunds_total'];
                         @endphp
                         <tr>
-                            <td>{{ $period['user']?->userable?->displayName() ?? 'User #' . $userId }}</td>
+                            {{-- the name opens the shift's popup (2026-10-28): open = account.shifts.open, closed = its View --}}
+                            <td><a href="{{ route('account.shifts.open', ['user_id' => $userId, 'date' => $dateValue]) }}" data-modal class="font-medium">{{ $period['user']?->userable?->displayName() ?? 'User #' . $userId }}</a></td>
                             <td><span class="badge badge-status-warning">Open</span></td>
                             <td class="whitespace-nowrap">{{ $period['since']->format('d-m-Y h:i A') }} → now</td>
                             <td><span class="{{ $rowIn ? 'money-in' : 'money-zero' }}">{{ number_format($rowIn, 2) }}</span></td>
@@ -97,7 +99,7 @@
                             $rowIn = $shift->cash_total + $rowRefunds;
                         @endphp
                         <tr>
-                            <td>{{ $shift->user?->userable?->displayName() ?? 'User #' . $shift->user_id }}</td>
+                            <td><a href="{{ route('account.shifts.show', [$shift->id, 'date' => $dateValue]) }}" data-modal class="font-medium">{{ $shift->user?->userable?->displayName() ?? 'User #' . $shift->user_id }}</a></td>
                             <td>@include('paymentmodule::Shift.partials.status', ['closing' => $shift])</td>
                             <td>@include('paymentmodule::Shift.partials.period', ['closing' => $shift])</td>
                             <td><span class="{{ $rowIn ? 'money-in' : 'money-zero' }}">{{ number_format($rowIn, 2) }}</span></td>
