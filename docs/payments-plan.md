@@ -13,7 +13,7 @@
 | Reservation inside a package | Not payable on its own; it is paid through the package. |
 | Member credit | Negative `remaining` = member credit, shown clearly (badge + member statement). Wallet comes later. |
 | Refunds | Refund records only (a `type = refund` row, positive amount). |
-| Rights | Employees **add** payments only. Edit / delete / refund = account owner only. Delete = soft delete + required reason. |
+| Rights | Employees **add** payments only. Edit / delete / refund = account owner only. Delete = soft delete + required reason. (2026-10-28: an employee may edit their OWN cash in / withholding while it is in their OPEN shift — not the date, not a refund, not after closing; logged.) |
 | Closing | ONE level since 2026-10-13 (§2b): the **shift** (every login, the account included); after closing the account edits / deletes with a reason (logged, totals recalculated); refunds by anyone into their own shift. No day / month lock; the account's **Daily Summary** is read only. (2026-10-11 → 10-13: two levels with an account day closing — removed.) |
 | Payment methods | Managed per account. |
 | Expenses | Separate table later, no `direction` column. |

@@ -6,10 +6,12 @@
 
 @section('modal-size', 'lg')
 
-{{-- the owner only (account routes); the payable, member and type are kept: a payment for something else = delete + add;
-     in a closed shift: a reason is required (logged on the shift, its totals recalculated) --}}
+{{-- the owner (any payment) or an employee (their own cash in while their shift is open: no date, PaymentService::canEdit());
+     the payable, member and type are kept: a payment for something else = delete + add; in a closed shift (the owner only): a
+     reason is required (logged on the shift, its totals recalculated); every edit is logged (Payment Exceptions › Edited) --}}
 @section('content')
-    <form method="POST" action="{{ route('account.payments.update', $payment->id) }}" data-ajax data-row="{{ $payment->id }}"
+    @php($area = request()->routeIs('employee.*') ? 'employee' : 'account')
+    <form method="POST" action="{{ route($area . '.payments.update', $payment->id) }}" data-ajax data-row="{{ $payment->id }}"
         data-confirm="{{ $payment->type_label }} #{{ $payment->payment_no }} will be changed, the paid / remaining of what it pays are calculated again."
         data-confirm-title="Save the changes?"
         data-confirm-button="Save"
@@ -24,8 +26,12 @@
         <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
             @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'value' => $payment->amount,
                 'attrs' => 'min="0.01" step="0.01" max="99999999"'])
-            @include('layoutmodule::partials.field', ['name' => 'paid_at', 'label' => 'Date', 'type' => 'date', 'required' => true,
-                'value' => $payment->paid_at?->format('Y-m-d')])
+            @if ($area === 'account')
+                @include('layoutmodule::partials.field', ['name' => 'paid_at', 'label' => 'Date', 'type' => 'date', 'required' => true,
+                    'value' => $payment->paid_at?->format('Y-m-d')])
+            @else
+                <dl class="detail-list"><div><dt>Date</dt><dd>{{ $payment->paid_at?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</dd></div></dl>
+            @endif
             @unless ($payment->type === 'withholding')
                 @include('layoutmodule::partials.field', ['name' => 'payment_method_id', 'label' => 'Payment Method', 'type' => 'select', 'required' => true, 'searchable' => true,
                     'options' => ['' => '- Select -'] + $methods, 'value' => $payment->payment_method_id ?: null])
@@ -48,6 +54,6 @@
             </div>
         @endif
 
-        @include('layoutmodule::partials.form-actions', ['cancel' => route('account.payments.show', $payment->id)])
+        @include('layoutmodule::partials.form-actions', ['cancel' => route($area . '.payments.show', $payment->id)])
     </form>
 @endsection

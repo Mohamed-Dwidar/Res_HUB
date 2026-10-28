@@ -6,9 +6,8 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Modules\PaymentModule\app\Http\Controllers\Concerns\PaymentActions;
 use Modules\PaymentModule\app\Http\Requests\PaymentDeleteRequest;
-use Modules\PaymentModule\app\Http\Requests\PaymentUpdateRequest;
 
-// logged in account: the account's payments (add / view / refund in PaymentActions) + the owner's edit / delete
+// logged in account: the account's payments (add / view / refund / edit in PaymentActions) + the owner's delete
 // (a payment of a closed shift: reason required, logged on the shift; PaymentService checks the owner again: the routes are account only)
 class PaymentAccountModuleController extends Controller
 {
@@ -23,32 +22,6 @@ class PaymentAccountModuleController extends Controller
     private function payableUrl($payment): ?string
     {
         return $payment->payable_kind ? route('account.' . $payment->payable_kind . 's.show', $payment->payable_id) : null;
-    }
-
-    public function edit($id)
-    {
-        $payment = $this->paymentService->findOne($this->accountId(), $id);
-        return view('paymentmodule::Payment.edit', [
-            'payment' => $payment,
-            'payableName' => $this->paymentService->payableName($payment->payable, false),
-            'closedShift' => $this->paymentService->closedShiftOf($payment),
-            'methods' => $this->methodService->options($this->accountId(), $payment->payment_method_id),
-            'categories' => $this->categoryService->options($this->accountId(), $payment->income_category_id),
-        ]);
-    }
-
-    public function update(PaymentUpdateRequest $request, $id)
-    {
-        $payment = $this->paymentService->update($this->accountId(), $id, $request->validated(), Auth::user());
-
-        return response()->json([
-            'message' => ($payment->type === 'refund' ? 'Refund #' : 'Cash In #') . $payment->payment_no . ' has been updated successfully.',
-            'row' => $this->row($request, $id),
-            // a list without this row id (Payments All / Cash Out: row-payment-{id}) reloads
-            'reload' => true,
-            'modal' => route('account.payments.show', $id),
-            'redirect' => route('account.payments.show', $id),
-        ]);
     }
 
     // the delete popup: the reason is required

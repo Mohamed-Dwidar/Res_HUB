@@ -225,12 +225,48 @@ class PaymentService
      * The payable / member / type are kept (a payment for another reservation = delete it and add a new one).
      * In a CLOSED shift: $data['change_reason'] required; the shift's totals are recalculated and the change logged (before / after).
      */
+    /**
+     * Who may edit a payment (2026-10-28): the owner any (a closed shift: with a reason); an employee only their OWN cash in /
+     * withholding while it is still in their OPEN shift (not a refund, not after closing). editError() = why not.
+     */
+    public function canEdit(Payment $payment, Model $user): bool
+    {
+        return $this->editError($payment, $user) === null;
+    }
+
+    public function editError(Payment $payment, Model $user): ?string
+    {
+        if ($this->isOwner($user)) {
+            return null;
+        }
+        if ($payment->trashed() || $payment->type === 'refund') {
+            return 'Only the account owner can change a refund.';
+        }
+        if ($payment->creatable_type !== $user->getMorphClass() || (int) $payment->creatable_id !== (int) $user->getKey()) {
+            return 'You can change only the cash in you recorded.';
+        }
+        if ($payment->shift_closing_id) {
+            return 'This cash in is in a closed shift: only the account owner can change it.';
+        }
+        return null;
+    }
+
+    // $user: the owner, or an employee for their own cash in of their open shift (canEdit(); the date stays as recorded)
     public function update($accountId, $id, array $data, Model $user): Payment
     {
-        $this->assertOwner($user);
         $payment = $this->findOne($accountId, $id);
+        if ($error = $this->editError($payment, $user)) {
+            abort(403, $error);
+        }
+        $owner = $this->isOwner($user);
+        if (!$owner) {
+            $data['paid_at'] = $payment->paid_at;
+        }
 
         $amount = $this->assertAmount($data['amount'] ?? 0);
+        if (!$owner) {
+            $this->assertEmployeeAmount($payment, $amount);
+        }
         // withholding: no money received, no method
         if ($payment->type !== 'withholding') {
             $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
@@ -535,6 +571,24 @@ class PaymentService
         $max = $this->refundable($payment, $except);
         if ($amount > $max) {
             throw ValidationException::withMessages(['amount' => 'Not more than ' . number_format(max(0, $max), 2) . ' can be refunded (what was paid on this payment, less its refunds).']);
+        }
+    }
+
+    // an employee's edit (2026-10-28): not below what was already refunded of it; a reservation's cash in not above what it
+    // still owes with this payment's old amount (the "never more than owed" rule of a new cash in; packages may go to credit)
+    private function assertEmployeeAmount(Payment $payment, float $amount): void
+    {
+        $refunded = round((float) Payment::where('refund_of', $payment->getKey())->sum('amount'), 2);
+        if ($amount < $refunded) {
+            throw ValidationException::withMessages(['amount' => 'Not less than ' . number_format($refunded, 2) . ' (already refunded of it).']);
+        }
+        $payable = $payment->load('payable')->payable;
+        if ($payable instanceof Reservation && $amount > (float) $payment->amount) {
+            $payable->newQuery()->whereKey($payable->getKey())->lockForUpdate()->first();
+            $owed = round($payable->load('status')->payableAmount() - Payment::paidTotal($payable->payments()) + (float) $payment->amount, 2);
+            if ($amount > $owed) {
+                throw ValidationException::withMessages(['amount' => 'The amount can\'t be more than ' . number_format(max(0, $owed), 2) . ' (what this reservation owes with this cash in).']);
+            }
         }
     }
 

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\PaymentModule\app\Http\Requests\PaymentRefundRequest;
 use Modules\PaymentModule\app\Http\Requests\PaymentRequest;
+use Modules\PaymentModule\app\Http\Requests\PaymentUpdateRequest;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Services\CashListService;
 use Modules\PaymentModule\app\Services\ExpenseCategoryService;
@@ -312,6 +313,38 @@ trait PaymentActions
         $payment = $this->findForViewer($id);
         $payableName = $this->paymentService->payableName($payment->payable, false);
         return view('paymentmodule::Payment.show', compact('payment', 'payableName'));
+    }
+
+    // edit (2026-10-28: the owner any payment; an employee their own cash in while their shift is open — PaymentService::canEdit())
+    public function edit($id)
+    {
+        $payment = $this->findForViewer($id);
+        if ($error = $this->paymentService->editError($payment, Auth::user())) {
+            abort(403, $error);
+        }
+        return view('paymentmodule::Payment.edit', [
+            'payment' => $payment,
+            'payableName' => $this->paymentService->payableName($payment->payable, false),
+            'closedShift' => $this->paymentService->closedShiftOf($payment),
+            'methods' => $this->methodService->options($this->accountId(), $payment->payment_method_id),
+            'categories' => $this->categoryService->options($this->accountId(), $payment->income_category_id),
+        ]);
+    }
+
+    public function update(PaymentUpdateRequest $request, $id)
+    {
+        $this->findForViewer($id);
+        $payment = $this->paymentService->update($this->accountId(), $id, $request->validated(), Auth::user());
+        $show = route($this->area() . '.payments.show', $id);
+
+        return response()->json([
+            'message' => ($payment->type === 'refund' ? 'Refund #' : 'Cash In #') . $payment->payment_no . ' has been updated successfully.',
+            'row' => $this->row($request, $id),
+            // a list without this row id (Payments All / Cash Out: row-payment-{id}) reloads
+            'reload' => true,
+            'modal' => $show,
+            'redirect' => $show,
+        ]);
     }
 
     // the receipt (PDF, opened in the browser)

@@ -6,8 +6,9 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Modules\PaymentModule\app\Models\Payment;
 
-// the owner's edit of a payment / refund / withholding (the payable, member and type are kept); in a closed shift a reason is
-// required (logged on the shift); PaymentService::update() checks the rules again (owner, reason, refund limit, ownership)
+// the edit of a payment / refund / withholding (the payable, member and type are kept): the owner (in a closed shift a reason is
+// required, logged on the shift) or an employee for their own cash in of their open shift (2026-10-28; no date);
+// PaymentService::update() checks the rules again (canEdit(), reason, refund limit, owed, ownership)
 class PaymentUpdateRequest extends FormRequest
 {
     public function rules(): array
@@ -19,7 +20,8 @@ class PaymentUpdateRequest extends FormRequest
 
         return [
             'amount' => 'required|numeric|min:0.01|max:99999999',
-            'paid_at' => 'required|date',
+            // employees can't change the date (it stays as recorded, PaymentService::update())
+            'paid_at' => $this->routeIs('employee.*') ? ['exclude'] : 'required|date',
             // the current method stays valid even if it was deactivated since
             'payment_method_id' => $payment?->type === 'withholding'
                 ? ['exclude']
@@ -30,7 +32,8 @@ class PaymentUpdateRequest extends FormRequest
             'reference' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:5000',
             // why a payment of a closed shift is changed (kept in the shift's history)
-            'change_reason' => $payment?->shift_closing_id ? 'required|string|max:255' : 'exclude',
+            // (the owner only: an employee can't change a closed shift's cash in — PaymentService answers 403 with why)
+            'change_reason' => $payment?->shift_closing_id && !$this->routeIs('employee.*') ? 'required|string|max:255' : 'exclude',
         ];
     }
 

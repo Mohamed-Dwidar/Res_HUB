@@ -10,12 +10,15 @@
 
 @section('actions')
     <a href="{{ route($area . '.payments.receipt', $payment->id) }}" target="_blank" class="btn btn-secondary"><i data-lucide="printer"></i> Receipt</a>
-    {{-- refund: the account and employees (into the refunder's shift); edit / delete: the account owner only --}}
+    {{-- refund: the account and employees (into the refunder's shift); edit: the owner, or an employee for their own cash in
+         while their shift is open (PaymentService::canEdit()); delete: the account owner only --}}
     @if ($payment->type === 'payment')
         <a href="{{ route($area . '.payments.refund', $payment->id) }}" data-modal class="btn btn-secondary"><i data-lucide="undo-2"></i> Refund</a>
     @endif
+    @if (app(\Modules\PaymentModule\app\Services\PaymentService::class)->canEdit($payment, Auth::user()))
+        <a href="{{ route($area . '.payments.edit', $payment->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    @endif
     @if ($area === 'account')
-        <a href="{{ route('account.payments.edit', $payment->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
         <a href="{{ route('account.payments.delete', $payment->id) }}" data-modal class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</a>
     @endif
 @endsection

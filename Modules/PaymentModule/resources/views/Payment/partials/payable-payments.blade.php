@@ -11,6 +11,7 @@
 @php
     $area = request()->routeIs('employee.*') ? 'employee' : 'account';
     $dateFormat = \Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT;
+    $paymentService = app(\Modules\PaymentModule\app\Services\PaymentService::class);
 @endphp
 
 <div class="form-section mt-8 payments-block__head">
@@ -54,7 +55,8 @@
         <div class="table-wrap mt-4">
             <table class="data-table">
                 <thead>
-                    {{-- the order the desk reads them (user 2026-10-21): Amount, Date, No., Method, Type, Collected by, print / delete --}}
+                    {{-- the order the desk reads them (user 2026-10-21): Amount, Date, No., Method, Type, Collected by, print / edit / delete;
+                         Amount, Date and No. open the payment (2026-10-28) --}}
                     <tr>
                         <th>Amount</th>
                         <th>Date</th>
@@ -67,17 +69,22 @@
                 </thead>
                 <tbody>
                     @foreach ($payments as $payment)
+                        @php($showUrl = route($area . '.payments.show', $payment->id))
                         <tr>
-                            <td class="font-medium {{ $payment->type === 'refund' ? 'text-danger' : '' }}">{{ number_format($payment->signed_amount, 2) }}</td>
-                            <td class="whitespace-nowrap">@include('paymentmodule::Payment.partials.record-date', ['record' => $payment, 'time' => false])</td>
-                            <td><a href="{{ route($area . '.payments.show', $payment->id) }}" data-modal class="font-medium">#{{ $payment->payment_no }}</a></td>
+                            <td><a href="{{ $showUrl }}" data-modal class="font-medium {{ $payment->type === 'refund' ? 'text-danger' : '' }}">{{ number_format($payment->signed_amount, 2) }}</a></td>
+                            <td class="whitespace-nowrap"><a href="{{ $showUrl }}" data-modal>@include('paymentmodule::Payment.partials.record-date', ['record' => $payment, 'time' => false])</a></td>
+                            <td><a href="{{ $showUrl }}" data-modal class="font-medium">#{{ $payment->payment_no }}</a></td>
                             <td>{{ $payment->paymentMethod?->name ?? '-' }}</td>
                             <td><span class="badge {{ $payment->type_badge_class }}">{{ $payment->type_label }}</span></td>
                             <td>{{ $payment->creatable?->userable?->displayName() ?? $payment->creatable?->email ?? '-' }}</td>
-                            {{-- the receipt (new tab); delete = the account owner only (popup with the reason, then back to this view) --}}
+                            {{-- the receipt (new tab); edit = the owner, or an employee for their own cash in of their open shift
+                                 (PaymentService::canEdit()); delete = the account owner only (popups, then back to this view) --}}
                             <td class="whitespace-nowrap">
                                 <span class="payments-block__icons">
                                     <a href="{{ route($area . '.payments.receipt', $payment->id) }}" target="_blank" title="Receipt"><i data-lucide="printer" class="h-4 w-4"></i></a>
+                                    @if ($paymentService->canEdit($payment, Auth::user()))
+                                        <a href="{{ route($area . '.payments.edit', $payment->id) }}" data-modal title="Edit"><i data-lucide="pencil" class="h-4 w-4"></i></a>
+                                    @endif
                                     @if ($area === 'account')
                                         <a href="{{ route('account.payments.delete', $payment->id) }}" data-modal title="Delete" class="text-danger"><i data-lucide="trash-2" class="h-4 w-4"></i></a>
                                     @endif

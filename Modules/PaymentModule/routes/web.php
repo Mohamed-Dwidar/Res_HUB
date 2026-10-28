@@ -35,6 +35,9 @@ $paymentRoutes = function ($controller) {
     Route::post('/', [$controller, 'store'])->name('store');
     Route::get('{id}', [$controller, 'show'])->name('show');
     Route::get('{id}/receipt', [$controller, 'receipt'])->name('receipt');
+    // edit: the owner any payment, an employee their own cash in while their shift is open (PaymentService::canEdit())
+    Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
+    Route::put('{id}', [$controller, 'update'])->name('update');
     // a refund (reason required) goes into the refunder's own open shift
     Route::get('{id}/refund', [$controller, 'refundForm'])->name('refund');
     Route::post('{id}/refund', [$controller, 'refund'])->name('refund.store');
@@ -43,10 +46,8 @@ $paymentRoutes = function ($controller) {
 Route::prefix('account/payments')->name('account.payments.')->middleware(['auth', 'user.active:' . Account::class])
     ->group(fn () => $paymentRoutes(PaymentAccountModuleController::class));
 
-// the owner only: edit / delete (a payment of a closed shift: reason required, logged on the shift)
+// the owner only: delete (a payment of a closed shift: reason required, logged on the shift)
 Route::prefix('account/payments')->name('account.payments.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
-    Route::get('{id}/edit', [PaymentAccountModuleController::class, 'edit'])->name('edit');
-    Route::put('{id}', [PaymentAccountModuleController::class, 'update'])->name('update');
     Route::get('{id}/delete', [PaymentAccountModuleController::class, 'deleteForm'])->name('delete');
     Route::delete('{id}', [PaymentAccountModuleController::class, 'destroy'])->name('destroy');
 });
