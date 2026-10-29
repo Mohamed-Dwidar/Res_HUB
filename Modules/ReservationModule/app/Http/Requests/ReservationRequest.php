@@ -70,6 +70,8 @@ class ReservationRequest extends FormRequest
             // taxes only with an invoice (docs/payments-plan.md §3): the checkbox is on the form only once taxes apply (absent =
             // kept / the plan's "Invoice by default"); account AND employees; inside a package the package's (ReservationService)
             'invoice_requested' => 'sometimes|boolean',
+            // the Renew form of an unpaid period (the owner only; ReservationService refuses an employee): why it is renewed first
+            'unpaid_renewal_reason' => $this->route('id') ? ['exclude'] : ['nullable', 'string', 'max:255'],
             // the period it renews: the Renew form (hidden, both areas) / "Renewal of #" in the account's edit form; employees'
             // edits keep it; checked by ReservationService::renewalError()
             'renewal_of' => $this->route('id') && !$this->routeIs('account.*') ? ['exclude'] : ['nullable', 'integer', 'min:1'],

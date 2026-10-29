@@ -1,5 +1,10 @@
 {{--
-    One period row ($reservation, $kind today | overdue | next | new). Payment is due at the START of a period (2026-10-19):
+    One period row ($reservation, $kind today | overdue | next | new). The row is the period covering the selected date (user
+    2026-10-29, ScheduleService::periodGroups()): a renewal whose renewal date has come is the row itself ($reservation->renewal_row:
+    the name opens it, its amount / remaining, Pay); Next N days = the current period, an advance renewal is not mentioned (no
+    Renew), Pay = pay_target (its own debt first, else the renewal's). Renew = pay first (Reservation::canRenew(): the owner may
+    still, the form asks a reason); an employee on an unpaid period gets Pay + "Pay this period first, then renew."
+    Before 2026-10-29: payment is due at the START of a period (2026-10-19):
     renewed = its renewal (renewedBy) exists AND is paid.
     - today / next: its renewal date (the day after its last day, Reservation::renewalDate()), the period's amount (net);
       no renewal → Renew (+ Mark left on Renews today, 2026-10-26) | a renewal still owing → "Renewal created · Due <remaining>" + Pay (Cash In for the renewal) |
@@ -15,7 +20,9 @@
     $renewal = $reservation->renewedBy;
     $owes = fn ($row) => $row && $row->canTakePayments() && $row->remaining > 0;
     $renewalOwes = $owes($renewal);
-    $payKind = $kind === 'overdue' && $reservation->overdue_kind === 'pay';
+    $isRenewalRow = !empty($reservation->renewal_row);
+    $payKind = ($kind === 'overdue' && $reservation->overdue_kind === 'pay') || $isRenewalRow;
+    $isOwner = Auth::user()?->userable instanceof \Modules\AccountModule\app\Models\Account;
     $dueSince = $kind === 'overdue' ? \Illuminate\Support\Carbon::parse($reservation->due_since) : null;
     $dueDays = $dueSince ? (int) $dueSince->diffInDays($date, false) : 0;
     $payUrl = fn ($row) => route($area . '.payments.create', ['payable' => 'reservation', 'payable_id' => $row->id]);
@@ -26,13 +33,18 @@
         @if ($reservation->member?->phone)
             <div class="text-xs text-slate-500">{{ $reservation->member->phone }}</div>
         @endif
+        @if ($isRenewalRow)
+            <div class="text-xs text-slate-500">renewal of <a href="{{ route($area . '.reservations.show', $reservation->renewal_for) }}" data-modal>#{{ $reservation->renewal_for }}</a></div>
+        @endif
     </td>
     <td>
         {{ $reservation->unit?->name ?? '-' }}
         <div class="text-xs text-slate-500">{{ $reservation->space?->name }}</div>
     </td>
     <td class="whitespace-nowrap">
-        @if ($kind === 'new')
+        @if ($kind === 'new' || ($kind === 'today' && $isRenewalRow))
+            {{-- a new subscription / a renewal starting on the day: its start → end (user 2026-10-29) --}}
+            {{ $reservation->start_at?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}
             → {{ $reservation->realEnd()?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}
         @elseif ($kind === 'today')
             renews {{ $isToday ? 'today' : 'this day' }}
@@ -60,10 +72,10 @@
         {{-- the current period still owing: its remaining (partial payments: what is left) --}}
         <td class="today-renewals__amount text-danger">{{ number_format($reservation->remaining, 2) }}</td>
     @else
-        {{-- the period's net amount (a renewal starts from the same amount); muted once renewed and paid; + its own debt --}}
-        <td class="today-renewals__amount {{ $renewal && !$renewalOwes ? 'text-slate-400' : '' }}">
+        {{-- the period's amount (a renewal starts from the same amount) + its own debt --}}
+        <td class="today-renewals__amount">
             {{ number_format($reservation->dueAmount(), 2) }}
-            @if ($kind === 'overdue' && $owes($reservation))
+            @if ($kind !== 'next' && $owes($reservation))
                 <div class="text-xs text-danger">Due {{ number_format($reservation->remaining, 2) }}</div>
             @endif
         </td>
@@ -73,20 +85,25 @@
             <a href="{{ route($area . '.reservations.show', $reservation->id) }}" data-modal class="btn btn-secondary btn-sm"><i data-lucide="eye"></i> View</a>
         @elseif ($payKind)
             <a href="{{ $payUrl($reservation) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="wallet"></i> Pay</a>
-        @elseif ($renewal && $renewalOwes)
-            {{-- the renewal exists but is not paid: not renewed yet (payment due at its start) --}}
-            <a href="{{ route($area . '.reservations.show', $renewal->id) }}" data-modal class="text-warning font-medium">Renewal created · Due {{ number_format($renewal->remaining, 2) }}</a>
-            <a href="{{ $payUrl($renewal) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="wallet"></i> Pay</a>
-        @elseif ($renewal)
-            <a href="{{ route($area . '.reservations.show', $renewal->id) }}" data-modal class="text-success font-medium"><i data-lucide="check" class="inline h-4 w-4"></i> Renewed → {{ $renewal->realEnd()?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}</a>
+        @elseif ($kind === 'next')
+            {{-- the current period: an advance renewal is not mentioned (no Renew); Pay = its own debt first, else the renewal's --}}
+            @if ($reservation->pay_target)
+                <a href="{{ $payUrl($reservation->pay_target) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="wallet"></i> Pay</a>
+            @elseif (!$renewal)
+                <a href="{{ route($area . '.reservations.create', ['renew' => $reservation->id]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="refresh-cw"></i> Renew</a>
+            @endif
         @else
-            <a href="{{ route($area . '.reservations.create', ['renew' => $reservation->id]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="refresh-cw"></i> Renew</a>
-            @if ($kind === 'overdue')
-                @if ($owes($reservation))
-                    <a href="{{ $payUrl($reservation) }}" data-modal class="btn btn-secondary btn-sm"><i data-lucide="wallet"></i> Pay</a>
-                @endif
-                @include('reservationmodule::Reservation.partials.left-form')
-            @elseif ($kind === 'today')
+            {{-- no renewal yet: Renew (pay first; the owner may still), Pay its own debt, Mark left --}}
+            @if ($reservation->canRenew($isOwner))
+                <a href="{{ route($area . '.reservations.create', ['renew' => $reservation->id]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="refresh-cw"></i> Renew</a>
+            @endif
+            @if ($owes($reservation))
+                <a href="{{ $payUrl($reservation) }}" data-modal class="btn btn-secondary btn-sm"><i data-lucide="wallet"></i> Pay</a>
+                @unless ($reservation->canRenew($isOwner))
+                    <span class="text-xs text-slate-500">{{ \Modules\ReservationModule\app\Models\Reservation::RENEW_PAY_FIRST }}</span>
+                @endunless
+            @endif
+            @if (in_array($kind, ['overdue', 'today'], true))
                 @include('reservationmodule::Reservation.partials.left-form')
             @endif
         @endif

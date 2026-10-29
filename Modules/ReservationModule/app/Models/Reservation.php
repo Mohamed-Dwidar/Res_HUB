@@ -598,6 +598,31 @@ class Reservation extends Model implements Payable
     }
 
     /**
+     * Renew rules (user 2026-10-29): pay first, then renew. renewalDebt() = what this period still owes on its own (0 inside a
+     * package); canRenew($owner): a counted period with no counted renewal yet, paid — or the account owner (an unpaid period:
+     * the Renew form asks a reason, ReservationService::create()); RENEW_PAY_FIRST = the message.
+     */
+    const RENEW_PAY_FIRST = 'Pay this period first, then renew.';
+
+    public function renewalDebt(): float
+    {
+        return $this->canTakePayments() && $this->remaining > 0 ? round((float) $this->remaining, 2) : 0.0;
+    }
+
+    public function canRenew(bool $owner): bool
+    {
+        return $this->isPeriod() && $this->isCounted() && !$this->renewedBy && ($owner || $this->renewalDebt() <= 0);
+    }
+
+    // the period shown for a renewal row on $date (the Schedule date / the list's Renewal filter, 2026-10-29): its renewal once the
+    // renewal date has come (the period covering that date), else this period
+    public function shownOn(Carbon $date): self
+    {
+        $renewal = $this->renewedBy;
+        return $renewal && $this->renewalDate() && $this->renewalDate()->lte($date) ? $renewal : $this;
+    }
+
+    /**
      * The end of a period that starts on $start, by the plan's lease period and the anchor day (subscription_day, the day of month
      * the subscription renews on; user 2026-10-23, calendar months like the old system): month → the next start = the anchor day
      * of the month after $start's month, clamped to its last day (31 → 28/29 Feb → 31 Mar → 30 Apr); year → the same date next

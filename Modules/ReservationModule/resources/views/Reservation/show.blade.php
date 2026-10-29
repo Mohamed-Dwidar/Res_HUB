@@ -28,9 +28,12 @@
     @unless ($reservation->isCounted())
         <a href="{{ route($area . '.reservations.restore', [$reservation->id, 'back_to_view' => 1]) }}" data-modal class="btn btn-secondary"><i data-lucide="rotate-ccw"></i> Restore</a>
     @endunless
-    {{-- a counted subscription period not renewed yet: the next period, pre-filled (renewal_of = this one) --}}
-    @if ($reservation->isPeriod() && $reservation->isCounted() && !$reservation->renewedBy)
+    {{-- a counted subscription period not renewed yet: the next period, pre-filled (renewal_of = this one); pay first (2026-10-29,
+         Reservation::canRenew(): the owner may still, the form asks a reason; an employee sees "Pay this period first, then renew.") --}}
+    @if ($reservation->canRenew($area === 'account'))
         <a href="{{ route($area . '.reservations.create', ['renew' => $reservation->id]) }}" data-modal class="btn btn-secondary"><i data-lucide="refresh-cw"></i> Renew</a>
+    @elseif ($reservation->isPeriod() && $reservation->isCounted() && !$reservation->renewedBy && $reservation->renewalDebt() > 0)
+        <span class="text-xs text-slate-500">{{ \Modules\ReservationModule\app\Models\Reservation::RENEW_PAY_FIRST }}</span>
     @endif
     {{-- Pay: opens the Add Cash In fields of this view (Cash In block; still owed, paid on its own: not inside a package / not counted) --}}
     @if ($reservation->canTakePayments() && $reservation->remaining > 0)

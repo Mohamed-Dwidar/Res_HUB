@@ -193,6 +193,14 @@ trait ReservationActions
         // by period only: the not counted ones (cancelled, pending ...) stay in their date place, muted (user 2026-10-27; they were
         // always after the counted ones) + who added it (the "By" column)
         $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy');
+        // the Renewal filter (2026-10-29): the rows are seen on the last day of its range; a period whose renewal date has come shows
+        // its renewal (Reservation::shownOn(): member, place, period, amounts, status, menu), the Renewal column stays the period's
+        $refDate = $renewal ? $renewal[2]->copy()->subDay() : null;
+        $shown = fn ($reservation) => $refDate ? $reservation->shownOn($refDate) : $reservation;
+        if ($renewal) {
+            $query->with('renewedBy.member', 'renewedBy.plan', 'renewedBy.unit.color', 'renewedBy.space', 'renewedBy.status',
+                'renewedBy.subscriptionType', 'renewedBy.package', 'renewedBy.creatable.userable');
+        }
         if ($id) {
             $query->whereKey($id);
         } elseif (!request()->filled('order')) {
@@ -210,25 +218,25 @@ trait ReservationActions
             // not counted (cancelled, pending ...): muted (custom.css)
             ->setRowClass(fn ($reservation) => $reservation->isCounted() ? '' : 'row-muted')
             // the columns (docs/reservations-list-plan.md, 2026-10-13): Member | Space › Unit | Plan | Period | Amount | Paid | Remaining | Created By | Status
-            ->addColumn('member_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-member', compact('reservation'))->render())
+            ->addColumn('member_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-member', ['reservation' => $shown($reservation)])->render())
             // (the unit color) space / › unit (two lines)
-            ->addColumn('place', fn ($reservation) => view('reservationmodule::Reservation.partials.row-place', ['reservation' => $reservation, 'stacked' => true])->render())
-            ->addColumn('plan', fn ($reservation) => e($reservation->plan?->name ?? '-'))
+            ->addColumn('place', fn ($reservation) => view('reservationmodule::Reservation.partials.row-place', ['reservation' => $shown($reservation), 'stacked' => true])->render())
+            ->addColumn('plan', fn ($reservation) => e($shown($reservation)->plan?->name ?? '-'))
             // by the subscription type: full day = one date, auto renew / contract = From + Ends, else date | time → (date |) time
             // + on Today / Upcoming / picked days a period row's badge: New / Renewal (its start) or Renewal due (its renewal date)
-            ->addColumn('period', fn ($reservation) => view('reservationmodule::Reservation.partials.row-period', ['reservation' => $reservation,
-                'badge' => $reservation->listBadge($tab, Arr::only($filters, ['date_from', 'date_to']))])->render())
+            ->addColumn('period', fn ($reservation) => view('reservationmodule::Reservation.partials.row-period', ['reservation' => $shown($reservation),
+                'badge' => $shown($reservation)->listBadge($tab, Arr::only($filters, ['date_from', 'date_to']))])->render())
             // the Renewal filter: renewal date + what happened + Renew / Pay / Mark left (the Schedule page texts); empty otherwise
-            ->addColumn('renewal_html', fn ($reservation) => $renewal ? view('reservationmodule::Reservation.partials.row-renewal', compact('reservation'))->render() : '')
+            ->addColumn('renewal_html', fn ($reservation) => $renewal ? view('reservationmodule::Reservation.partials.row-renewal', ['reservation' => $reservation, 'refDate' => $refDate])->render() : '')
             // the reservation status + the payment status (two badges)
-            ->addColumn('status', fn ($reservation) => view('reservationmodule::Reservation.partials.row-status', compact('reservation'))->render())
+            ->addColumn('status', fn ($reservation) => view('reservationmodule::Reservation.partials.row-status', ['reservation' => $shown($reservation)])->render())
             // what it costs (with its taxes when an invoice is requested) + the Invoice badge
-            ->editColumn('net_amount', fn ($reservation) => view('reservationmodule::Reservation.partials.row-amount', compact('reservation'))->render())
-            ->editColumn('paid_amount', fn ($reservation) => number_format($reservation->paid_amount, 2))
+            ->editColumn('net_amount', fn ($reservation) => view('reservationmodule::Reservation.partials.row-amount', ['reservation' => $shown($reservation)])->render())
+            ->editColumn('paid_amount', fn ($reservation) => number_format($shown($reservation)->paid_amount, 2))
             // red when owed, a credit (negative) in blue
-            ->addColumn('remaining_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-remaining', compact('reservation'))->render())
-            ->addColumn('by', fn ($reservation) => e($reservation->creatable?->userable?->displayName() ?? '-'))
-            ->addColumn('actions', fn ($reservation) => view('reservationmodule::Reservation.partials.row-actions', compact('reservation'))->render())
+            ->addColumn('remaining_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-remaining', ['reservation' => $shown($reservation)])->render())
+            ->addColumn('by', fn ($reservation) => e($shown($reservation)->creatable?->userable?->displayName() ?? '-'))
+            ->addColumn('actions', fn ($reservation) => view('reservationmodule::Reservation.partials.row-actions', ['reservation' => $shown($reservation)])->render())
             ->rawColumns(['member_html', 'place', 'period', 'renewal_html', 'status', 'net_amount', 'remaining_html', 'actions'])
             ->only(['DT_RowId', 'DT_RowClass', 'member_html', 'place', 'plan', 'period', 'renewal_html', 'status', 'net_amount', 'paid_amount', 'remaining_html', 'by', 'actions']);
 

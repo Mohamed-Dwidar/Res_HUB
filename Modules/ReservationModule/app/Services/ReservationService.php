@@ -67,6 +67,9 @@ class ReservationService
                     'is_repeat' => false,
                 ]);
             }
+            // pay first, then renew (user 2026-10-29): an unpaid period — an employee is refused, the owner gives a reason (a dated
+            // line in the new period's notes)
+            $unpaidNote = $renewalOf && isset($period) ? $this->unpaidRenewalNote($period, $data, $creator) : null;
             // the status is not chosen in the form: a new reservation gets the first active status
             $reservation = $this->reservationRepository->makeModel()->newInstance($this->reservationData($accountId, $data) + [
                 'account_id' => $accountId,
@@ -79,6 +82,9 @@ class ReservationService
             }
             if ($renewalOf && ($error = $this->renewalError($accountId, $reservation, $renewalOf))) {
                 throw ValidationException::withMessages(['renewal_of' => $error]);
+            }
+            if ($unpaidNote) {
+                $reservation->notes = trim(($reservation->notes ? $reservation->notes . "\n" : '') . $unpaidNote);
             }
             // "Invoice requested" + the tax snapshot from the plan's current flags (the repeat copies replicate it)
             $this->applyTax($reservation, $accountId, $data, true, $renewalOf ? ($period ?? null) : null);
@@ -266,6 +272,28 @@ class ReservationService
             ->orderByDesc('paid_at')->orderByDesc('id')->limit(20)->get()
             ->map(fn ($payment) => ['id' => $payment->id, 'no' => $payment->payment_no, 'date' => $payment->paid_at->format(Reservation::DATE_FORMAT),
                 'amount' => number_format((float) $payment->amount, 2)])->all();
+    }
+
+    /**
+     * Renewing a period that still owes (2026-10-29, Reservation::RENEW_PAY_FIRST): null when it is paid; an employee → 422; the
+     * owner → the reason is required (unpaid_renewal_reason) and returns the notes line "Renewed before #X was paid (it owed Y) by …".
+     */
+    private function unpaidRenewalNote(Reservation $period, array $data, Model $creator): ?string
+    {
+        $debt = $period->renewalDebt();
+        if ($debt <= 0) {
+            return null;
+        }
+        if (!$this->paymentService->isOwner($creator)) {
+            throw ValidationException::withMessages(['renewal_of' => Reservation::RENEW_PAY_FIRST]);
+        }
+        $reason = trim((string) ($data['unpaid_renewal_reason'] ?? ''));
+        if (mb_strlen($reason) < 3) {
+            throw ValidationException::withMessages(['unpaid_renewal_reason' => 'Write why this period is renewed before it is paid.']);
+        }
+
+        return 'Renewed before #' . $period->id . ' was paid (it owed ' . number_format($debt, 2) . ') by '
+            . ($creator->userable?->displayName() ?? 'the account') . ' on ' . now()->format('d-m-Y h:i A') . ': ' . $reason;
     }
 
     // a change of "Invoice requested" (Payment Exceptions › Invoice Toggled = changed after a payment)

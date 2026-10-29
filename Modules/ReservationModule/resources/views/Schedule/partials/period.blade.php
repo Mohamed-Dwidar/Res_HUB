@@ -34,6 +34,10 @@
             @endforeach
         </div>
     @endforeach
+    @if (!empty($section['isPast']))
+        {{-- a past day (2026-10-29): Not renewed / Next days use today's payments, so they are not shown --}}
+        <div class="today-empty">A past day: only Starts today and Renews today are shown.</div>
+    @endif
     @if (collect($groups)->every(fn ($group) => $group['rows']->isEmpty()))
         <div class="today-empty">No renewals due.</div>
     @else
