@@ -102,6 +102,8 @@ class MemberService
             'job_id' => $data['job_id'] ?? 0,
             'from_where' => $data['from_where'] ?? null,
             'notes' => $data['notes'] ?? null,
+            // WhatsApp language (MessagingModule): empty = the account's default; the quick add has no such field
+            'message_language' => ($data['message_language'] ?? null) ?: null,
         ];
     }
 }

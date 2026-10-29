@@ -199,7 +199,8 @@ class ScheduleService
             $reservation->setRelation('status', $statuses[$reservation->reservation_status_id] ?? null);
             $reservation->setRelation('subscriptionType', $context['types'][$reservation->subscription_type_id] ?? null);
         }
-        $rows->load('member', 'package', 'plan', 'creatable');
+        // + the WhatsApp icon state (MessagingModule's messageLogs, one query)
+        $rows->load('member', 'package', 'plan', 'creatable', 'messageLogs');
         // the creators' user types: the account's own login = the page's account (no query), the employees in one query
         $users = $rows->pluck('creatable')->filter()->unique('id');
         $accountType = (new Account())->getMorphClass();
@@ -223,7 +224,7 @@ class ScheduleService
             $renewal->setRelation('status', $statuses[$renewal->reservation_status_id] ?? null);
             $renewal->setRelation('subscriptionType', $context['types'][$renewal->subscription_type_id] ?? null);
         }
-        $renewals->load('member', 'package', 'plan');
+        $renewals->load('member', 'package', 'plan', 'messageLogs');
     }
 
     // remaining owed (> 0) of reservations paid on their own (not inside a package)

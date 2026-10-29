@@ -354,6 +354,9 @@ function ajaxSubmit(form) {
             toast(json.message);
             if (inModal && json.modal) {
                 appModal.open(json.modal, "saved");
+            } else if (!inModal && json.open_modal) {
+                // a form on the page whose save goes on in a popup (Mark left → the WhatsApp message, MessagingModule)
+                appModal.open(json.open_modal);
             } else if (result.reminder) {
                 appModal.open(result.reminder);
             } else if (backAfter) {
@@ -1504,6 +1507,12 @@ function initForms(root) {
             reservationAvailability(form);
             reservationTax(form, false);
         }
+        if (form.matches("[data-message-template-form]")) {
+            // a new space version: "Start from" (the type's default at first) fills the empty texts
+            var arabic = formField(form, "body_ar");
+            if (form.querySelector("[data-message-start]") && arabic && !arabic.value.trim()) messageStartFill(form);
+            messagePreview(form);
+        }
     });
 }
 
@@ -1966,4 +1975,147 @@ document.addEventListener("click", function (event) {
     scope.querySelectorAll("tr[data-spaces]").forEach(function (row) {
         row.classList.toggle("is-filtered-out", active && row.getAttribute("data-spaces").split(" ").indexOf(space) === -1);
     });
+});
+
+
+// WhatsApp messages (MessagingModule, 2026-10-29) ------------------------------------------------------------------------
+// The popup (Message/show): AR | EN ([data-message-lang-set]) switches every Send link to that language's text; a Send
+// (a[data-message-send], a wa.me link with target=_blank) opens WhatsApp by itself (the browser follows the link: no popup
+// blocker) while its log is posted beside it; the answer shows the popup again (Last sent + history) and refreshes the page
+// behind (Schedule sections / list rows: the icon turns green).
+document.addEventListener("click", function (e) {
+    var langButton = e.target.closest && e.target.closest("[data-message-lang-set]");
+    if (langButton) {
+        var box = langButton.closest("[data-message-lang]");
+        var lang = langButton.getAttribute("data-message-lang-set");
+        box.setAttribute("data-message-lang", lang);
+        box.querySelectorAll("[data-message-lang-set]").forEach(function (button) {
+            button.classList.toggle("is-active", button === langButton);
+        });
+        document.querySelectorAll("#app-modal a[data-message-send]").forEach(function (link) {
+            link.href = link.getAttribute(lang === "en" ? "data-href-en" : "data-href-ar");
+        });
+        return;
+    }
+
+    var send = e.target.closest && e.target.closest("a[data-message-send]");
+    if (!send) return;
+    var langBox = document.querySelector("#app-modal [data-message-lang]");
+    var data = new FormData();
+    data.append("_token", document.querySelector('meta[name="csrf-token"]').content);
+    data.append("type", send.dataset.type);
+    data.append("language", langBox ? langBox.getAttribute("data-message-lang") : "ar");
+    if (send.dataset.context) data.append("context", send.dataset.context);
+    if (send.dataset.suggested) data.append("suggested", send.dataset.suggested);
+    fetch(send.dataset.messageSend, {
+        method: "POST",
+        body: data,
+        keepalive: true,
+        headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
+    })
+        .then(function (response) {
+            return response.json().then(function (json) {
+                return { ok: response.ok, json: json };
+            });
+        })
+        .then(function (result) {
+            if (!result.ok) {
+                var errors = result.json.errors ? Object.values(result.json.errors)[0] : null;
+                toast((errors && errors[0]) || result.json.message || "The message was not logged, please try again.", "error");
+                return;
+            }
+            toast(result.json.message);
+            if (result.json.modal) appModal.open(result.json.modal, "saved");
+            if (window.todayPage && window.todayPage.active()) {
+                window.todayPage.refresh();
+            } else if (window.dataTables) {
+                window.dataTables.reload();
+            }
+        })
+        .catch(function () {
+            toast("The message was not logged, please try again.", "error");
+        });
+});
+
+// the popup's Back ([data-message-back], a link to the reservation view): the previous popup page when there is one (capture,
+// before the [data-modal] link handler), else the link opens the reservation view
+document.addEventListener("click", function (e) {
+    var back = e.target.closest && e.target.closest("#app-modal [data-message-back]");
+    if (!back || !appModal.stack.length || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    appModal.back();
+}, true);
+
+// Settings › WhatsApp Messages, a text's popup ([data-message-template-form]): the live preview of both texts with the account's
+// newest subscription ([data-message-sample]; MessagingService::render() = the same rule: an unknown {name} stays), "Start
+// from" ([data-message-start] + [data-message-starts] {type: {default | <space text>: {ar, en}}}) fills both texts, a
+// placeholder chip inserts {name} at the cursor of the text last used
+function messageJson(form, attribute) {
+    var el = form.querySelector("[" + attribute + "]");
+    try {
+        return el ? JSON.parse(el.textContent) : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function messagePreview(form) {
+    var sample = messageJson(form, "data-message-sample");
+    form.querySelectorAll("[data-message-body]").forEach(function (textarea) {
+        var preview = form.querySelector('[data-message-preview="' + textarea.getAttribute("data-message-body") + '"]');
+        if (!preview) return;
+        var text = textarea.value;
+        if (!text.trim() && textarea.getAttribute("data-message-body") === "en") {
+            preview.textContent = "(empty: the Arabic text is sent)";
+            preview.classList.add("is-empty");
+            return;
+        }
+        preview.classList.remove("is-empty");
+        preview.textContent = text.replace(/\{(\w+)\}/g, function (match, name) {
+            return Object.prototype.hasOwnProperty.call(sample, name) ? sample[name] : match;
+        });
+    });
+}
+
+function messageStartFill(form) {
+    var start = form.querySelector("[data-message-start]");
+    var type = formField(form, "type");
+    if (!start || !start.value || !type) return;
+    var texts = messageJson(form, "data-message-starts")[type.value] || {};
+    var chosen = texts[start.value] || texts["default"] || { ar: "", en: "" };
+    ["ar", "en"].forEach(function (lang) {
+        var textarea = form.querySelector('[data-message-body="' + lang + '"]');
+        if (textarea) textarea.value = chosen[lang] || "";
+    });
+    messagePreview(form);
+}
+
+document.addEventListener("input", function (e) {
+    if (e.target.matches && e.target.matches("[data-message-body]") && e.target.form) messagePreview(e.target.form);
+});
+
+document.addEventListener("change", function (e) {
+    var form = e.target.form;
+    if (!form || !form.matches("[data-message-template-form]")) return;
+    if (e.target.matches("[data-message-start]") || e.target.name === "type") messageStartFill(form);
+});
+
+document.addEventListener("focusin", function (e) {
+    if (e.target.matches && e.target.matches("[data-message-body]") && e.target.form) e.target.form.dataset.messageLast = e.target.getAttribute("data-message-body");
+});
+
+document.addEventListener("click", function (e) {
+    var chip = e.target.closest && e.target.closest("[data-message-placeholder]");
+    if (!chip || !chip.form) return;
+    var form = chip.form;
+    var textarea = form.querySelector('[data-message-body="' + (form.dataset.messageLast || "ar") + '"]');
+    if (!textarea) return;
+    var insert = "{" + chip.getAttribute("data-message-placeholder") + "}";
+    var from = textarea.selectionStart != null ? textarea.selectionStart : textarea.value.length;
+    var to = textarea.selectionEnd != null ? textarea.selectionEnd : from;
+    textarea.value = textarea.value.slice(0, from) + insert + textarea.value.slice(to);
+    textarea.focus();
+    textarea.setSelectionRange(from + insert.length, from + insert.length);
+    messagePreview(form);
 });

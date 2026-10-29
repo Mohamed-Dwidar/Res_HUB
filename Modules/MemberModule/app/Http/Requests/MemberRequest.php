@@ -44,6 +44,7 @@ class MemberRequest extends FormRequest
             'job_id' => ['nullable', 'integer', $ownedBy('job_positions')],
             'from_where' => 'nullable|string|max:1000',
             'notes' => 'nullable|string|max:255',
+            'message_language' => 'nullable|in:ar,en',
         ];
     }
 
@@ -60,6 +61,7 @@ class MemberRequest extends FormRequest
             'company_id' => 'company',
             'job_id' => 'job',
             'from_where' => 'source',
+            'message_language' => 'WhatsApp language',
         ];
     }
 

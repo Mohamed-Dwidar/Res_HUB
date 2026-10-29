@@ -47,7 +47,7 @@
                     <tbody @isset($group['id']) id="{{ $group['id'] }}" @endisset>
                         <tr class="today-renewals__group"><td colspan="6">{{ $group['title'] }} ({{ $group['rows']->count() }})</td></tr>
                         {{-- each group has its own header (2026-10-29): Not renewed & Not paid shows the period in "Date" --}}
-                        <tr class="today-renewals__head"><th>Member</th><th>Unit</th><th>{{ $group['kind'] === 'owing' ? 'Date' : 'Renewal date' }}</th><th class="text-center">Price</th>@if ($group['kind'] === 'owing')<th class="text-center">Status</th>@else<th>Payment</th>@endif<th class="text-center">Action</th></tr>
+                        <tr class="today-renewals__head"><th>Member</th><th>Unit</th><th>{{ $group['kind'] === 'owing' ? 'Date' : 'Renewal date' }}</th><th class="text-center">Price</th>@if ($group['kind'] === 'owing')<th class="text-center">Status</th>@else<th>Payment</th>@endif<th class="text-right">Action</th></tr>
                         @foreach ($group['rows'] as $reservation)
                             @include('reservationmodule::Schedule.partials.renewal-row', ['kind' => $group['kind']])
                         @endforeach

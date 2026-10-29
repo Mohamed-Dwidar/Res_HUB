@@ -2825,3 +2825,231 @@ button.today-summary__item:hover,
 .cash-cell-link:hover {
     text-decoration: underline;
 }
+
+/* ===== WhatsApp messages (MessagingModule, 2026-10-29) ===== */
+/* the icon of a row / the reservation view (Message/partials/button): grey = the suggested message not sent yet, green + ✓ = sent,
+   faded = the phone can't be used (the reason in its tooltip) */
+.wa-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-left: 0.25rem;
+    vertical-align: middle;
+    border-radius: 9999px;
+}
+.wa-btn img {
+    width: 1.125rem;
+    height: 1.125rem;
+    filter: grayscale(1);
+    opacity: 0.55;
+}
+.wa-btn:hover img,
+.wa-btn--sent img {
+    filter: none;
+    opacity: 1;
+}
+.wa-btn--disabled {
+    cursor: not-allowed;
+}
+.wa-btn--disabled img,
+.wa-btn--disabled:hover img {
+    filter: grayscale(1);
+    opacity: 0.25;
+}
+.wa-btn__check {
+    position: absolute;
+    right: -0.3rem;
+    bottom: -0.2rem;
+    min-width: 0.85rem;
+    height: 0.85rem;
+    padding: 0 0.1rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 0.85rem;
+    text-align: center;
+    color: #fff;
+    background-color: rgb(var(--color-success));
+    border-radius: 9999px;
+}
+.app-modal__actions .wa-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: 0 0.5rem 0 0;
+    border: 1px solid rgb(226 232 240);
+}
+.app-modal__actions .wa-btn img {
+    width: 1.35rem;
+    height: 1.35rem;
+}
+
+/* the popup (Message/show) */
+.wa-title-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+}
+.message-lang {
+    display: inline-flex;
+    margin-right: 0.5rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+.message-lang__btn {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: rgb(100 116 139);
+}
+.message-lang__btn.is-active {
+    color: #fff;
+    background-color: rgb(var(--color-primary));
+}
+.message-types__suggested > td {
+    background-color: rgb(var(--color-success) / 0.08);
+}
+.message-types__star {
+    color: rgb(var(--color-warning));
+}
+.btn-whatsapp {
+    gap: 0.35rem;
+    color: #fff;
+    background-color: #25d366;
+    border-color: #25d366;
+}
+.btn-whatsapp:hover {
+    color: #fff;
+    background-color: #1ebe5b;
+}
+.btn-whatsapp img {
+    width: 1rem;
+    height: 1rem;
+    filter: brightness(0) invert(1);
+}
+
+/* Settings › WhatsApp Messages: the texts table, a text's popup (live preview, placeholder chips) */
+.message-templates tr.message-templates__first > td {
+    border-top: 2px solid rgb(226 232 240);
+}
+textarea[data-message-body] {
+    min-height: 16rem;
+}
+.message-preview__label {
+    margin-top: 0.75rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: rgb(100 116 139);
+}
+.message-preview {
+    min-height: 4rem;
+    padding: 0.75rem 1rem;
+    white-space: pre-wrap;
+    font-size: 0.875rem;
+    background-color: #dcf8c6;
+    border-radius: 0.6rem;
+}
+.message-preview.is-empty {
+    color: rgb(100 116 139);
+    background-color: rgb(241 245 249);
+}
+.message-placeholders {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+.message-placeholders__item {
+    padding: 0.15rem 0.5rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: rgb(51 65 85);
+    background-color: rgb(241 245 249);
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.375rem;
+}
+.message-placeholders__item:hover {
+    background-color: rgb(226 232 240);
+}
+.message-texts-head {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+}
+.message-texts-head .form-section {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+/* WhatsApp in the reservations list row menu (Message/partials/button $menu) and at the end of a Schedule row */
+.wa-menu-item {
+    align-items: flex-start;
+}
+.wa-menu-item__icon {
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.1rem;
+    margin-right: 0.5rem;
+    filter: grayscale(1);
+    opacity: 0.6;
+}
+.wa-menu-item--sent .wa-menu-item__icon,
+.wa-menu-item:hover .wa-menu-item__icon {
+    filter: none;
+    opacity: 1;
+}
+.wa-menu-item--disabled {
+    cursor: not-allowed;
+    color: rgb(148 163 184);
+}
+.wa-menu-item__sub {
+    display: block;
+    font-size: 0.7rem;
+    color: rgb(100 116 139);
+}
+.wa-menu-item__check {
+    position: static;
+    display: inline-block;
+    margin-left: 0.25rem;
+}
+.schedule-row-end {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+td.renewal-row__action > .wa-btn {
+    vertical-align: top;
+    margin-top: 0.25rem;
+}
+
+/* Schedule renewal rows (user 2026-10-29): every button of the Action cell on ONE line (computer screens; the phone layout keeps
+   wrapping) — the buttons as wide as their text, the Action column wider, the others a little narrower */
+@media (min-width: 768px) {
+    .renewal-col--member { width: 15%; }
+    .renewal-col--unit { width: 11%; }
+    .renewal-col--date { width: 19%; }
+    .renewal-col--price { width: 8%; }
+    .renewal-col--payment { width: 19%; }
+    .renewal-col--action { width: 28%; }
+
+    td.renewal-row__action {
+        white-space: nowrap;
+        overflow-wrap: normal;
+        text-align: right;
+    }
+    td.renewal-row__action > * {
+        margin: 0 0.15rem;
+        vertical-align: middle;
+    }
+    td.renewal-row__action .renewal-btn {
+        width: auto;
+        padding-left: 0.6rem;
+        padding-right: 0.6rem;
+    }
+    td.renewal-row__action > .wa-btn {
+        margin-top: 0;
+    }
+}

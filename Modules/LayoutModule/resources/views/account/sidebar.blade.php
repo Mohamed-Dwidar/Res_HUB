@@ -92,6 +92,13 @@
                     'url' => route('account.settings.general.edit'),
                     'active' => request()->routeIs('account.settings.general.*'),
                 ],
+                // MessagingModule (2026-10-29): settings + the message texts
+                [
+                    'title' => 'WhatsApp Messages',
+                    'icon' => 'message-circle',
+                    'url' => route('account.settings.messages.edit'),
+                    'active' => request()->routeIs('account.settings.messages.*'),
+                ],
                 [
                     'title' => 'Spaces & Units',
                     'icon' => 'layout-grid',

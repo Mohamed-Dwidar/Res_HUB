@@ -126,7 +126,8 @@
                                 <td class="whitespace-nowrap">@include('reservationmodule::Reservation.partials.row-remaining')</td>
                                 <td>{{ $reservation->creatable?->userable?->displayName() ?? '-' }}</td>
                                 <td>@include('reservationmodule::Reservation.partials.row-status')</td>
-                                <td>@include('reservationmodule::Reservation.partials.row-actions')</td>
+                                {{-- + WhatsApp after the row menu (MessagingModule) --}}
+                                <td><span class="schedule-row-end">@include('reservationmodule::Reservation.partials.row-actions')@include('messagingmodule::Message.partials.button', ['messageDate' => $date])</span></td>
                             </tr>
                         @endforeach
                     </tbody>

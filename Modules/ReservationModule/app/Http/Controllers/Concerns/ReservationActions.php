@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Modules\CompanyModule\app\Services\CompanyService;
+use Modules\MessagingModule\app\Services\MessagingService;
 use Modules\PackageModule\app\Services\PackageService;
 use Modules\PaymentModule\app\Services\PaymentMethodService;
 use Modules\ReservationModule\app\Http\Requests\ReservationRequest;
@@ -206,7 +207,8 @@ trait ReservationActions
         $renewal = $this->renewalFilter($filters);
         // by period only: the not counted ones (cancelled, pending ...) stay in their date place, muted (user 2026-10-27; they were
         // always after the counted ones) + who added it (the "By" column)
-        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy');
+        // + the WhatsApp icon state (MessagingModule's messageLogs: one query for the page, the renewal's too)
+        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy', 'messageLogs', 'renewedBy.messageLogs');
         // the Renewal filter (2026-10-29): Upcoming / Renewed rows show the renewal when it exists (member, place, period, amounts,
         // status, menu); Not renewed & Not paid / Left = the period itself; the Renewal column = RenewalView (the Schedule rows)
         $shown = fn ($reservation) => in_array($renewal[0] ?? null, ['upcoming', 'renewed'], true) ? ($reservation->renewedBy ?? $reservation) : $reservation;
@@ -256,7 +258,9 @@ trait ReservationActions
             // red when owed, a credit (negative) in blue
             ->addColumn('remaining_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-remaining', ['reservation' => $shown($reservation)])->render())
             ->addColumn('by', fn ($reservation) => e($shown($reservation)->creatable?->userable?->displayName() ?? '-'))
-            ->addColumn('actions', fn ($reservation) => view('reservationmodule::Reservation.partials.row-actions', ['reservation' => $shown($reservation)])->render())
+            // + WhatsApp in the menu (MessagingModule): about the period itself, the Renewal filter = the message context
+            ->addColumn('actions', fn ($reservation) => view('reservationmodule::Reservation.partials.row-actions', ['reservation' => $shown($reservation),
+                'messageFor' => $reservation, 'messageContext' => ['owing' => 'owing', 'upcoming' => 'upcoming', 'left' => 'left'][$renewalKind] ?? null])->render())
             ->rawColumns(['member_html', 'place', 'period', 'renewal_html', 'status', 'net_amount', 'remaining_html', 'actions'])
             ->only(['DT_RowId', 'DT_RowClass', 'member_html', 'place', 'plan', 'period', 'renewal_html', 'status', 'net_amount', 'paid_amount', 'remaining_html', 'by', 'actions']);
 
@@ -324,6 +328,8 @@ trait ReservationActions
             'message' => $repeats ? 'The reservation has been added with ' . $repeats . ' repeated reservation(s).' : 'The reservation has been added successfully.',
             'reload' => true,
             'redirect' => $this->route('show', $reservation->id),
+            // the popup goes on to the WhatsApp message (Booking confirmation; MessagingModule, null = no usable number / type off)
+            'modal' => $reservation->renewal_of ? null : app(MessagingService::class)->popupUrl($reservation, 'booking_confirmation'),
         ]);
     }
 
@@ -392,11 +398,14 @@ trait ReservationActions
     public function markLeft(Request $request, $id)
     {
         $this->reservationService->markLeft($this->accountId(), $id, Auth::user());
+        // then the WhatsApp message (Contract end; MessagingModule, null = no usable number / type off)
+        $whatsapp = app(MessagingService::class)->popupUrl($this->reservationService->findOne($this->accountId(), $id), 'contract_end');
 
         return response()->json([
             'message' => 'The period has been marked as left.',
             'row' => $this->row($request, $id),
-            'modal' => $request->boolean('back_to_view') ? route($this->area() . '.reservations.show', $id) : null,
+            'modal' => $whatsapp ?? ($request->boolean('back_to_view') ? route($this->area() . '.reservations.show', $id) : null),
+            'open_modal' => $whatsapp,
         ]);
     }
 

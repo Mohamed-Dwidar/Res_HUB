@@ -11,5 +11,9 @@
         ...(!$reservation->isCounted() ? [['label' => 'Restore', 'icon' => 'rotate-ccw', 'url' => route($area . '.reservations.restore', $reservation->id), 'modal' => true]] : []),
         ...($reservation->canTakePayments() && $reservation->remaining > 0 ? [['label' => 'Add Cash In', 'icon' => 'wallet', 'url' => route($area . '.payments.create', ['payable' => 'reservation', 'payable_id' => $reservation->id]), 'modal' => true]] : []),
     ],
-    'actions' => [['view' => 'reservationmodule::Reservation.partials.delete-form', 'data' => ['reservation' => $reservation]]],
+    'actions' => [
+        // WhatsApp (MessagingModule; $messageFor = the reservation the message is about, the reservations list only)
+        ...(!empty($messageFor) ? [['view' => 'messagingmodule::Message.partials.button', 'data' => ['reservation' => $messageFor, 'messageContext' => $messageContext ?? null]]] : []),
+        ['view' => 'reservationmodule::Reservation.partials.delete-form', 'data' => ['reservation' => $reservation]],
+    ],
 ])

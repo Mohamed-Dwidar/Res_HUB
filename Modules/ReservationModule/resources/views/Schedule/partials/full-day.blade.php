@@ -26,7 +26,8 @@
                             <td class="whitespace-nowrap">{{ $reservation->today_in?->format(\Modules\ReservationModule\app\Models\Reservation::TIME_FORMAT) }}</td>
                             <td class="whitespace-nowrap">@include('reservationmodule::Reservation.partials.row-amount')</td>
                             <td class="whitespace-nowrap">@include('paymentmodule::Payment.partials.remaining-amount', ['payable' => $reservation])</td>
-                            <td>@include('reservationmodule::Schedule.partials.pay-badge')</td>
+                            {{-- + WhatsApp at the end of the row (MessagingModule) --}}
+                            <td><span class="schedule-row-end">@include('reservationmodule::Schedule.partials.pay-badge')@include('messagingmodule::Message.partials.button', ['messageDate' => $date])</span></td>
                         </tr>
                     @endforeach
                 </tbody>

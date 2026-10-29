@@ -28,6 +28,8 @@ class Member extends Model
 
     protected $fillable = [
         'account_id', 'name', 'company_id', 'job_id', 'phone', 'email', 'national_number', 'notes', 'from_where', 'created_by',
+        // WhatsApp language (MessagingModule, 2026-10-29): ar | en, NULL = the account's default
+        'message_language',
     ];
 
     protected static function booted(): void

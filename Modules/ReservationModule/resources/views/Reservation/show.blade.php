@@ -23,6 +23,8 @@
 @section('modal-size', 'lg')
 
 @section('actions')
+    {{-- WhatsApp (MessagingModule): the suggested type by the reservation's state --}}
+    @include('messagingmodule::Message.partials.button')
     {{-- the status: a drop menu like its badge, changed by ajax --}}
     @include('reservationmodule::Reservation.partials.status-menu')
     @unless ($reservation->isCounted())
