@@ -14,6 +14,7 @@ use Modules\PaymentModule\app\Models\InvoiceRequestLog;
 use Modules\PaymentModule\app\Services\PaymentService;
 use Modules\PaymentModule\app\Services\Tax\TaxSnapshot;
 use Modules\ReservationModule\app\Models\Reservation;
+use Modules\ReservationModule\app\Models\ReservationEvent;
 use Modules\ReservationModule\app\Models\ReservationStatus;
 use Modules\ReservationModule\app\Repositories\ReservationRepository;
 use Modules\PlanModule\app\Models\Plan;
@@ -70,6 +71,9 @@ class ReservationService
             // pay first, then renew (user 2026-10-29): an unpaid period — an employee is refused, the owner gives a reason (a dated
             // line in the new period's notes)
             $unpaidNote = $renewalOf && isset($period) ? $this->unpaidRenewalNote($period, $data, $creator) : null;
+            $unpaidDebt = $unpaidNote ? $period->renewalDebt() : 0;
+            // what the member owes across their periods before this renewal (the event's total)
+            $memberDebt = $unpaidNote ? round((float) Reservation::owingPeriodsOf($accountId, (int) $period->member_id)->sum('remaining'), 2) : 0;
             // the status is not chosen in the form: a new reservation gets the first active status
             $reservation = $this->reservationRepository->makeModel()->newInstance($this->reservationData($accountId, $data) + [
                 'account_id' => $accountId,
@@ -90,6 +94,11 @@ class ReservationService
             $this->applyTax($reservation, $accountId, $data, true, $renewalOf ? ($period ?? null) : null);
             $reservation->creatable()->associate($creator);
             $reservation->save();
+            // the owner's override, for Payment Exceptions › Unpaid Renewals (2026-10-29)
+            if ($unpaidNote) {
+                $this->recordEvent($reservation, 'renewed_unpaid', trim((string) $data['unpaid_renewal_reason']), $unpaidDebt,
+                    ['new_amount' => $reservation->dueAmount(), 'total' => round($memberDebt + $reservation->dueAmount(), 2)], $creator, $period->id);
+            }
 
             // repeat: the copies until the "repeat until" date
             if ($reservation->is_repeat && !empty($data['repeat_until'])) {
@@ -176,15 +185,21 @@ class ReservationService
                 . $this->reservationLink($other) . '. Change that one first.']);
         }
         $note = $cancelling ? $this->cancelPaidNote($reservation, $status, $forceReason, $user) : null;
+        // the owner's paid cancel, for Payment Exceptions › Paid Cancelled (2026-10-29): its net paid, the status before → after
+        $cancelEvent = $note ? ['paid' => $reservation->paymentsTotal(), 'from' => $reservation->status?->name, 'to' => $status->name] : null;
         // never overwrites a link
         $link = $restoring && !$reservation->renewal_of ? $this->renewalCandidate($reservation) : null;
 
-        return DB::transaction(function () use ($reservation, $statusId, $note, $link) {
+        return DB::transaction(function () use ($reservation, $statusId, $note, $link, $cancelEvent, $forceReason, $user) {
             $reservation->update(array_filter([
                 'reservation_status_id' => $statusId,
                 'renewal_of' => $link?->id,
                 'notes' => $note !== null ? trim($reservation->notes . "\n" . $note) : null,
             ], fn ($value) => $value !== null));
+            if ($cancelEvent) {
+                $this->recordEvent($reservation, 'cancelled_paid', trim((string) $forceReason), $cancelEvent['paid'],
+                    ['from' => $cancelEvent['from'], 'to' => $cancelEvent['to']], $user);
+            }
             // for the answer: "Linked as renewal of #…" (a relation: never saved)
             $reservation->setRelation('linkedRenewal', $link);
             $this->packageService->recalculate($reservation->package_id);
@@ -275,17 +290,14 @@ class ReservationService
     }
 
     /**
-     * Renewing a period that still owes (2026-10-29, Reservation::RENEW_PAY_FIRST): null when it is paid; an employee → 422; the
-     * owner → the reason is required (unpaid_renewal_reason) and returns the notes line "Renewed before #X was paid (it owed Y) by …".
+     * Renewing a period that still owes (2026-10-29, revised the same day: the owner AND employees): null when it is paid; else the
+     * reason is required (unpaid_renewal_reason) and the notes line "Renewed before #X was paid (it owed Y) by …" is returned.
      */
     private function unpaidRenewalNote(Reservation $period, array $data, Model $creator): ?string
     {
         $debt = $period->renewalDebt();
         if ($debt <= 0) {
             return null;
-        }
-        if (!$this->paymentService->isOwner($creator)) {
-            throw ValidationException::withMessages(['renewal_of' => Reservation::RENEW_PAY_FIRST]);
         }
         $reason = trim((string) ($data['unpaid_renewal_reason'] ?? ''));
         if (mb_strlen($reason) < 3) {
@@ -294,6 +306,19 @@ class ReservationService
 
         return 'Renewed before #' . $period->id . ' was paid (it owed ' . number_format($debt, 2) . ') by '
             . ($creator->userable?->displayName() ?? 'the account') . ' on ' . now()->format('d-m-Y h:i A') . ': ' . $reason;
+    }
+
+    // a logged exception (reservation_events: Payment Exceptions › Unpaid Renewals / Paid Cancelled, 2026-10-29)
+    private function recordEvent(Reservation $reservation, string $type, ?string $reason, float $amount, array $data, ?Model $by, int $relatedId = 0): void
+    {
+        $event = new ReservationEvent([
+            'account_id' => $reservation->account_id, 'reservation_id' => $reservation->id, 'related_reservation_id' => $relatedId,
+            'type' => $type, 'reason' => $reason, 'amount' => round($amount, 2), 'data' => $data,
+        ]);
+        if ($by) {
+            $event->creatable()->associate($by);
+        }
+        $event->save();
     }
 
     // a change of "Invoice requested" (Payment Exceptions › Invoice Toggled = changed after a payment)

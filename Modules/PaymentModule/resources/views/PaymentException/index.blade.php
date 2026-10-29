@@ -80,6 +80,8 @@
             @case('deleted') Deleted cash in / refunds / cash out (only the account deletes). @break
             @case('expenses') Cash outs recorded by employees from {{ number_format($reviewAmount, 2) }} (Settings › General). @break
             @case('invoice') "Invoice requested" ticked / unticked on a reservation that was already paid (part or all): what the customer owes changed with its taxes. @break
+            @case('unpaid_renewals') Periods renewed before the previous period was paid — by the owner or an employee (By), with the reason and what the member owed across their periods. @break
+            @case('cancelled_paid') Reservations cancelled by the owner while they had payments (with the reason; the payments stay until refunded). @break
         @endswitch
         @if ($rows->count() >= \Modules\PaymentModule\app\Services\PaymentExceptionService::LIMIT)
             The newest {{ $rows->count() }} rows.
@@ -120,6 +122,47 @@
                         </tr>
                     @empty
                         <tr><td colspan="6" class="text-slate-500">Nothing in this range.</td></tr>
+                    @endforelse
+                </tbody>
+            @elseif (in_array($tab, ['unpaid_renewals', 'cancelled_paid'], true))
+                {{-- the owner's overrides (reservation_events, 2026-10-29) --}}
+                <thead>
+                    <tr>
+                        <th>Date</th><th>Reservation</th><th>Member</th>
+                        @if ($tab === 'unpaid_renewals')
+                            <th>Unpaid Period</th><th class="text-right">It Owed</th><th class="text-right">New Period</th><th class="text-right">Total Owed</th>
+                        @else
+                            <th>Status</th><th class="text-right">Paid</th>
+                        @endif
+                        <th>Reason</th><th>By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($rows as $event)
+                        <tr>
+                            <td class="whitespace-nowrap">{{ $event->created_at->format($dateFormat) }}<div class="text-xs text-slate-500">{{ $event->created_at->format($timeFormat) }}</div></td>
+                            <td class="whitespace-nowrap">
+                                @if ($event->reservation && !$event->reservation->trashed())
+                                    <a href="{{ route('account.reservations.show', $event->reservation_id) }}" data-modal class="font-medium">#{{ $event->reservation_id }}</a>
+                                @else
+                                    #{{ $event->reservation_id }} <span class="badge badge-status-danger">Deleted</span>
+                                @endif
+                            </td>
+                            <td>{{ $event->reservation?->member?->name ?? '-' }}</td>
+                            @if ($tab === 'unpaid_renewals')
+                                <td><a href="{{ route('account.reservations.show', $event->related_reservation_id) }}" data-modal>#{{ $event->related_reservation_id }}</a></td>
+                                <td class="whitespace-nowrap text-right text-danger">{{ number_format($event->amount, 2) }}</td>
+                                <td class="whitespace-nowrap text-right">{{ number_format((float) ($event->data['new_amount'] ?? 0), 2) }}</td>
+                                <td class="whitespace-nowrap text-right font-medium">{{ number_format((float) ($event->data['total'] ?? 0), 2) }}</td>
+                            @else
+                                <td class="whitespace-nowrap">{{ $event->data['from'] ?? '-' }} → <span class="font-medium">{{ $event->data['to'] ?? '-' }}</span></td>
+                                <td class="whitespace-nowrap text-right font-medium">{{ number_format($event->amount, 2) }}</td>
+                            @endif
+                            <td>{{ $event->reason ?: '-' }}</td>
+                            <td>{{ $event->recorder_name }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="9" class="text-slate-500">Nothing in this range.</td></tr>
                     @endforelse
                 </tbody>
             @elseif ($tab === 'invoice')

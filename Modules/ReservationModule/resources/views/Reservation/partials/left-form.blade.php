@@ -1,6 +1,7 @@
 {{--
     Mark a not renewed subscription period "left" / undo it ($reservation; $undo = the undo form).
-    $backToView: answered with the view again (popup); $class: the button classes (default a small secondary button).
+    $backToView: answered with the view again (popup); $class: the button classes (default a small secondary button);
+    $iconOnly: the icon only, its text as the tooltip; $label: another button text (the renewal rows: "Left", 2026-10-29).
 --}}
 @php($area = request()->routeIs('employee.*') ? 'employee' : 'account')
 <form method="POST" action="{{ route($area . '.reservations.' . (!empty($undo) ? 'left.undo' : 'left'), $reservation->id) }}" class="inline-form" data-ajax data-row="{{ $reservation->id }}"
@@ -13,7 +14,7 @@
     @if (!empty($backToView))
         <input type="hidden" name="back_to_view" value="1">
     @endif
-    <button type="submit" class="{{ $class ?? 'btn btn-secondary btn-sm' }}">
-        <i data-lucide="{{ !empty($undo) ? 'undo-2' : 'log-out' }}"></i> {{ !empty($undo) ? 'Undo Left' : 'Mark Left' }}
+    <button type="submit" class="{{ $class ?? 'btn btn-secondary btn-sm' }}" @if (!empty($iconOnly)) title="{{ !empty($undo) ? 'Undo Left' : 'Mark Left' }}" aria-label="{{ !empty($undo) ? 'Undo Left' : 'Mark Left' }}" @endif>
+        <i data-lucide="{{ !empty($undo) ? 'undo-2' : 'log-out' }}"></i>@unless (!empty($iconOnly)) {{ $label ?? (!empty($undo) ? 'Undo Left' : 'Mark Left') }}@endunless
     </button>
 </form>

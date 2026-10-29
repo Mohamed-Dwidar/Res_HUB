@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Modules\AccountModule\app\Models\Account;
 use Modules\MemberModule\app\Models\Member;
 use Modules\PackageModule\app\Models\Package;
@@ -411,42 +412,49 @@ class Reservation extends Model implements Payable
             . " AND {$renewal}.reservation_status_id NOT IN ({$notCounted}) AND ({$renewal}.package_id > 0 OR {$renewal}.remaining <= 0))";
     }
 
-    // the list "Renewal" filter (2026-10-23): not_renewed | renewed | left
+    // the list "Renewal" filter (2026-10-23; the Schedule lists, 2026-10-29): not_paid | upcoming | renewed | left
     const RENEWAL_FILTERS = [
-        'not_renewed' => 'Not renewed',
+        'not_paid' => 'Not renewed & Not paid',
+        'upcoming' => 'Upcoming',
         'renewed' => 'Renewed',
         'left' => 'Left',
     ];
 
+    // SQL: the period still owes on its own (paid on its own, remaining > 0)
+    const OWES_SQL = '(reservations.package_id = 0 AND reservations.remaining > 0)';
+
     /**
-     * The list "Renewal" filter: period rows (counted, member, end) whose renewal date is in [from, to), by what happened:
-     * - left: marked left (left_at);
-     * - renewed: not left, renewed AND paid (paidRenewalSql());
-     * - not_renewed: not left, no renewal or one still owing; one row per chain — a period is left out when its own renewal
-     *   is also not renewed with a renewal date in the range (the debt moved on to it: the Schedule "current period" rule).
+     * The list "Renewal" filter: period rows (counted, member, end) — the Schedule's lists (user 2026-10-29):
+     * - not_paid (as of $asOf, the Schedule's "Not renewed & Not paid"): not left, AND (started by $asOf and still owing — due since
+     *   its start, in [from, to)) OR (paid, ended by $asOf with no renewal — due since its renewal date, in [from, to));
+     * - upcoming: not left, renewal date in [from, to), renewed or not, paid or not (the Renewal column describes the renewal);
+     * - renewed: not left, renewal date in [from, to), renewed AND paid (paidRenewalSql());
+     * - left: renewal date in [from, to), marked left (left_at).
      */
-    public function scopeRenewalStatus($query, string $status, Carbon $from, Carbon $to)
+    public function scopeRenewalStatus($query, string $status, Carbon $from, Carbon $to, ?Carbon $asOf = null)
     {
         $query->whereIn('reservations.subscription_type_id', SubscriptionType::idsOf('period') ?: [0])
-            ->counted()->where('reservations.member_id', '>', 0)->whereNotNull('reservations.end_at')
-            ->renewalDateBetween($from, $to);
+            ->counted()->where('reservations.member_id', '>', 0)->whereNotNull('reservations.end_at');
 
         if ($status === 'left') {
-            return $query->whereNotNull('reservations.left_at');
+            return $query->renewalDateBetween($from, $to)->whereNotNull('reservations.left_at');
         }
         $query->whereNull('reservations.left_at');
         if ($status === 'renewed') {
-            return $query->whereRaw(self::paidRenewalSql());
+            return $query->renewalDateBetween($from, $to)->whereRaw(self::paidRenewalSql());
+        }
+        if ($status === 'upcoming') {
+            return $query->renewalDateBetween($from, $to);
         }
 
-        $notCounted = implode(',', array_map('intval', ReservationStatus::notCountedIds()) ?: [0]);
-        $nextRenewal = 'DATE_ADD(DATE(GREATEST(next_period.end_at, next_period.start_at)), INTERVAL 1 DAY)';
-        return $query->whereRaw('NOT ' . self::paidRenewalSql())
-            ->whereRaw("NOT EXISTS (SELECT 1 FROM reservations next_period WHERE next_period.renewal_of = reservations.id"
-                . " AND next_period.deleted_at IS NULL AND next_period.reservation_status_id NOT IN ({$notCounted})"
-                . " AND next_period.left_at IS NULL AND next_period.member_id > 0 AND next_period.end_at IS NOT NULL"
-                . " AND {$nextRenewal} >= ? AND {$nextRenewal} < ? AND NOT " . self::paidRenewalSql('next_period', 'next_paid') . ')',
-                [$from->toDateString(), $to->toDateString()]);
+        // not_paid: up to the day after $asOf (default the range's last day)
+        $until = ($asOf ?? $to->copy()->subDay())->copy()->startOfDay()->addDay();
+        $until = $until->lt($to) ? $until : $to->copy();
+        return $query->where(fn ($query) => $query
+            ->where(fn ($query) => $query->whereRaw(self::OWES_SQL)
+                ->where('reservations.start_at', '>=', $from)->where('reservations.start_at', '<', $until))
+            ->orWhere(fn ($query) => $query->whereRaw('NOT ' . self::OWES_SQL)->renewalDateBetween($from, $until)
+                ->whereRaw('NOT ' . self::renewedSql())));
     }
 
     /**
@@ -598,28 +606,27 @@ class Reservation extends Model implements Payable
     }
 
     /**
-     * Renew rules (user 2026-10-29): pay first, then renew. renewalDebt() = what this period still owes on its own (0 inside a
-     * package); canRenew($owner): a counted period with no counted renewal yet, paid — or the account owner (an unpaid period:
-     * the Renew form asks a reason, ReservationService::create()); RENEW_PAY_FIRST = the message.
+     * Renew rules (user 2026-10-29, revised the same day): anyone (the owner AND employees) may renew a period that still owes —
+     * the Renew form shows what the member will owe across their periods and asks a reason (ReservationService::unpaidRenewalNote(),
+     * logged in reservation_events → Payment Exceptions › Unpaid Renewals). renewalDebt() = what this period still owes on its own
+     * (0 inside a package); canRenew(): a counted period with no counted renewal yet.
      */
-    const RENEW_PAY_FIRST = 'Pay this period first, then renew.';
-
     public function renewalDebt(): float
     {
         return $this->canTakePayments() && $this->remaining > 0 ? round((float) $this->remaining, 2) : 0.0;
     }
 
-    public function canRenew(bool $owner): bool
+    public function canRenew(): bool
     {
-        return $this->isPeriod() && $this->isCounted() && !$this->renewedBy && ($owner || $this->renewalDebt() <= 0);
+        return $this->isPeriod() && $this->isCounted() && !$this->renewedBy;
     }
 
-    // the period shown for a renewal row on $date (the Schedule date / the list's Renewal filter, 2026-10-29): its renewal once the
-    // renewal date has come (the period covering that date), else this period
-    public function shownOn(Carbon $date): self
+    // the member's periods (period types, counted, paid on their own) that still owe, oldest first: the Renew form's total
+    public static function owingPeriodsOf(int $accountId, int $memberId): Collection
     {
-        $renewal = $this->renewedBy;
-        return $renewal && $this->renewalDate() && $this->renewalDate()->lte($date) ? $renewal : $this;
+        return $memberId > 0 ? static::where('account_id', $accountId)->where('member_id', $memberId)
+            ->whereIn('subscription_type_id', SubscriptionType::idsOf('period') ?: [0])->counted()
+            ->where('package_id', 0)->where('remaining', '>', 0)->orderBy('start_at')->orderBy('id')->get() : collect();
     }
 
     /**

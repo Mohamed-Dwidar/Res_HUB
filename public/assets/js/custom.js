@@ -1947,3 +1947,23 @@ window.todayPage = (function () {
         dragged = null;
     });
 })();
+
+// Schedule period section (2026-10-29): a "Not paid by space:" chip ([data-space-filter]) shows only that space's rows of its
+// section's table (rows [data-space], member totals [data-spaces]); the same chip again = every row
+document.addEventListener("click", function (event) {
+    var chip = event.target.closest("[data-space-filter]");
+    if (!chip) return;
+    var scope = chip.closest("[data-space-filter-scope]");
+    if (!scope) return;
+    var active = !chip.classList.contains("is-active");
+    var space = chip.getAttribute("data-space-filter");
+    scope.querySelectorAll("[data-space-filter]").forEach(function (item) {
+        item.classList.toggle("is-active", active && item === chip);
+    });
+    scope.querySelectorAll("tr[data-space]").forEach(function (row) {
+        row.classList.toggle("is-filtered-out", active && row.getAttribute("data-space") !== space);
+    });
+    scope.querySelectorAll("tr[data-spaces]").forEach(function (row) {
+        row.classList.toggle("is-filtered-out", active && row.getAttribute("data-spaces").split(" ").indexOf(space) === -1);
+    });
+});

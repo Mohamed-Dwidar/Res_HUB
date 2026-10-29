@@ -10,6 +10,7 @@ use Modules\PaymentModule\app\Models\Expense;
 use Modules\PaymentModule\app\Models\InvoiceRequestLog;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Models\ShiftEvent;
+use Modules\ReservationModule\app\Models\ReservationEvent;
 use Modules\UserModule\app\Models\User;
 
 /**
@@ -23,11 +24,14 @@ use Modules\UserModule\app\Models\User;
  * - expenses: cash outs recorded by EMPLOYEES from Settings › General "review cash out from" (default 500)
  * - invoice: "Invoice requested" changed on a reservation that already had payments (invoice_request_logs, 2026-10-28; the
  *   login = who changed it)
+ * - unpaid_renewals / cancelled_paid (reservation_events, 2026-10-29): a period renewed before the previous (owner or employee)
+ *   one was paid; a reservation with payments cancelled (the login = who did it)
  * The user filter = the login who RECORDED the row (the one the exception is about); edits / deletes also show who changed it.
  */
 class PaymentExceptionService
 {
-    const TABS = ['late' => 'Late Entries', 'edited' => 'Edited', 'deleted' => 'Deleted', 'expenses' => 'Expenses', 'invoice' => 'Invoice Toggled'];
+    const TABS = ['late' => 'Late Entries', 'edited' => 'Edited', 'deleted' => 'Deleted', 'expenses' => 'Expenses', 'invoice' => 'Invoice Toggled',
+        'unpaid_renewals' => 'Unpaid Renewals', 'cancelled_paid' => 'Paid Cancelled'];
 
     // the most rows one tab shows (the counts above are complete)
     const LIMIT = 500;
@@ -65,6 +69,10 @@ class PaymentExceptionService
             ->groupBy('creatable_id')->selectRaw('creatable_id, COUNT(*) AS n')->pluck('n', 'creatable_id'));
         $add('invoice', $this->invoiceTogglesQuery($accountId, $from, $to)
             ->groupBy('creatable_id')->selectRaw('creatable_id, COUNT(*) AS n')->pluck('n', 'creatable_id'));
+        foreach (['unpaid_renewals' => 'renewed_unpaid', 'cancelled_paid' => 'cancelled_paid'] as $tab => $type) {
+            $add($tab, $this->eventsQuery($accountId, $type, $from, $to)
+                ->groupBy('creatable_id')->selectRaw('creatable_id, COUNT(*) AS n')->pluck('n', 'creatable_id'));
+        }
 
         return $counts;
     }
@@ -94,6 +102,9 @@ class PaymentExceptionService
                 ->with('expenseCategory', 'paymentMethod')->latest()->limit(self::LIMIT)->get()),
             'invoice' => $this->withRecorder($forUser($this->invoiceTogglesQuery($accountId, $from, $to))
                 ->with('loggable.member')->latest()->limit(self::LIMIT)->get()),
+            'unpaid_renewals', 'cancelled_paid' => $this->withRecorder($forUser($this->eventsQuery($accountId,
+                    $tab === 'unpaid_renewals' ? 'renewed_unpaid' : 'cancelled_paid', $from, $to))
+                ->with('reservation.member', 'related')->latest()->limit(self::LIMIT)->get()),
         };
     }
 
@@ -131,6 +142,12 @@ class PaymentExceptionService
     {
         return ShiftEvent::where('account_id', $accountId)->whereIn('action', ['payment_edit', 'expense_edit', 'payment_move'])
             ->where('created_at', '>=', $from)->where('created_at', '<', $to->copy()->addDay());
+    }
+
+    // the owner's overrides on reservations (reservation_events) of a type, by a login
+    private function eventsQuery(int $accountId, string $type, Carbon $from, Carbon $to)
+    {
+        return $this->recorded(ReservationEvent::query(), $accountId, $from, $to)->where('type', $type);
     }
 
     // "Invoice requested" changed after the row's first payment (paid at that moment > 0), by a login

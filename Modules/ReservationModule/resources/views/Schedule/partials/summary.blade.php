@@ -1,4 +1,5 @@
-{{-- The summary row: the day's count of each hourly / full day section, renewals needing action, the new subscriptions starting
+{{-- The summary row: the day's count of each hourly / full day section, Not paid (Not renewed & Not paid) / Next N days of the
+     period sections (2026-10-29; hidden on a past day), the new subscriptions starting
      on the day (New, only when > 0: scrolls to Starts today), the day's remaining (Due),
      the day's cancelled reservations (popup list) --}}
 @php($firstPeriod = $sections->firstWhere('mode', 'period'))
@@ -7,8 +8,9 @@
         @foreach ($sections->whereIn('mode', ['hourly', 'full_day']) as $section)
             <a href="#{{ $section['anchor'] }}" class="today-summary__item"><span>{{ $section['type']->name }}</span> <b>{{ $section['count'] }}</b></a>
         @endforeach
-        @if ($firstPeriod)
-            <a href="#{{ $firstPeriod['anchor'] }}" class="today-summary__item"><span>Renewals</span> <b class="{{ $renewals ? 'text-danger' : '' }}">{{ $renewals }}</b></a>
+        @if ($firstPeriod && empty($firstPeriod['isPast']))
+            <a href="#{{ $notPaidAnchor ?? $firstPeriod['anchor'] }}" class="today-summary__item"><span>Not paid</span> <b class="{{ $notPaid ? 'text-danger' : '' }}">{{ $notPaid }}</b></a>
+            <a href="#{{ $nextAnchor ?? $firstPeriod['anchor'] }}" class="today-summary__item"><span>Next {{ $renewalDays }} days</span> <b>{{ $nextCount }}</b></a>
         @endif
         @if ($starts > 0)
             <a href="#{{ $startsAnchor }}" class="today-summary__item"><span>New</span> <b>{{ $starts }}</b></a>

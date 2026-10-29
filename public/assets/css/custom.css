@@ -389,6 +389,17 @@
     background: rgb(var(--color-primary));
 }
 
+/* every "Pay" button (2026-10-29, user): green */
+.btn-pay {
+    color: #fff;
+    background-color: rgb(var(--color-success));
+    border-color: rgb(var(--color-success));
+}
+
+.btn-pay:hover {
+    background-color: rgb(var(--color-success) / 0.9);
+}
+
 .btn-secondary {
     color: rgb(71 85 105);
     background-color: #fff;
@@ -2062,6 +2073,173 @@ a.today-summary__item:hover {
     margin-left: 0.35rem;
 }
 
+/* The renewal rows (Schedule/partials/renewal-row + the list Renewal column, 2026-10-29): fixed columns Member | Unit | Renewal
+   date | Price | Payment | Action; the buttons have one width and wrap to the next line instead of being cut; on narrow screens
+   a row stacks (each cell on its own line with its label) */
+.data-table.today-renewals {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.renewal-col--member { width: 16%; }
+.renewal-col--unit { width: 12%; }
+.renewal-col--date { width: 21%; }
+.renewal-col--price { width: 9%; }
+.renewal-col--payment { width: 21%; }
+.renewal-col--action { width: 22%; }
+
+.renewal-row td {
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+.renewal-row__price {
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.renewal-row__action {
+    text-align: center;
+}
+
+.renewal-row__action,
+.renewal-cell__action {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-content: flex-start;
+    gap: 0.35rem;
+}
+
+td.renewal-row__action {
+    display: table-cell;
+}
+
+td.renewal-row__action > * {
+    margin: 0 0.175rem 0.35rem;
+}
+
+.renewal-btn {
+    width: 5.75rem;
+    justify-content: center;
+    white-space: nowrap;
+}
+
+.renewal-row__action .inline-form,
+.renewal-cell__action .inline-form {
+    display: inline-flex;
+}
+
+/* the column titles under each group title (Schedule/partials/period) */
+.data-table tr.today-renewals__head > th {
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: rgb(100 116 139);
+    border-bottom: 1px solid rgb(226 232 240);
+}
+
+/* Not renewed & Not paid: the Status column (the renewal + payment badges) centred */
+.renewal-row__status {
+    text-align: center;
+}
+
+.renewal-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.3rem;
+}
+
+/* a member with 2+ owing periods: their total under the last one */
+.renewal-row__total td {
+    padding-top: 0.2rem;
+    padding-bottom: 0.6rem;
+    font-size: 0.8rem;
+    text-align: right;
+}
+
+/* "Not paid by space:" chips: the chosen one (custom.js filters the section's table) */
+button.today-summary__item {
+    cursor: pointer;
+    background: transparent;
+}
+
+button.today-summary__item:hover,
+.today-summary__item.is-active {
+    border-color: rgb(var(--color-primary) / 0.6);
+}
+
+.today-summary__item.is-active {
+    background-color: rgb(var(--color-primary) / 0.08);
+}
+
+/* the list Renewal column: date + price | payment | buttons */
+.renewal-cell {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.25rem 1rem;
+    min-width: 17rem;
+}
+
+.renewal-cell__action {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+}
+
+@media (max-width: 767px) {
+    .data-table.today-renewals,
+    .data-table.today-renewals tbody,
+    .data-table.today-renewals tr,
+    .data-table.today-renewals td {
+        display: block;
+        width: 100%;
+    }
+
+    .data-table.today-renewals thead,
+    .data-table.today-renewals colgroup,
+    .data-table.today-renewals tr.today-renewals__head {
+        display: none !important;
+    }
+
+    .renewal-row {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgb(226 232 240);
+    }
+
+    .renewal-row td {
+        border: 0;
+        padding: 0.2rem 0.75rem;
+    }
+
+    .renewal-row td[data-label]:not([data-label=""])::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 0.7rem;
+        color: rgb(100 116 139);
+    }
+
+    .renewal-row__price,
+    .renewal-row__status {
+        text-align: left;
+    }
+
+    .renewal-badges {
+        justify-content: flex-start;
+    }
+
+    .renewal-row__action {
+        text-align: left;
+    }
+
+    td.renewal-row__action > * {
+        margin: 0 0.35rem 0.35rem 0;
+    }
+}
+
 /* ----- the timeline: CSS grid, 4 columns (15 minute slots) per hour; .tl-hours-N = N hours (to > 24 = the next morning) ----- */
 .tl-scroll {
     overflow-x: auto;
@@ -2631,4 +2809,19 @@ a.today-summary__item:hover {
     font-size: 0.75rem;
     font-weight: 400;
     color: rgb(100 116 139);
+}
+
+/* a row hidden by the "Not paid by space:" chips (custom.js) */
+.data-table tr.is-filtered-out {
+    display: none !important;
+}
+
+/* the All / Cash Out list: the For / Item cell opens the record (its text keeps its own colors) */
+.cash-cell-link {
+    display: block;
+    color: inherit;
+}
+
+.cash-cell-link:hover {
+    text-decoration: underline;
 }

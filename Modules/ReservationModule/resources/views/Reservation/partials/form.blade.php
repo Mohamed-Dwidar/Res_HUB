@@ -64,24 +64,24 @@
         Renewal of <b>{{ $reservation->member?->name ?? '-' }}</b>{{ $renewed?->unit ? ' · ' . $renewed->unit->name : '' }}:
         the current period ends {{ $renewed?->realEnd()?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}, the new one starts the day after.
     </div>
-    {{-- pay first, then renew (2026-10-29): the period still owes — the owner gives a reason (ReservationService::unpaidRenewalNote()),
-         an employee is refused --}}
-    @if ($renewed && ($renewedDebt = $renewed->renewalDebt()) > 0)
+    {{-- renewing a period that still owes (2026-10-29, owner AND employees): what the member will owe across their periods + a
+         required reason (ReservationService::unpaidRenewalNote(): the new period's notes + reservation_events → Payment Exceptions) --}}
+    @if ($renewed && $renewed->renewalDebt() > 0)
+        @php
+            $owing = \Modules\ReservationModule\app\Models\Reservation::owingPeriodsOf($renewed->account_id, $renewed->member_id);
+            $newAmount = (float) $reservation->net_amount;
+        @endphp
         <div class="mb-5 tax-warning">
-            #{{ $renewed->id }} still owes {{ number_format($renewedDebt, 2) }}.
-            @if ($area === 'account')
-                After this renewal the member will owe {{ number_format($renewedDebt, 2) }} + {{ number_format((float) $reservation->net_amount, 2) }}
-                = {{ number_format($renewedDebt + (float) $reservation->net_amount, 2) }} in total.
-            @else
-                {{ \Modules\ReservationModule\app\Models\Reservation::RENEW_PAY_FIRST }}
-            @endif
+            <div class="font-medium">#{{ $renewed->id }} is not fully paid. This member will owe {{ number_format($owing->sum('remaining') + $newAmount, 2) }} across {{ $owing->count() + 1 }} periods:</div>
+            @foreach ($owing as $period)
+                <div>#{{ $period->id }} · {{ $period->start_at?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }} → {{ $period->realEnd()?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }} · still owes {{ number_format($period->remaining, 2) }}</div>
+            @endforeach
+            <div>This renewal · {{ number_format($newAmount, 2) }}</div>
         </div>
-        @if ($area === 'account')
-            <div class="mb-5">
-                @include('layoutmodule::partials.field', ['name' => 'unpaid_renewal_reason', 'label' => 'Why Renew Before It Is Paid?', 'type' => 'textarea', 'required' => true,
-                    'attrs' => 'maxlength="255"', 'hint' => 'Kept in the new period\'s notes with the amount still owed.'])
-            </div>
-        @endif
+        <div class="mb-5">
+            @include('layoutmodule::partials.field', ['name' => 'unpaid_renewal_reason', 'label' => 'Why Renew Before It Is Paid?', 'type' => 'textarea', 'required' => true,
+                'attrs' => 'maxlength="255"', 'hint' => 'Kept in the new period\'s notes and listed in Payment Exceptions › Unpaid Renewals with your name.'])
+        </div>
     @endif
     <div class="form-section">Member</div>
     <dl class="detail-list">

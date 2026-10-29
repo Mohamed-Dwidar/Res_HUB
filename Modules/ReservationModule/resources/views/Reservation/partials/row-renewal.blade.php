@@ -1,52 +1,18 @@
 {{--
-    The list "Renewal" column (the Renewal filter, 2026-10-23; Reservation::scopeRenewalStatus()): the period's renewal date and
-    what happened. $reservation = the period (renewedBy eager loaded), $refDate = the last day of the filter's range: the row is
-    the period covering it (user 2026-10-29, Reservation::shownOn() — the other columns already show the renewal when it has come):
-    Left (+ Undo) | a renewal whose renewal date has come → "Renewal of #X" + Due / Pay (its own) or ✓ Paid |
-    a renewal made in advance (renewal date after $refDate) → not mentioned, no Renew; Pay = the period's own debt first, else the
-    renewal's | no renewal → Not renewed + Renew (pay first: Reservation::canRenew(), the owner may still) / Pay, Mark left.
+    The list "Renewal" column (the Renewal filter, 2026-10-29): the Schedule renewal row in one cell — the date (+ due since /
+    in N days), the price, the Payment cell and the buttons, from RenewalView::make() ($kind owing | upcoming | renewed | left,
+    $asOf = the range's last day, the business date at most). $reservation = the period (renewedBy eager loaded).
 --}}
-@php
-    $area = request()->routeIs('employee.*') ? 'employee' : 'account';
-    $dateFormat = \Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT;
-    $renewal = $reservation->renewedBy;
-    $renewsOn = $reservation->renewalDate();
-    $renewalCame = $renewal && $renewsOn && $refDate && $renewsOn->lte($refDate);
-    $owes = fn ($row) => $row && $row->canTakePayments() && $row->remaining > 0;
-    $payUrl = fn ($row) => route($area . '.payments.create', ['payable' => 'reservation', 'payable_id' => $row->id]);
-    $canRenew = $reservation->canRenew($area === 'account');
-@endphp
-<div class="whitespace-nowrap">{{ $renewsOn?->format($dateFormat) ?? '-' }}</div>
+@php($view = \Modules\ReservationModule\app\Services\RenewalView::make($reservation, $kind, $asOf, $asOf->eq(\Modules\ReservationModule\app\Models\Reservation::businessToday()[0])))
 <div class="renewal-cell">
-    @if ($reservation->left_at)
-        <span class="badge badge-status-slate">Left</span>
-        @include('reservationmodule::Reservation.partials.left-form', ['undo' => true])
-    @elseif ($renewalCame)
-        <a href="{{ route($area . '.reservations.show', $reservation->id) }}" data-modal class="text-xs text-slate-500">Renewal of #{{ $reservation->id }}</a>
-        @if ($owes($renewal))
-            <span class="text-danger font-medium">Due {{ number_format($renewal->remaining, 2) }}</span>
-            <a href="{{ $payUrl($renewal) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="wallet"></i> Pay</a>
-        @else
-            <span class="text-success font-medium"><i data-lucide="check" class="inline h-4 w-4"></i> Paid</span>
-        @endif
-    @elseif ($renewal)
-        {{-- renewed in advance: not mentioned, no Renew; Pay its own debt first, else the renewal's --}}
-        @if ($owes($reservation))
-            <a href="{{ $payUrl($reservation) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="wallet"></i> Pay</a>
-        @elseif ($owes($renewal))
-            <a href="{{ $payUrl($renewal) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="wallet"></i> Pay</a>
-        @endif
-    @else
-        <span class="text-danger font-medium">Not renewed</span>
-        @if ($canRenew)
-            <a href="{{ route($area . '.reservations.create', ['renew' => $reservation->id]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="refresh-cw"></i> Renew</a>
-        @endif
-        @if ($owes($reservation))
-            <a href="{{ $payUrl($reservation) }}" data-modal class="btn btn-secondary btn-sm"><i data-lucide="wallet"></i> Pay</a>
-            @unless ($canRenew)
-                <span class="text-xs text-slate-500">{{ \Modules\ReservationModule\app\Models\Reservation::RENEW_PAY_FIRST }}</span>
-            @endunless
-        @endif
-        @include('reservationmodule::Reservation.partials.left-form')
+    <div>
+        @if ($view['datePrefix'])<div class="text-xs text-danger">{{ $view['datePrefix'] }}</div>@endif
+        <div><span class="whitespace-nowrap">{{ $view['date']?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}</span>@if ($view['dateTo']) <span class="whitespace-nowrap">→ {{ $view['dateTo']->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</span>@endif</div>
+        @if ($view['when'])<div class="text-xs whitespace-nowrap {{ $view['whenClass'] }}">{{ $view['when'] }}</div>@endif
+        <div class="renewal-row__price">{{ number_format($view['price'], 2) }}</div>
+    </div>
+    <div>@include('reservationmodule::Reservation.partials.renewal-payment')</div>
+    @if ($view['actions'])
+        <div class="renewal-cell__action">@include('reservationmodule::Reservation.partials.renewal-actions')</div>
     @endif
 </div>

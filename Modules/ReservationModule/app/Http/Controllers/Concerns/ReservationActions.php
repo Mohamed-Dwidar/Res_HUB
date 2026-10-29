@@ -4,6 +4,7 @@ namespace Modules\ReservationModule\app\Http\Controllers\Concerns;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\PackageModule\app\Services\PackageService;
@@ -135,9 +136,11 @@ trait ReservationActions
 
     // the list columns, for data() and for one row after a change (row())
     /**
-     * The "Renewal" filter (2026-10-23): [status, from, to) when chosen (Reservation::RENEWAL_FILTERS), null = All. The dates
-     * are the RENEWAL dates: the picked days of the date field (the Today tab = the business date), else this month (of the
-     * business date); the tabs' own rules are not used (custom.js moves to the All tab when it is chosen).
+     * The "Renewal" filter (2026-10-23; the Schedule lists, 2026-10-29): [status, from, to, asOf] when chosen
+     * (Reservation::RENEWAL_FILTERS), null = All. The picked days of the date field (the Today tab = the business date) = the
+     * "due since" days (not_paid) / the renewal dates (the others); else not_paid = everything up to the business date, upcoming =
+     * the next N days (Settings › General renewals window), renewed / left = this month. asOf = the range's last day, the business
+     * date at most (not_paid is seen on it; the texts count the days from it). custom.js moves to the All tab when it is chosen.
      */
     private function renewalFilter(array $filters): ?array
     {
@@ -145,16 +148,23 @@ trait ReservationActions
         if (!isset(Reservation::RENEWAL_FILTERS[$status])) {
             return null;
         }
+        $today = Reservation::businessToday()[0]->copy();
         if (!empty($filters['date_from']) && strtotime($filters['date_from'])) {
-            return [$status, ...Reservation::pickedDays($filters)];
+            [$from, $to] = Reservation::pickedDays($filters);
+        } elseif ($this->tab($filters) === 'today') {
+            [$from, $to] = [$today->copy(), $today->copy()->addDay()];
+        } elseif ($status === 'not_paid') {
+            [$from, $to] = [Carbon::create(2000, 1, 1), $today->copy()->addDay()];
+        } elseif ($status === 'upcoming') {
+            $days = \Modules\AccountModule\app\Models\Account::settingsOf($this->accountId())?->renewalDays() ?? 7;
+            [$from, $to] = [$today->copy()->addDay(), $today->copy()->addDays($days + 1)];
+        } else {
+            $from = $today->copy()->startOfMonth();
+            $to = $from->copy()->addMonth();
         }
-        // the Today tab (also the business date picked alone): that day only
-        if ($this->tab($filters) === 'today') {
-            $today = Reservation::businessToday()[0]->copy();
-            return [$status, $today, $today->copy()->addDay()];
-        }
-        $from = Reservation::businessToday()[0]->copy()->startOfMonth();
-        return [$status, $from, $from->copy()->addMonth()];
+        $last = $to->copy()->subDay();
+
+        return [$status, $from, $to, $last->lt($today) ? $last : $today];
     }
 
     // the line under the filters with the "Renewal" filter: the dates, the count and what is owed (json html → [data-html])
@@ -164,14 +174,18 @@ trait ReservationActions
         $notCounted = implode(',', array_map('intval', \Modules\ReservationModule\app\Models\ReservationStatus::notCountedIds()) ?: [0]);
         $renewalOf = 'FROM reservations next_period WHERE next_period.renewal_of = reservations.id AND next_period.deleted_at IS NULL'
             . ' AND next_period.reservation_status_id NOT IN (' . $notCounted . ')';
-        // one query: the count, its own debt, the debt of the renewals created (not paid), the periods with no renewal yet + their amount
+        $renewalOwes = 'EXISTS (SELECT 1 ' . $renewalOf . ' AND next_period.package_id = 0 AND next_period.remaining > 0)';
+        // one query: the count; not_paid: the debt + the paid ones not renewed; upcoming: not renewed yet (+ their price),
+        // renewed and owing (+ the debt), renewed & paid
         $totals = $this->reservationService->listQuery($this->accountId(), $this->listFilters($filters))
-            ->renewalStatus($status, $from, $to)->toBase()
+            ->renewalStatus(...$renewal)->toBase()
             ->selectRaw('COUNT(*) AS periods')
-            ->selectRaw('COALESCE(SUM(CASE WHEN reservations.package_id = 0 AND reservations.remaining > 0 THEN reservations.remaining ELSE 0 END), 0) AS own_due')
-            ->selectRaw('COALESCE(SUM((SELECT COALESCE(SUM(next_period.remaining), 0) ' . $renewalOf . ' AND next_period.package_id = 0 AND next_period.remaining > 0)), 0) AS renewal_due')
+            ->selectRaw('COALESCE(SUM(CASE WHEN ' . Reservation::OWES_SQL . ' THEN reservations.remaining ELSE 0 END), 0) AS own_due')
+            ->selectRaw('COALESCE(SUM(CASE WHEN NOT ' . Reservation::OWES_SQL . ' THEN 1 ELSE 0 END), 0) AS paid_not_renewed')
             ->selectRaw('COALESCE(SUM(CASE WHEN NOT EXISTS (SELECT 1 ' . $renewalOf . ') THEN 1 ELSE 0 END), 0) AS not_created')
             ->selectRaw('COALESCE(SUM(CASE WHEN NOT EXISTS (SELECT 1 ' . $renewalOf . ') THEN ' . Reservation::DUE_SQL . ' ELSE 0 END), 0) AS not_created_amount')
+            ->selectRaw('COALESCE(SUM(CASE WHEN ' . $renewalOwes . ' THEN 1 ELSE 0 END), 0) AS renewed_owing')
+            ->selectRaw('COALESCE(SUM((SELECT COALESCE(SUM(next_period.remaining), 0) ' . $renewalOf . ' AND next_period.package_id = 0 AND next_period.remaining > 0)), 0) AS renewal_due')
             ->first();
 
         return view('reservationmodule::Reservation.partials.renewal-summary', [
@@ -193,10 +207,10 @@ trait ReservationActions
         // by period only: the not counted ones (cancelled, pending ...) stay in their date place, muted (user 2026-10-27; they were
         // always after the counted ones) + who added it (the "By" column)
         $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy');
-        // the Renewal filter (2026-10-29): the rows are seen on the last day of its range; a period whose renewal date has come shows
-        // its renewal (Reservation::shownOn(): member, place, period, amounts, status, menu), the Renewal column stays the period's
-        $refDate = $renewal ? $renewal[2]->copy()->subDay() : null;
-        $shown = fn ($reservation) => $refDate ? $reservation->shownOn($refDate) : $reservation;
+        // the Renewal filter (2026-10-29): Upcoming / Renewed rows show the renewal when it exists (member, place, period, amounts,
+        // status, menu); Not renewed & Not paid / Left = the period itself; the Renewal column = RenewalView (the Schedule rows)
+        $shown = fn ($reservation) => in_array($renewal[0] ?? null, ['upcoming', 'renewed'], true) ? ($reservation->renewedBy ?? $reservation) : $reservation;
+        $renewalKind = ['not_paid' => 'owing', 'upcoming' => 'upcoming', 'renewed' => 'renewed', 'left' => 'left'][$renewal[0] ?? ''] ?? null;
         if ($renewal) {
             $query->with('renewedBy.member', 'renewedBy.plan', 'renewedBy.unit.color', 'renewedBy.space', 'renewedBy.status',
                 'renewedBy.subscriptionType', 'renewedBy.package', 'renewedBy.creatable.userable');
@@ -204,9 +218,14 @@ trait ReservationActions
         if ($id) {
             $query->whereKey($id);
         } elseif (!request()->filled('order')) {
-            // the tab's order until a column is clicked (the list has data-order='[]'); the Renewal filter: by renewal date
-            $renewal ? $query->orderByRaw(Reservation::RENEWAL_DATE_SQL)->orderBy('reservations.id')
-                : $query->tabOrder($tab, Arr::only($filters, ['date_from', 'date_to']));
+            // the tab's order until a column is clicked (the list has data-order='[]'); the Renewal filter: by renewal date —
+            // Not renewed & Not paid: a member's rows together (by name), oldest first
+            match (true) {
+                ($renewal[0] ?? null) === 'not_paid' => $query->orderByRaw('(SELECT members.name FROM members WHERE members.id = reservations.member_id)')
+                    ->orderBy('reservations.member_id')->orderBy('reservations.start_at')->orderBy('reservations.id'),
+                (bool) $renewal => $query->orderByRaw(Reservation::RENEWAL_DATE_SQL)->orderBy('reservations.id'),
+                default => $query->tabOrder($tab, Arr::only($filters, ['date_from', 'date_to'])),
+            };
         }
 
         $table = DataTables::eloquent($query)
@@ -227,7 +246,8 @@ trait ReservationActions
             ->addColumn('period', fn ($reservation) => view('reservationmodule::Reservation.partials.row-period', ['reservation' => $shown($reservation),
                 'badge' => $shown($reservation)->listBadge($tab, Arr::only($filters, ['date_from', 'date_to']))])->render())
             // the Renewal filter: renewal date + what happened + Renew / Pay / Mark left (the Schedule page texts); empty otherwise
-            ->addColumn('renewal_html', fn ($reservation) => $renewal ? view('reservationmodule::Reservation.partials.row-renewal', ['reservation' => $reservation, 'refDate' => $refDate])->render() : '')
+            ->addColumn('renewal_html', fn ($reservation) => $renewal ? view('reservationmodule::Reservation.partials.row-renewal', ['reservation' => $reservation,
+                'kind' => $renewalKind, 'asOf' => $renewal[3], 'area' => $this->area()])->render() : '')
             // the reservation status + the payment status (two badges)
             ->addColumn('status', fn ($reservation) => view('reservationmodule::Reservation.partials.row-status', ['reservation' => $shown($reservation)])->render())
             // what it costs (with its taxes when an invoice is requested) + the Invoice badge
