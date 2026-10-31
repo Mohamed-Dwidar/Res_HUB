@@ -4,6 +4,7 @@ namespace Modules\UnitModule\app\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Modules\MessagingModule\app\Services\MessagingService;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\UnitModule\app\Models\Unit;
 
@@ -40,6 +41,14 @@ class UnitRequest extends FormRequest
             'images.*' => 'image|max:2048',
             'delete_images' => 'nullable|array',
             'delete_images.*' => 'integer',
+            // MessagingModule (2026-10-31): the WhatsApp messages of this unit, one per type (checked again when saving)
+            'message_templates_sent' => 'nullable|boolean',
+            'message_templates' => ['nullable', 'array', function ($attribute, $value, $fail) {
+                if ($error = app(MessagingService::class)->unitTemplatesError($this->user()->userable->ownerAccountId(), (array) $value)) {
+                    $fail($error);
+                }
+            }],
+            'message_templates.*' => 'integer',
         ];
     }
 

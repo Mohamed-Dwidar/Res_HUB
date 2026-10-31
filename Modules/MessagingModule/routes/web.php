@@ -23,7 +23,7 @@ Route::prefix('employee/messages')->name('employee.messages.')->middleware(['aut
     ->group(fn () => $messageRoutes(MessageEmployeeModuleController::class));
 
 /**
- *  Settings › WhatsApp Messages: only the account (settings + the texts: a default per type, space versions)
+ *  Settings › WhatsApp Messages: only the account (settings + the messages, each assigned to units)
  */
 Route::prefix('account/settings/messages')->name('account.settings.messages.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     Route::get('/', [MessageSettingAccountModuleController::class, 'edit'])->name('edit');

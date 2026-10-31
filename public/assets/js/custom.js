@@ -1508,10 +1508,9 @@ function initForms(root) {
             reservationTax(form, false);
         }
         if (form.matches("[data-message-template-form]")) {
-            // a new space version: "Start from" (the type's default at first) fills the empty texts
-            var arabic = formField(form, "body_ar");
-            if (form.querySelector("[data-message-start]") && arabic && !arabic.value.trim()) messageStartFill(form);
+            // a message: the live preview, the units by space ("Start from" fills it only when chosen)
             messagePreview(form);
+            messageUnits(form);
         }
     });
 }
@@ -2003,7 +2002,7 @@ document.addEventListener("click", function (e) {
     var langBox = document.querySelector("#app-modal [data-message-lang]");
     var data = new FormData();
     data.append("_token", document.querySelector('meta[name="csrf-token"]').content);
-    data.append("type", send.dataset.type);
+    data.append("message", send.dataset.message);
     data.append("language", langBox ? langBox.getAttribute("data-message-lang") : "ar");
     if (send.dataset.context) data.append("context", send.dataset.context);
     if (send.dataset.suggested) data.append("suggested", send.dataset.suggested);
@@ -2025,6 +2024,7 @@ document.addEventListener("click", function (e) {
                 return;
             }
             toast(result.json.message);
+            if (result.json.sent) messageMarkSent(result.json.sent);
             if (result.json.modal) appModal.open(result.json.modal, "saved");
             if (window.todayPage && window.todayPage.active()) {
                 window.todayPage.refresh();
@@ -2036,6 +2036,19 @@ document.addEventListener("click", function (e) {
             toast("The message was not logged, please try again.", "error");
         });
 });
+
+// after a Send: every icon / row menu item of that reservation on the page gets the ✓ and the "Last sent" tooltip at once
+// (the Schedule / list refresh that follows draws the same from the log)
+function messageMarkSent(sent) {
+    document.querySelectorAll('[data-wa-reservation="' + sent.reservation + '"]').forEach(function (icon) {
+        icon.classList.add(icon.classList.contains("wa-menu-item") ? "wa-menu-item--sent" : "wa-btn--sent");
+        icon.title = sent.title;
+        var check = icon.querySelector(".wa-btn__check");
+        if (check) check.hidden = false;
+        var sub = icon.querySelector("[data-wa-sub]");
+        if (sub) sub.textContent = sent.title.replace(/^Last sent: /, "Sent: ");
+    });
+}
 
 // the popup's Back ([data-message-back], a link to the reservation view): the previous popup page when there is one (capture,
 // before the [data-modal] link handler), else the link opens the reservation view
@@ -2049,8 +2062,11 @@ document.addEventListener("click", function (e) {
 
 // Settings › WhatsApp Messages, a text's popup ([data-message-template-form]): the live preview of both texts with the account's
 // newest subscription ([data-message-sample]; MessagingService::render() = the same rule: an unknown {name} stays), "Start
-// from" ([data-message-start] + [data-message-starts] {type: {default | <space text>: {ar, en}}}) fills both texts, a
-// placeholder chip inserts {name} at the cursor of the text last used
+// from" ([data-message-start] + [data-message-starts] {key: {name, suggest_when, ar, en}}) fills both texts (+ the name when
+// empty / still the previous ready text's, "Suggest when" when Never), a placeholder chip inserts {name} at the cursor of the text
+// last used; the units (2026-10-31): a space's checkbox ticks / unticks all its units (checked = all, a dash = some), counts, and
+// the units that already have another message with the chosen "Suggest when" ([data-message-taken] {unit id: {suggest_when:
+// name}}) are marked (the save refuses them)
 function messageJson(form, attribute) {
     var el = form.querySelector("[" + attribute + "]");
     try {
@@ -2080,15 +2096,49 @@ function messagePreview(form) {
 
 function messageStartFill(form) {
     var start = form.querySelector("[data-message-start]");
-    var type = formField(form, "type");
-    if (!start || !start.value || !type) return;
-    var texts = messageJson(form, "data-message-starts")[type.value] || {};
-    var chosen = texts[start.value] || texts["default"] || { ar: "", en: "" };
+    if (!start || !start.value) return;
+    var chosen = messageJson(form, "data-message-starts")[start.value];
+    if (!chosen) return;
     ["ar", "en"].forEach(function (lang) {
         var textarea = form.querySelector('[data-message-body="' + lang + '"]');
         if (textarea) textarea.value = chosen[lang] || "";
     });
+    var name = formField(form, "name");
+    if (name && (!name.value.trim() || name.value === form.dataset.messageStartName)) name.value = chosen.name || "";
+    form.dataset.messageStartName = chosen.name || "";
+    var when = formField(form, "suggest_when");
+    if (when && !when.value && chosen.suggest_when) {
+        when.value = chosen.suggest_when;
+        if (when.tomselect) when.tomselect.setValue(chosen.suggest_when, true);
+    }
     messagePreview(form);
+    messageUnits(form);
+}
+
+function messageUnits(form) {
+    var box = form.querySelector("[data-message-units]");
+    if (!box) return;
+    var taken = messageJson(form, "data-message-taken");
+    var when = formField(form, "suggest_when");
+    var total = 0;
+    box.querySelectorAll(".message-unit-space").forEach(function (space) {
+        var units = space.querySelectorAll('input[name="units[]"]');
+        var ticked = space.querySelectorAll('input[name="units[]"]:checked').length;
+        var all = space.querySelector("[data-message-space]");
+        all.checked = units.length > 0 && ticked === units.length;
+        all.indeterminate = ticked > 0 && ticked < units.length;
+        space.querySelector("[data-message-space-count]").textContent = ticked + " of " + units.length;
+        total += ticked;
+    });
+    box.querySelectorAll("[data-message-unit]").forEach(function (unit) {
+        var other = when && when.value && taken[unit.getAttribute("data-message-unit")] ? taken[unit.getAttribute("data-message-unit")][when.value] : null;
+        var note = unit.querySelector("[data-message-taken-note]");
+        unit.classList.toggle("is-taken", !!other);
+        note.hidden = !other;
+        note.textContent = other ? "· has \u201c" + other + "\u201d" : "";
+    });
+    var count = form.querySelector("[data-message-units-count]");
+    if (count) count.textContent = total ? total + " chosen" : "none chosen: not sent yet";
 }
 
 document.addEventListener("input", function (e) {
@@ -2098,7 +2148,13 @@ document.addEventListener("input", function (e) {
 document.addEventListener("change", function (e) {
     var form = e.target.form;
     if (!form || !form.matches("[data-message-template-form]")) return;
-    if (e.target.matches("[data-message-start]") || e.target.name === "type") messageStartFill(form);
+    if (e.target.matches("[data-message-start]")) messageStartFill(form);
+    if (e.target.matches("[data-message-space]")) {
+        e.target.closest(".message-unit-space").querySelectorAll('input[name="units[]"]').forEach(function (unit) {
+            unit.checked = e.target.checked;
+        });
+    }
+    if (e.target.name === "suggest_when" || e.target.name === "units[]" || e.target.matches("[data-message-space]")) messageUnits(form);
 });
 
 document.addEventListener("focusin", function (e) {

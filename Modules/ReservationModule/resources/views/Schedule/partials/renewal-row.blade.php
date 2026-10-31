@@ -23,8 +23,11 @@
     </td>
     <td data-label="Price" class="renewal-row__price">{{ number_format($view['price'], 2) }}</td>
     <td data-label="{{ $kind === 'owing' ? 'Status' : 'Payment' }}" @if ($kind === 'owing') class="renewal-row__status" @endif>@include('reservationmodule::Reservation.partials.renewal-payment')</td>
-    {{-- + WhatsApp after the last button (MessagingModule): about this period, the group = the suggested type --}}
-    <td data-label="" class="renewal-row__action">@include('reservationmodule::Reservation.partials.renewal-actions')@include('messagingmodule::Message.partials.button', ['messageContext' => $kind, 'messageDate' => $date])</td>
+    {{-- + WhatsApp after the last button (MessagingModule): about the period the row shows (the renewal when the row shows it:
+         its sends = the ✓; suggested = Payment due while it owes, else by its state), else this period with the group's suggestion --}}
+    <td data-label="" class="renewal-row__action">@include('reservationmodule::Reservation.partials.renewal-actions')@include('messagingmodule::Message.partials.button', $open->id === $reservation->id
+        ? ['messageContext' => $kind, 'messageDate' => $date]
+        : ['reservation' => $open, 'messageContext' => $view['due'] ? 'owing' : null, 'messageDate' => $date])</td>
 </tr>
 @if (!empty($reservation->member_total) && $kind === 'owing')
     {{-- a member with 2+ owing periods: their total under the last one --}}

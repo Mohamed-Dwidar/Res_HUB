@@ -7,11 +7,12 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     /**
      * Every message sent (MessagingModule, 2026-10-29; a log, no updates by the app): what it was about (messageable: a
-     * reservation now; a package / payment later), to whom (member, the international number used), which type / language,
-     * who (creatable), when. The message text is never stored.
+     * reservation now; a package / payment later), to whom (member, the international number used), which message
+     * (message_template_id + its name at send time: the name stays right after a rename / delete; 0 = sent before 2026-10-31),
+     * the language, who (creatable), when. The message text is never stored.
      * status / external_id: the WhatsApp API only (sent | delivered | read | failed, Meta's message id); NULL for click-to-chat
      * (the log = the employee pressed Send, WhatsApp itself is not checked).
-     * Indexes: the popup history + the icon state (messageable + type), a future report (account + date), the API webhook (external_id).
+     * Indexes: the popup history + the icon state (messageable + message), a future report (account + date), the API webhook (external_id).
      */
     public function up(): void {
         Schema::create('message_logs', function (Blueprint $table) {
@@ -22,14 +23,15 @@ return new class extends Migration {
             $table->string('messageable_type');
             $table->unsignedBigInteger('messageable_id');
             $table->unsignedBigInteger('member_id')->default(0);
-            $table->string('type', 40);
+            $table->unsignedBigInteger('message_template_id')->default(0);
+            $table->string('message_name', 100);
             $table->char('language', 2);
             $table->string('phone', 20);
             $table->string('status', 20)->nullable();
             $table->string('external_id', 100)->nullable();
             $table->nullableMorphs('creatable');
             $table->timestamp('created_at')->nullable();
-            $table->index(['messageable_type', 'messageable_id', 'type', 'created_at'], 'message_logs_messageable_type_index');
+            $table->index(['messageable_type', 'messageable_id', 'message_template_id', 'created_at'], 'message_logs_messageable_type_index');
             $table->index(['account_id', 'created_at']);
             $table->index('external_id');
         });

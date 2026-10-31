@@ -12,8 +12,6 @@ class MessageSettingRequest extends FormRequest
         return [
             'is_enabled' => 'required|boolean',
             'default_language' => 'required|in:ar,en',
-            'deposit_percent' => 'required|numeric|min:0|max:100',
-            'payment_details' => 'nullable|string|max:2000',
         ];
     }
 
@@ -21,7 +19,6 @@ class MessageSettingRequest extends FormRequest
     {
         return [
             'is_enabled' => 'WhatsApp messages',
-            'deposit_percent' => 'deposit %',
         ];
     }
 

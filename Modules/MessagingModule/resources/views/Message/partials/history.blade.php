@@ -1,4 +1,5 @@
-{{-- The popup's history ($history, MessagingService::history()): every send for the reservation, the period it renews and its renewal --}}
+{{-- The popup's history ($history, MessagingService::history()): every send for the reservation, the period it renews and its renewal:
+     the message's name at send time, the period, when, who (no text) --}}
 <div class="form-section mt-6">History</div>
 @if ($history->isEmpty())
     <div class="text-slate-500">Nothing sent yet.</div>
@@ -9,7 +10,7 @@
             <tbody>
                 @foreach ($history as $log)
                     <tr>
-                        <td>{{ $log->type_label }} <span class="text-xs text-slate-500">{{ strtoupper($log->language) }}</span></td>
+                        <td>{{ $log->message_name }} <span class="text-xs text-slate-500">{{ strtoupper($log->language) }}</span></td>
                         <td class="whitespace-nowrap">
                             @if ((int) $log->messageable_id === (int) $reservation->id)
                                 This period

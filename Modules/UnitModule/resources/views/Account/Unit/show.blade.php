@@ -41,6 +41,8 @@
         <div class="text-slate-500">No plans chosen.</div>
     @endforelse
 
+    @include('messagingmodule::Unit.show-messages')
+
     <div class="form-section mt-8">Images ({{ $unit->images->count() }})</div>
     @include('layoutmodule::partials.gallery', ['images' => $unit->images, 'alt' => $unit->name])
 

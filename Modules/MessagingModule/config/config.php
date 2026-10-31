@@ -1,26 +1,34 @@
 <?php
 
 /**
- * MessagingModule (2026-10-29): WhatsApp messages (click-to-chat now, the WhatsApp API later).
- * types: the message types in the popup order, each with its default texts (used until the owner saves Settings › WhatsApp
- * Messages, then copied into message_templates and edited there). space_texts: ready texts for one kind of space, offered as
- * "Start from" when adding a space version (code never knows which space is which). placeholders: {name} → MessagingService::variables().
+ * MessagingModule (2026-10-29; by name + "Suggest when" 2026-10-31): WhatsApp messages (click-to-chat now, the WhatsApp API later).
+ * suggest_when: the optional "Suggest when" of a message (NULL = Never): the ★ in the popup (by the Schedule group / the list
+ * filter / the reservation's state, MessagingService::suggest()) and the popup opened after a save (new_booking) / Mark left
+ * (marked_left); a unit has at most one message of each value. starts: ready texts offered as "Start from" in the message form
+ * (they fill the name, "Suggest when" and both texts; nothing is created from them). placeholders: {name} → MessagingService::variables().
  */
 return [
     'name' => 'MessagingModule',
 
-    'deposit_percent' => 25,
-
     'languages' => ['ar' => 'Arabic', 'en' => 'English'],
 
-    'types' => [
+    'suggest_when' => [
+        'new_booking' => ['label' => 'New booking', 'hint' => 'Starts today, a new reservation (the popup opens after saving it).'],
+        'before_renewal' => ['label' => 'Before renewal', 'hint' => 'Next N days, before the renewal date.'],
+        'renewal_day' => ['label' => 'Renewal day', 'hint' => 'Renews today.'],
+        'after_renewal' => ['label' => 'After renewal (not paid)', 'hint' => 'Not paid, after the renewal date.'],
+        'payment_due' => ['label' => 'Payment due', 'hint' => 'Not paid, before the renewal date (e.g. a new member\'s first month).'],
+        'marked_left' => ['label' => 'Marked left', 'hint' => 'Left (the popup opens after Mark left).'],
+    ],
+
+    'starts' => [
         'booking_confirmation' => [
             'label' => 'Booking confirmation',
-            'hint' => 'A new reservation.',
+            'suggest_when' => 'new_booking',
             'ar' => <<<'TXT'
 أهلاً {member_name}،
 تم تسجيل حجزك: {unit} – {space}، {period}.
-لتأكيد الحجز، يرجى تحويل *{deposit_percent}% من إجمالي قيمة الحجز* ({deposit_amount} جنيه).
+لتأكيد الحجز، يرجى تحويل *25% من إجمالي قيمة الحجز* (إجمالي الحجز {amount} جنيه).
 
 —> يرجى العلم أن *مبلغ التأكيد غير قابل للاسترداد في حالة إلغاء الحجز قبل موعد الحجز بأقل من 24 ساعة أو في حالة عدم الحضور*.
 أما في حالة الإلغاء قبل موعد الحجز بـ *24 ساعة أو أكثر*، فيمكن استرداد مبلغ التأكيد.
@@ -32,14 +40,14 @@ return [
 
 *بيانات التحويل:*
 ———
-{payment_details}
+اكتب بيانات التحويل هنا
 
 يرجى إرسال صورة التحويل بعد إتمامه لتأكيد الحجز.
 TXT,
             'en' => <<<'TXT'
 Hello {member_name},
 Your booking is registered: {unit} – {space}, {period}.
-To confirm it, please transfer *{deposit_percent}% of the booking total* ({deposit_amount} EGP).
+To confirm it, please transfer *25% of the booking total* (the total is {amount} EGP).
 
 —> Please note: *the deposit is not refundable if the booking is cancelled less than 24 hours before its time, or in case of no-show*.
 If it is cancelled *24 hours or more* before its time, the deposit can be refunded.
@@ -51,7 +59,7 @@ Thank you for your understanding and cooperation.
 
 *Transfer details:*
 ———
-{payment_details}
+Write the transfer details here
 
 Please send a screenshot of the transfer once it is done to confirm the booking.
 TXT,
@@ -59,7 +67,7 @@ TXT,
 
         'renewal_reminder' => [
             'label' => 'Renewal reminder',
-            'hint' => 'Before the renewal date.',
+            'suggest_when' => 'before_renewal',
             'ar' => <<<'TXT'
 اهلا بحضرتك يا فندم
 حاببين نفكر حضرتك ان اشتراك الـ {space} ({unit}) معانا في {account_name} ينتهي بتاريخ ( {end_date} ).
@@ -80,7 +88,7 @@ TXT,
 
         'renewal_day' => [
             'label' => 'Renewal day',
-            'hint' => 'On the renewal date.',
+            'suggest_when' => 'renewal_day',
             'ar' => <<<'TXT'
 اهلا بحضرتك يا فندم
 حاببين نفكر حضرتك ان النهارده ( {renewal_date} ) معاد تجديد اشتراك الـ {space} ({unit}) معانا في {account_name}.
@@ -101,7 +109,7 @@ TXT,
 
         'after_renewal' => [
             'label' => 'After-renewal reminder',
-            'hint' => 'After the renewal date, while not renewed / not paid.',
+            'suggest_when' => 'after_renewal',
             'ar' => <<<'TXT'
 اهلا بحضرتك يا فندم
 حاببين نبلغ حضرتك ان اشتراك الـ {space} ({unit}) معانا في {account_name} كان معاد تجديده يوم ( {renewal_date} ) و لسه ما اتجددش.
@@ -122,14 +130,14 @@ TXT,
 
         'payment_reminder' => [
             'label' => 'Payment reminder',
-            'hint' => 'A current period not fully paid, before its renewal date (e.g. a new member\'s first month).',
+            'suggest_when' => 'payment_due',
             'ar' => <<<'TXT'
 اهلا بحضرتك يا فندم
 حاببين نفكر حضرتك ان فيه مبلغ {due} جنيه متبقي على اشتراك الـ {space} ({unit}) للفترة {period}.
 اجمالي المستحق على حضرتك {owing_total} جنيه.
 
 *بيانات التحويل:*
-{payment_details}
+اكتب بيانات التحويل هنا
 
 شكرا لثقتك فينا
 {account_name}
@@ -140,7 +148,7 @@ This is a reminder that {due} EGP is still due on your {space} subscription ({un
 Your total due is {owing_total} EGP.
 
 *Transfer details:*
-{payment_details}
+Write the transfer details here
 
 Thank you for your trust
 {account_name}
@@ -149,7 +157,7 @@ TXT,
 
         'contract_end' => [
             'label' => 'Contract end',
-            'hint' => 'When the period is marked Left.',
+            'suggest_when' => 'marked_left',
             'ar' => <<<'TXT'
 اهلا بحضرتك يا فندم
 حاببين نبلغ حضرتك ان اشتراك الـ {space} معانا في {account_name} انتهي من تاريخ ( {end_date} ) و نظرا لعدم التجديد تم انهاء الاشتراك.
@@ -167,15 +175,12 @@ Thank you for your trust throughout your subscription
 {account_name}
 TXT,
         ],
-    ],
 
-    // "Start from" texts for a space version (Settings › WhatsApp Messages › + Space Version)
-    'space_texts' => [
-        'virtual_office' => [
-            'label' => 'Virtual Office',
-            'texts' => [
-                'contract_end' => [
-                    'ar' => <<<'TXT'
+        // ready texts for one kind of space (code never knows which space is which)
+        'virtual_office_end' => [
+            'label' => 'Virtual Office contract end',
+            'suggest_when' => 'marked_left',
+            'ar' => <<<'TXT'
 اهلا بحضرتك يا فندم
 حاببين نبلغ حضرتك ان للأسف عقد الـ {space} معانا في {account_name} انتهي من تاريخ ( {end_date} ).
 و نظرا لعدم التجديد توقفنا عن استلام اي مراسلات خاصة بك سواء من البنوك او الجهات الحكومية مثل الضرائب و التأمينات او اي استعلامات عن الشركة.
@@ -183,7 +188,7 @@ TXT,
 شكرا لثقتك فينا طوال فتره التعاقد
 {account_name}
 TXT,
-                    'en' => <<<'TXT'
+            'en' => <<<'TXT'
 Hello,
 We regret to inform you that your {space} contract with {account_name} ended on ( {end_date} ).
 As it was not renewed, we have stopped receiving any mail on your behalf, whether from banks or government bodies such as the tax authority and social insurance, and any inquiries about the company.
@@ -191,9 +196,12 @@ As it was not renewed, we have stopped receiving any mail on your behalf, whethe
 Thank you for your trust throughout the contract
 {account_name}
 TXT,
-                ],
-                'renewal_reminder' => [
-                    'ar' => <<<'TXT'
+        ],
+
+        'virtual_office_renewal' => [
+            'label' => 'Virtual Office renewal reminder',
+            'suggest_when' => 'before_renewal',
+            'ar' => <<<'TXT'
 اهلا بحضرتك يا فندم
 حاببين نبلغ حضرتك ان عقد الـ {space} معانا في {account_name} ينتهي بتاريخ ( {end_date} ).
 منتظرين تشريف حضرتك للتجديد و استمرار خدماتنا في استلام اي مراسلات خاصة بك سواء من البنوك او الجهات الحكومية مثل الضرائب و التأمينات او اي استعلامات عن الشركة.
@@ -201,7 +209,7 @@ TXT,
 شكرا لثقتك فينا
 {account_name}
 TXT,
-                    'en' => <<<'TXT'
+            'en' => <<<'TXT'
 Hello,
 We would like to inform you that your {space} contract with {account_name} ends on ( {end_date} ).
 We look forward to your renewal, so we can keep receiving your mail from banks or government bodies such as the tax authority and social insurance, and any inquiries about the company.
@@ -209,8 +217,6 @@ We look forward to your renewal, so we can keep receiving your mail from banks o
 Thank you for your trust
 {account_name}
 TXT,
-                ],
-            ],
         ],
     ],
 
@@ -235,9 +241,6 @@ TXT,
         'days_overdue' => 'Days since the renewal date',
         'left_date' => 'Date marked left',
         'reservation_no' => 'Reservation number',
-        'deposit_percent' => 'Deposit % (settings)',
-        'deposit_amount' => 'Total × deposit %',
-        'payment_details' => 'Payment details (settings)',
         'account_name' => 'Your business name',
         'account_phone' => 'Your phone',
         'employee_name' => 'Who sends it',

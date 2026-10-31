@@ -207,8 +207,8 @@ trait ReservationActions
         $renewal = $this->renewalFilter($filters);
         // by period only: the not counted ones (cancelled, pending ...) stay in their date place, muted (user 2026-10-27; they were
         // always after the counted ones) + who added it (the "By" column)
-        // + the WhatsApp icon state (MessagingModule's messageLogs: one query for the page, the renewal's too)
-        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy', 'messageLogs', 'renewedBy.messageLogs');
+        // + the WhatsApp icon state (MessagingModule's messageLogs: the row's own sends, a fixed number of queries for the page)
+        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy', 'messageLogs');
         // the Renewal filter (2026-10-29): Upcoming / Renewed rows show the renewal when it exists (member, place, period, amounts,
         // status, menu); Not renewed & Not paid / Left = the period itself; the Renewal column = RenewalView (the Schedule rows)
         $shown = fn ($reservation) => in_array($renewal[0] ?? null, ['upcoming', 'renewed'], true) ? ($reservation->renewedBy ?? $reservation) : $reservation;
@@ -328,8 +328,8 @@ trait ReservationActions
             'message' => $repeats ? 'The reservation has been added with ' . $repeats . ' repeated reservation(s).' : 'The reservation has been added successfully.',
             'reload' => true,
             'redirect' => $this->route('show', $reservation->id),
-            // the popup goes on to the WhatsApp message (Booking confirmation; MessagingModule, null = no usable number / type off)
-            'modal' => $reservation->renewal_of ? null : app(MessagingService::class)->popupUrl($reservation, 'booking_confirmation'),
+            // the popup goes on to the WhatsApp message (the unit's "New booking" message; MessagingModule, null = none / no usable number)
+            'modal' => $reservation->renewal_of ? null : app(MessagingService::class)->popupUrl($reservation, 'new_booking'),
         ]);
     }
 
@@ -398,8 +398,8 @@ trait ReservationActions
     public function markLeft(Request $request, $id)
     {
         $this->reservationService->markLeft($this->accountId(), $id, Auth::user());
-        // then the WhatsApp message (Contract end; MessagingModule, null = no usable number / type off)
-        $whatsapp = app(MessagingService::class)->popupUrl($this->reservationService->findOne($this->accountId(), $id), 'contract_end');
+        // then the WhatsApp message (the unit's "Marked left" message; MessagingModule, null = none / no usable number)
+        $whatsapp = app(MessagingService::class)->popupUrl($this->reservationService->findOne($this->accountId(), $id), 'marked_left');
 
         return response()->json([
             'message' => 'The period has been marked as left.',

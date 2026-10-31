@@ -7,22 +7,19 @@ use Illuminate\Support\Facades\Auth;
 use Modules\MessagingModule\app\Http\Requests\MessageSettingRequest;
 use Modules\MessagingModule\app\Http\Requests\MessageTemplateRequest;
 use Modules\MessagingModule\app\Services\MessagingService;
-use Modules\SpaceModule\app\Services\SpaceService;
 
 /**
- * Settings › WhatsApp Messages (the account only): the settings form (on / off, default language, deposit %, payment details)
- * + the texts table: a default per type (from config the first time the page opens; edit, switch off) and space versions
- * (add / edit / delete in the popup, live preview with the account's newest subscription).
+ * Settings › WhatsApp Messages (the account only): the settings form (on / off, default language)
+ * + the messages table (2026-10-31: none until the owner adds one; each = name + "Suggest when" + texts + on / off + its units; add / edit /
+ * delete in the popup, live preview with the account's newest subscription).
  */
 class MessageSettingAccountModuleController extends Controller
 {
     private $messagingService;
-    private $spaceService;
 
-    public function __construct(MessagingService $messagingService, SpaceService $spaceService)
+    public function __construct(MessagingService $messagingService)
     {
         $this->messagingService = $messagingService;
-        $this->spaceService = $spaceService;
     }
 
     private function accountId()
@@ -32,11 +29,12 @@ class MessageSettingAccountModuleController extends Controller
 
     public function edit()
     {
-        $this->messagingService->ensureDefaults($this->accountId(), Auth::user());
+        $templates = $this->messagingService->templates($this->accountId());
+        $templates->load(['units' => fn ($query) => $query->with('space')]);
 
         return view('messagingmodule::Setting.messages', [
             'settings' => $this->messagingService->settings($this->accountId()),
-            'groups' => $this->messagingService->templateGroups($this->accountId()),
+            'templates' => $templates,
         ]);
     }
 
@@ -50,10 +48,10 @@ class MessageSettingAccountModuleController extends Controller
         ]);
     }
 
-    // + Space Version (?type= pre-selects the type)
+    // + New Message
     public function createTemplate()
     {
-        return view('messagingmodule::Setting.template-create', $this->templateFormData() + ['template' => null]);
+        return view('messagingmodule::Setting.template-create', $this->templateFormData(null) + ['template' => null]);
     }
 
     public function storeTemplate(MessageTemplateRequest $request)
@@ -61,7 +59,7 @@ class MessageSettingAccountModuleController extends Controller
         $this->messagingService->createTemplate($this->accountId(), $request->validated(), Auth::user());
 
         return response()->json([
-            'message' => 'The space version has been added.',
+            'message' => 'The message has been added.',
             'redirect' => route('account.settings.messages.edit'),
         ]);
     }
@@ -69,7 +67,7 @@ class MessageSettingAccountModuleController extends Controller
     public function editTemplate($id)
     {
         $template = $this->messagingService->findTemplate($this->accountId(), $id);
-        return view('messagingmodule::Setting.template-edit', $this->templateFormData() + compact('template'));
+        return view('messagingmodule::Setting.template-edit', $this->templateFormData($template->id) + compact('template'));
     }
 
     public function updateTemplate(MessageTemplateRequest $request, $id)
@@ -77,7 +75,7 @@ class MessageSettingAccountModuleController extends Controller
         $this->messagingService->updateTemplate($this->accountId(), $id, $request->validated());
 
         return response()->json([
-            'message' => 'The text has been saved.',
+            'message' => 'The message has been saved.',
             'redirect' => route('account.settings.messages.edit'),
         ]);
     }
@@ -87,30 +85,25 @@ class MessageSettingAccountModuleController extends Controller
         $this->messagingService->deleteTemplate($this->accountId(), $id);
 
         return response()->json([
-            'message' => 'The space version has been deleted.',
+            'message' => 'The message has been deleted.',
             'redirect' => route('account.settings.messages.edit'),
         ]);
     }
 
-    // the form's lists + the live preview values + the "Start from" texts ({type: {default: {ar, en}, <space text key>: {ar, en}}})
-    private function templateFormData(): array
+    /**
+     * The form's lists: "Suggest when", the "Start from" texts ({key: {name, suggest_when, ar, en}}), the spaces with their units,
+     * the units' other messages per "Suggest when" (hints), the live preview values.
+     */
+    private function templateFormData(?int $templateId): array
     {
-        $starts = [];
-        foreach (MessagingService::types() as $type => $definition) {
-            $default = $this->messagingService->templateFor($this->accountId(), $type, 0) ?? ['ar' => $definition['ar'], 'en' => $definition['en']];
-            $starts[$type]['default'] = $default;
-            foreach (config('messagingmodule.space_texts') as $key => $spaceText) {
-                if (isset($spaceText['texts'][$type])) {
-                    $starts[$type][$key] = $spaceText['texts'][$type];
-                }
-            }
-        }
+        $starts = collect(config('messagingmodule.starts'));
 
         return [
-            'types' => collect(MessagingService::types())->map(fn ($definition) => $definition['label'])->all(),
-            'spaces' => $this->spaceService->options($this->accountId()),
-            'startOptions' => ['default' => 'The default text of this type'] + collect(config('messagingmodule.space_texts'))->map(fn ($spaceText) => $spaceText['label'] . ' text')->all(),
-            'starts' => $starts,
+            'suggestOptions' => collect(MessagingService::suggestOptions())->map(fn ($option) => $option['label'])->all(),
+            'spaces' => $this->messagingService->spacesWithUnits($this->accountId()),
+            'taken' => $this->messagingService->unitTypesTaken($this->accountId(), $templateId),
+            'startOptions' => $starts->map(fn ($start) => $start['label'] . ' (' . MessagingService::suggestLabel($start['suggest_when']) . ')')->all(),
+            'starts' => $starts->map(fn ($start) => ['name' => $start['label'], 'suggest_when' => $start['suggest_when'], 'ar' => $start['ar'], 'en' => $start['en']])->all(),
             'sample' => $this->messagingService->sampleVariables($this->accountId()),
         ];
     }

@@ -23,6 +23,9 @@
     'hint' => 'Only the plans assigned to this space.',
 ])
 
+{{-- MessagingModule (2026-10-31): the messages sent for this unit's reservations --}}
+@include('messagingmodule::Unit.messages')
+
 <div class="form-section mt-8">Description & Notes</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
     @include('layoutmodule::partials.field', ['name' => 'description_ar', 'label' => 'Description (Arabic)', 'type' => 'textarea', 'value' => $unit?->description_ar, 'attrs' => 'dir="rtl"'])

@@ -1,9 +1,8 @@
 @extends('layoutmodule::account.main')
 
 {{--
-    Settings › WhatsApp Messages (the account only, MessagingModule): the settings (messages on / off, default language, deposit %,
-    payment details) + the texts: per type its default (all spaces; edit, switch off) and space versions (used instead of the
-    default for that space's reservations; add / edit / delete in the popup with a live preview).
+    Settings › WhatsApp Messages (the account only, MessagingModule): the settings (messages on / off, default language) + the messages (2026-10-31): name, "Suggest when", units (count + spaces, expandable), languages, on / off; add / edit /
+    delete in the popup with a live preview. None until the owner adds one.
 --}}
 @section('title')
     WhatsApp Messages
@@ -25,63 +24,60 @@
             @include('layoutmodule::partials.field', ['name' => 'default_language', 'label' => 'Default Language', 'type' => 'select', 'required' => true,
                 'options' => config('messagingmodule.languages'), 'value' => $settings->default_language,
                 'hint' => 'For members without their own WhatsApp language.'])
-            @include('layoutmodule::partials.field', ['name' => 'deposit_percent', 'label' => 'Deposit %', 'type' => 'number', 'required' => true,
-                'value' => $settings->deposit_percent, 'attrs' => 'min=0 max=100 step=0.01',
-                'hint' => '{deposit_percent}; {deposit_amount} = the reservation total × this %.'])
-        </div>
-        <div class="mt-5">
-            @include('layoutmodule::partials.field', ['name' => 'payment_details', 'label' => 'Payment Details', 'type' => 'textarea',
-                'value' => $settings->payment_details, 'attrs' => 'maxlength="2000" dir="auto"',
-                'hint' => '{payment_details}: how to pay (InstaPay handle / link, bank transfer number …), one per line.'])
         </div>
 
         @include('layoutmodule::partials.form-actions', ['cancel' => route('account.dashboard')])
     </form>
 
     <div class="message-texts-head">
-        <div class="form-section">Texts</div>
-        <a href="{{ route('account.settings.messages.templates.create') }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Space Version</a>
+        <div class="form-section">Messages</div>
+        <a href="{{ route('account.settings.messages.templates.create') }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="plus"></i> New Message</a>
     </div>
-    <div class="mb-3 text-sm text-slate-500">Each type has a default text for all spaces. A space version replaces it for that space's reservations (switched off there = the type is off for that space).</div>
-    <div class="table-wrap">
-        <table class="data-table message-templates">
-            <thead><tr><th>Type</th><th>Space</th><th>Languages</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-                @foreach ($groups as $type => $templates)
+    <div class="mb-3 text-sm text-slate-500">A message is offered for the reservations of its units. "Suggest when" puts it first (★) in the right list and opens it after a new reservation / Mark left; a unit has one message for each "Suggest when" at most (Never: any number). A unit without messages shows no WhatsApp icon. Units can also be chosen from the unit's form.</div>
+    @if ($templates->isEmpty())
+        <div class="notice">No messages yet. Add one with <b>+ New Message</b> (start from a suggested text or write your own), then choose its units.</div>
+    @else
+        <div class="table-wrap">
+            <table class="data-table message-templates">
+                <thead><tr><th>Name</th><th>Suggest When</th><th>Units</th><th>AR / EN</th><th>Enabled</th><th></th></tr></thead>
+                <tbody>
                     @foreach ($templates as $template)
-                        <tr @class(['message-templates__first' => $loop->first])>
+                        @php($bySpace = $template->units->groupBy(fn ($unit) => $unit->space?->name ?? '-'))
+                        <tr>
+                            <td class="font-medium">{{ $template->name }}</td>
+                            <td @class(['text-slate-400' => !$template->suggest_when])>{{ $template->suggest_label }}</td>
                             <td>
-                                @if ($loop->first)
-                                    <div class="font-medium">{{ $template->type_label }}</div>
-                                    <div class="text-xs text-slate-500">{{ config('messagingmodule.types.' . $type . '.hint') }}</div>
+                                @if ($template->units->isEmpty())
+                                    <span class="text-slate-400">No units (not sent)</span>
+                                @else
+                                    <details class="message-units">
+                                        <summary>{{ $template->units->count() }} {{ Str::plural('unit', $template->units->count()) }} · {{ $bySpace->keys()->implode(', ') }}</summary>
+                                        @foreach ($bySpace as $spaceName => $units)
+                                            <div class="message-units__space"><b>{{ $spaceName }}:</b> {{ $units->pluck('name')->implode(', ') }}</div>
+                                        @endforeach
+                                    </details>
                                 @endif
                             </td>
-                            <td>{{ $template->isDefault() ? 'All spaces (default)' : ($template->space?->name ?? '-') }}</td>
                             <td>AR @if ($template->body_en) · EN @else <span class="text-xs text-slate-400">· EN = Arabic</span> @endif</td>
                             <td>
                                 <span class="badge {{ $template->is_enabled ? 'badge-status-success' : 'badge-inactive' }}">{{ $template->is_enabled ? 'On' : 'Off' }}</span>
                             </td>
                             <td class="actions whitespace-nowrap">
                                 <a href="{{ route('account.settings.messages.templates.edit', $template->id) }}" data-modal class="btn btn-secondary btn-sm"><i data-lucide="pencil"></i> Edit</a>
-                                @unless ($template->isDefault())
-                                    <form method="POST" action="{{ route('account.settings.messages.templates.destroy', $template->id) }}" class="inline-form" data-ajax
-                                        data-confirm="The {{ $template->space?->name }} version of &quot;{{ $template->type_label }}&quot; will be deleted: its reservations get the default text again."
-                                        data-confirm-title="Delete this space version?"
-                                        data-confirm-button="Delete"
-                                        data-confirm-variant="danger">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="btn btn-secondary btn-sm" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
-                                    </form>
-                                @endunless
-                                @if ($loop->first)
-                                    <a href="{{ route('account.settings.messages.templates.create', ['type' => $type]) }}" data-modal class="btn btn-secondary btn-sm" title="Add a space version of this type"><i data-lucide="plus"></i> Space</a>
-                                @endif
+                                <form method="POST" action="{{ route('account.settings.messages.templates.destroy', $template->id) }}" class="inline-form" data-ajax
+                                    data-confirm="&quot;{{ $template->name }}&quot; will be deleted{{ $template->units->isNotEmpty() ? ' and removed from ' . $template->units->count() . ' ' . Str::plural('unit', $template->units->count()) . ' (' . $bySpace->keys()->implode(', ') . ')' : '' }}. The messages already sent stay in the history."
+                                    data-confirm-title="Delete this message?"
+                                    data-confirm-button="Delete"
+                                    data-confirm-variant="danger">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-secondary btn-sm" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                                </form>
                             </td>
                         </tr>
                     @endforeach
-                @endforeach
-            </tbody>
-        </table>
-    </div>
+                </tbody>
+            </table>
+        </div>
+    @endif
 @endsection

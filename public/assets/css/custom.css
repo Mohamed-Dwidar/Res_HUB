@@ -2929,9 +2929,61 @@ button.today-summary__item:hover,
     filter: brightness(0) invert(1);
 }
 
-/* Settings › WhatsApp Messages: the texts table, a text's popup (live preview, placeholder chips) */
-.message-templates tr.message-templates__first > td {
-    border-top: 2px solid rgb(226 232 240);
+/* Settings › WhatsApp Messages: the messages table (units expandable), a message's popup (live preview, units by space,
+   placeholder chips), the unit form's WhatsApp Messages section (by name) */
+.message-units summary {
+    cursor: pointer;
+    color: rgb(30 41 59);
+}
+.message-units__space {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: rgb(71 85 105);
+}
+.message-units-count {
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: rgb(100 116 139);
+}
+.message-unit-space {
+    padding: 0.6rem 0.75rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+}
+.message-unit-space__head {
+    display: flex;
+    align-items: center;
+}
+.message-unit-space__count {
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+    color: rgb(100 116 139);
+}
+.message-unit-space__units {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.25rem;
+    margin-top: 0.5rem;
+    padding-left: 1.5rem;
+}
+.message-unit {
+    display: flex;
+    align-items: center;
+}
+.message-unit__taken {
+    margin-left: 0.25rem;
+    font-size: 0.75rem;
+    color: rgb(234 88 12);
+}
+.message-unit.is-taken label {
+    color: rgb(234 88 12);
+}
+.message-unit-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: 0.4rem 1.25rem;
 }
 textarea[data-message-body] {
     min-height: 16rem;
@@ -3014,6 +3066,9 @@ textarea[data-message-body] {
     position: static;
     display: inline-block;
     margin-left: 0.25rem;
+}
+.wa-btn__check[hidden] {
+    display: none;
 }
 .schedule-row-end {
     display: inline-flex;

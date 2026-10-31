@@ -5,6 +5,7 @@ namespace Modules\UnitModule\app\Services;
 use App\Helpers\UploaderHelper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Modules\MessagingModule\app\Services\MessagingService;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\UnitModule\app\Models\Unit;
 use Modules\UnitModule\app\Repositories\UnitRepository;
@@ -63,13 +64,17 @@ class UnitService
 
     public function create(Space $space, array $data)
     {
-        $unit = $this->unitRepository->create($this->unitData($data) + [
-            'account_id' => $space->account_id,
-            'space_id' => $space->id,
-            // a new unit goes last in its space
-            'sort_order' => (int) Unit::where('space_id', $space->id)->max('sort_order') + 1,
-        ]);
-        $unit->plans()->sync($data['plans'] ?? []);
+        $unit = DB::transaction(function () use ($space, $data) {
+            $unit = $this->unitRepository->create($this->unitData($data) + [
+                'account_id' => $space->account_id,
+                'space_id' => $space->id,
+                // a new unit goes last in its space
+                'sort_order' => (int) Unit::where('space_id', $space->id)->max('sort_order') + 1,
+            ]);
+            $unit->plans()->sync($data['plans'] ?? []);
+            $this->syncMessages($unit, $data);
+            return $unit;
+        });
 
         $this->storeImages($unit, $data['images'] ?? []);
         return $unit;
@@ -102,8 +107,11 @@ class UnitService
     public function update(Space $space, $id, array $data)
     {
         $unit = $this->findOne($space, $id);
-        $unit->update($this->unitData($data));
-        $unit->plans()->sync($data['plans'] ?? []);
+        DB::transaction(function () use ($unit, $data) {
+            $unit->update($this->unitData($data));
+            $unit->plans()->sync($data['plans'] ?? []);
+            $this->syncMessages($unit, $data);
+        });
 
         $this->deleteImages($unit, $data['delete_images'] ?? []);
         $this->storeImages($unit, $data['images'] ?? []);
@@ -151,6 +159,14 @@ class UnitService
     public function clearSubscriptionType($subscriptionTypeId)
     {
         Unit::withTrashed()->where('subscription_type_id', $subscriptionTypeId)->update(['subscription_type_id' => 0]);
+    }
+
+    // MessagingModule (2026-10-31): the WhatsApp messages ticked in the unit form (only when the form sent the section)
+    private function syncMessages(Unit $unit, array $data): void
+    {
+        if (!empty($data['message_templates_sent'])) {
+            app(MessagingService::class)->syncUnitTemplates((int) $unit->account_id, (int) $unit->id, $data['message_templates'] ?? []);
+        }
     }
 
     private function unitData(array $data): array

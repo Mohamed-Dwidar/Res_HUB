@@ -1,15 +1,15 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::account.main')
 
 @section('title')
-    Add Space Version
+    New Message
 @endsection
 
 @section('modal-size', 'xl')
 
 @section('content')
     <form method="POST" action="{{ route('account.settings.messages.templates.store') }}" data-ajax data-message-template-form
-        data-confirm="This text will be sent instead of the default for the chosen space's reservations."
-        data-confirm-title="Add this space version?"
+        data-confirm="This message will be offered for the reservations of the chosen units."
+        data-confirm-title="Add this message?"
         data-confirm-button="Add"
         data-confirm-variant="success">
         @csrf
