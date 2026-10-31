@@ -4,6 +4,8 @@
     Edit Company: {{ $company->name }}
 @endsection
 
+@section('modal-size', 'lg')
+
 @section('content')
     <form method="POST" action="{{ route('account.companies.update', $company->id) }}" data-ajax data-row="{{ $company->id }}"
         data-confirm="The changes to &quot;{{ $company->name }}&quot; will be saved."

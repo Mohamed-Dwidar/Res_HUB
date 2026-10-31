@@ -99,6 +99,13 @@
                     'url' => route('account.settings.messages.edit'),
                     'active' => request()->routeIs('account.settings.messages.*'),
                 ],
+                // ContractModule (2026-10-31): the lessor data + the contract templates
+                [
+                    'title' => 'Contracts',
+                    'icon' => 'file-text',
+                    'url' => route('account.settings.contracts.edit'),
+                    'active' => request()->routeIs('account.settings.contracts.*'),
+                ],
                 [
                     'title' => 'Spaces & Units',
                     'icon' => 'layout-grid',

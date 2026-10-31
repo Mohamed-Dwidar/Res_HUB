@@ -4,6 +4,7 @@ namespace Modules\UnitModule\app\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Modules\ContractModule\app\Services\ContractService;
 use Modules\MessagingModule\app\Services\MessagingService;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\UnitModule\app\Models\Unit;
@@ -49,6 +50,13 @@ class UnitRequest extends FormRequest
                 }
             }],
             'message_templates.*' => 'integer',
+            // ContractModule (2026-10-31): the contract template of this unit (one at most; checked again when saving)
+            'contract_template_sent' => 'nullable|boolean',
+            'contract_template_id' => ['nullable', 'integer', function ($attribute, $value, $fail) {
+                if ($error = app(ContractService::class)->unitTemplateError($this->user()->userable->ownerAccountId(), $value)) {
+                    $fail($error);
+                }
+            }],
         ];
     }
 
@@ -69,6 +77,7 @@ class UnitRequest extends FormRequest
             'subscription_type_id' => 'subscription type',
             'color_id' => 'color',
             'plans.*' => 'plan',
+            'contract_template_id' => 'contract template',
             'description_ar' => 'description (Arabic)',
             'description_en' => 'description (English)',
             'notes_ar' => 'notes (Arabic)',

@@ -5,6 +5,7 @@ namespace Modules\UnitModule\app\Services;
 use App\Helpers\UploaderHelper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Modules\ContractModule\app\Services\ContractService;
 use Modules\MessagingModule\app\Services\MessagingService;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\UnitModule\app\Models\Unit;
@@ -73,6 +74,7 @@ class UnitService
             ]);
             $unit->plans()->sync($data['plans'] ?? []);
             $this->syncMessages($unit, $data);
+            $this->syncContractTemplate($unit, $data);
             return $unit;
         });
 
@@ -111,6 +113,7 @@ class UnitService
             $unit->update($this->unitData($data));
             $unit->plans()->sync($data['plans'] ?? []);
             $this->syncMessages($unit, $data);
+            $this->syncContractTemplate($unit, $data);
         });
 
         $this->deleteImages($unit, $data['delete_images'] ?? []);
@@ -166,6 +169,14 @@ class UnitService
     {
         if (!empty($data['message_templates_sent'])) {
             app(MessagingService::class)->syncUnitTemplates((int) $unit->account_id, (int) $unit->id, $data['message_templates'] ?? []);
+        }
+    }
+
+    // ContractModule (2026-10-31): the contract template chosen in the unit form (only when the form sent the section)
+    private function syncContractTemplate(Unit $unit, array $data): void
+    {
+        if (!empty($data['contract_template_sent'])) {
+            app(ContractService::class)->syncUnitTemplate((int) $unit->account_id, (int) $unit->id, ($data['contract_template_id'] ?? null) ?: null);
         }
     }
 

@@ -263,6 +263,8 @@ function showFormErrors(form, errors) {
 }
 
 function ajaxSubmit(form) {
+    // rich-text editors (contract templates, TinyMCE) write their HTML back into their textareas first
+    if (window.tinymce) window.tinymce.triggerSave();
     var data = new FormData(form);
     var rowId = form.dataset.row;
     if (rowId && window.dataTables) {
@@ -1512,6 +1514,11 @@ function initForms(root) {
             messagePreview(form);
             messageUnits(form);
         }
+        if (form.matches("[data-contract-template-form]")) {
+            // a contract template: the rich-text editors, the units by space
+            contractEditors(form);
+            contractUnits(form);
+        }
     });
 }
 
@@ -2174,4 +2181,155 @@ document.addEventListener("click", function (e) {
     textarea.focus();
     textarea.setSelectionRange(from + insert.length, from + insert.length);
     messagePreview(form);
+});
+
+// Contract templates (ContractModule, 2026-10-31, docs/contracts-plan.md) --------------------------------------------------------
+// Settings › Contracts, a template's page ([data-contract-template-form]): each textarea[data-contract-editor] becomes a TinyMCE
+// 4.7.13 editor (local copy, public/assets/vendor/tinymce) limited to the tags / styles the server keeps
+// (ContractService::ALLOWED_HTML / ALLOWED_CSS: what you see is what is saved); the page looks like the PDF (content_css =
+// pdf.css, body class contract-body). A placeholder chip inserts {name} in the editor used last; "Preview with sample data"
+// shows the text with the account's newest subscription ([data-contract-sample] {ar: {...}, en: {...}}; values escaped, an
+// unknown {name} marked); the owner writes every text (no ready-made wording); the units: a space's checkbox ticks / unticks all its units, counts, the units of other templates
+// ([data-contract-taken] {unit id: name}) marked (one template per unit: the save refuses them).
+var CONTRACT_ELEMENTS = "p[style|dir],br,strong/b,em/i,u,ol[style|dir],ul[style|dir],li[style|dir],h2[style|dir],h3[style|dir],h4[style|dir],"
+    + "table[style|dir],thead,tbody,tr,td[style|dir|colspan|rowspan],th[style|dir|colspan|rowspan],span[style|dir]";
+
+function contractJson(form, attribute) {
+    var el = form.querySelector("[" + attribute + "]");
+    try {
+        return el ? JSON.parse(el.textContent) : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function contractEditors(form) {
+    if (!window.tinymce) return;
+    var config = form.querySelector("[data-contract-editor-base]");
+    form.querySelectorAll("textarea[data-contract-editor]").forEach(function (textarea) {
+        if (window.tinymce.get(textarea.id)) return;
+        var rtl = textarea.getAttribute("dir") === "rtl";
+        window.tinymce.init({
+            selector: "#" + textarea.id,
+            base_url: config ? config.getAttribute("data-contract-editor-base") : undefined,
+            suffix: ".min",
+            theme: "modern",
+            skin: "lightgray",
+            menubar: false,
+            branding: false,
+            height: 420,
+            plugins: "advlist lists table directionality paste code searchreplace visualblocks fullscreen wordcount",
+            toolbar: "undo redo | formatselect | bold italic underline | alignright aligncenter alignleft alignjustify | bullist numlist | table | rtl ltr | removeformat | searchreplace visualblocks code fullscreen",
+            block_formats: "Paragraph=p;Clause title=h3;Heading=h2;Small heading=h4",
+            directionality: rtl ? "rtl" : "ltr",
+            forced_root_block: "p",
+            entity_encoding: "raw",
+            valid_elements: CONTRACT_ELEMENTS,
+            valid_styles: { "*": "text-align,direction" },
+            // underline as <u> (the default is a span with text-decoration, a style the server removes)
+            formats: { underline: { inline: "u", exact: true } },
+            // pasted <div> blocks become paragraphs (a div is not kept: its lines would run together; the server does the same)
+            paste_preprocess: function (plugin, args) {
+                args.content = args.content.replace(/<div\b[^>]*>/gi, "<p>").replace(/<\/div\s*>/gi, "</p>");
+            },
+            table_advtab: false,
+            table_cell_advtab: false,
+            table_row_advtab: false,
+            table_appearance_options: false,
+            table_default_attributes: {},
+            table_default_styles: {},
+            content_css: config ? config.getAttribute("data-contract-editor-css") : undefined,
+            body_class: "contract-body" + (rtl ? " contract-body--rtl" : ""),
+            setup: function (editor) {
+                editor.on("focus", function () {
+                    form.dataset.contractLast = textarea.id;
+                });
+                editor.on("change keyup undo redo SetContent", function () {
+                    editor.save();
+                    contractPreview(form, textarea.name);
+                });
+            },
+        });
+    });
+}
+
+function contractEscape(text) {
+    var el = document.createElement("div");
+    el.textContent = text == null ? "" : String(text);
+    return el.innerHTML;
+}
+
+// the preview of one text ([data-contract-preview="<field>"], when open): the editor's HTML with the sample values
+function contractPreview(form, field) {
+    var box = form.querySelector('[data-contract-preview="' + field + '"]');
+    if (!box || box.hidden) return;
+    var editor = window.tinymce ? window.tinymce.get("field-" + field) : null;
+    var html = editor ? editor.getContent() : (formField(form, field) || {}).value || "";
+    if (!html.trim()) {
+        box.innerHTML = '<p class="contract-preview__empty">(empty)</p>';
+        return;
+    }
+    var sample = contractJson(form, "data-contract-sample")[field.slice(-2)] || {};
+    box.innerHTML = html.replace(/\{(\w+)\}/g, function (match, name) {
+        if (!Object.prototype.hasOwnProperty.call(sample, name)) return '<span class="contract-unknown" title="Unknown placeholder or no sample value">' + match + "</span>";
+        return sample[name] === "" ? '<span class="contract-blank" title="Empty for this sample">' + match + "</span>" : contractEscape(sample[name]);
+    });
+}
+
+function contractUnits(form) {
+    var box = form.querySelector("[data-contract-units]");
+    if (!box) return;
+    var taken = contractJson(form, "data-contract-taken");
+    var total = 0;
+    box.querySelectorAll(".message-unit-space").forEach(function (space) {
+        var units = space.querySelectorAll('input[name="units[]"]');
+        var ticked = space.querySelectorAll('input[name="units[]"]:checked').length;
+        var all = space.querySelector("[data-contract-space]");
+        all.checked = units.length > 0 && ticked === units.length;
+        all.indeterminate = ticked > 0 && ticked < units.length;
+        space.querySelector("[data-contract-space-count]").textContent = ticked + " of " + units.length;
+        total += ticked;
+    });
+    box.querySelectorAll("[data-contract-unit]").forEach(function (unit) {
+        var other = taken[unit.getAttribute("data-contract-unit")] || null;
+        var note = unit.querySelector("[data-contract-taken-note]");
+        unit.classList.toggle("is-taken", !!other);
+        note.hidden = !other;
+        note.textContent = other ? "· has “" + other + "”" : "";
+    });
+    var count = form.querySelector("[data-contract-units-count]");
+    if (count) count.textContent = total ? total + " chosen" : "none chosen: not used yet";
+}
+
+document.addEventListener("change", function (e) {
+    var form = e.target.form;
+    if (!form || !form.matches("[data-contract-template-form]")) return;
+    if (e.target.matches("[data-contract-space]")) {
+        e.target.closest(".message-unit-space").querySelectorAll('input[name="units[]"]').forEach(function (unit) {
+            unit.checked = e.target.checked;
+        });
+    }
+    if (e.target.name === "units[]" || e.target.matches("[data-contract-space]")) contractUnits(form);
+});
+
+document.addEventListener("click", function (e) {
+    var chip = e.target.closest && e.target.closest("[data-contract-placeholder]");
+    if (chip && chip.form && window.tinymce) {
+        var form = chip.form;
+        var first = form.querySelector("textarea[data-contract-editor]");
+        var editor = window.tinymce.get(form.dataset.contractLast || (first && first.id));
+        if (editor) {
+            editor.focus();
+            editor.insertContent("{" + chip.getAttribute("data-contract-placeholder") + "}");
+        }
+        return;
+    }
+    var toggle = e.target.closest && e.target.closest("[data-contract-preview-toggle]");
+    if (toggle && toggle.form) {
+        var field = toggle.getAttribute("data-contract-preview-toggle");
+        var box = toggle.form.querySelector('[data-contract-preview="' + field + '"]');
+        box.hidden = !box.hidden;
+        toggle.classList.toggle("is-open", !box.hidden);
+        contractPreview(toggle.form, field);
+    }
 });

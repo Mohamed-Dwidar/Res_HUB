@@ -4,6 +4,8 @@
     Add Company
 @endsection
 
+@section('modal-size', 'lg')
+
 @section('content')
     <form method="POST" action="{{ route('account.companies.store') }}" data-ajax
         data-confirm="The company will be added to your companies list."

@@ -40,11 +40,13 @@
     <div class="form-section mt-6">Member Data</div>
     <dl class="detail-list">
         <div><dt>Email</dt><dd>{{ $member->email ?: '-' }}</dd></div>
-        <div><dt>National Number</dt><dd>{{ $member->national_number ?: '-' }}</dd></div>
+        <div><dt>{{ $member->id_type_label ?? 'ID Number' }}</dt><dd>{{ $member->national_number ?: '-' }}</dd></div>
+        <div><dt>Nationality</dt><dd dir="auto">{{ $member->nationality ?: '-' }}</dd></div>
         <div><dt>Company</dt><dd>{{ $member->company?->name ?? '-' }}</dd></div>
         <div><dt>Job</dt><dd>{{ $member->job?->name ?? '-' }}</dd></div>
         <div><dt>WhatsApp Language</dt><dd>{{ config('messagingmodule.languages.' . $member->message_language, 'Account default') }}</dd></div>
         <div><dt>Added At</dt><dd>{{ $member->created_at->format('Y-m-d H:i') }}</dd></div>
+        <div class="wide"><dt>Address</dt><dd dir="auto">{{ $member->address ?: '-' }}</dd></div>
         <div class="wide"><dt>Source (from where)</dt><dd>{{ $member->from_where ?: '-' }}</dd></div>
         <div class="wide"><dt>Notes</dt><dd>{{ $member->notes ?: '-' }}</dd></div>
     </dl>

@@ -33,6 +33,8 @@ table { width: 100%; border-collapse: collapse; }
 .rtl { direction: rtl; text-align: right; }
 .nowrap { white-space: nowrap; }
 .num { text-align: right; white-space: nowrap; }
+/* Cairo (every PDF since 2026-10-31) has no arrow: → is drawn with DejaVu Sans */
+.pdf-arrow { font-family: dejavusans; }
 
 .statement-summary { margin-top: 16px; border: 1px solid #cbd5e1; background-color: #f8fafc; }
 .statement-summary-col { width: 50%; vertical-align: top; padding: 6px 8px; }
@@ -55,3 +57,17 @@ table { width: 100%; border-collapse: collapse; }
 .statement-row-even td { background-color: #f1f5f9; }
 .statement-row-cancelled td { background-color: #fee2e2; color: #991b1b; }
 .statement-cancelled-label { font-weight: bold; }
+
+/* ===== Contracts (contractmodule, 2026-10-31): the clauses of a contract / renewal annex. Also the content style of the template
+   editor (TinyMCE content_css, body class contract-body / contract-body--rtl), so the editor looks like the PDF. ===== */
+.contract-body { font-size: 11pt; line-height: 1.7; color: #1e293b; }
+.contract-body--rtl { direction: rtl; text-align: right; }
+.contract-body h2 { font-size: 14pt; font-weight: bold; margin: 12px 0 4px 0; }
+.contract-body h3 { font-size: 12pt; font-weight: bold; color: #164e63; margin: 12px 0 4px 0; }
+.contract-body h4 { font-size: 11pt; font-weight: bold; margin: 10px 0 3px 0; }
+.contract-body p { margin: 4px 0; }
+.contract-body ul, .contract-body ol { margin: 4px 0; }
+.contract-body li { margin: 2px 0; }
+.contract-body table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.contract-body td, .contract-body th { border: 1px solid #94a3b8; padding: 4px 6px; vertical-align: top; }
+.contract-body th { background-color: #f1f5f9; font-weight: bold; }

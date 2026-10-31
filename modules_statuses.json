@@ -13,5 +13,6 @@
     "ReservationModule": true,
     "PackageModule": true,
     "PaymentModule": true,
-    "MessagingModule": true
+    "MessagingModule": true,
+    "ContractModule": true
 }

@@ -15,7 +15,11 @@ class Company extends Model
     // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
     protected array $localizedFields = ['name'];
 
-    protected $fillable = ['account_id', 'name_ar', 'name_en'];
+    protected $fillable = [
+        'account_id', 'name_ar', 'name_en',
+        // contracts (ContractModule, 2026-10-31): a company contract needs the commercial register + the representative's name
+        'commercial_register', 'tax_number', 'address', 'representative_name', 'representative_title', 'representative_national_id',
+    ];
 
     public function account(): BelongsTo
     {

@@ -2930,7 +2930,8 @@ button.today-summary__item:hover,
 }
 
 /* Settings › WhatsApp Messages: the messages table (units expandable), a message's popup (live preview, units by space,
-   placeholder chips), the unit form's WhatsApp Messages section (by name) */
+   placeholder chips), the unit form's WhatsApp Messages section (by name); the units picker, the chips and the table head are
+   also used by Settings › Contracts (ContractModule) */
 .message-units summary {
     cursor: pointer;
     color: rgb(30 41 59);
@@ -3107,4 +3108,135 @@ td.renewal-row__action > .wa-btn {
     td.renewal-row__action > .wa-btn {
         margin-top: 0;
     }
+}
+
+/* ===== Contracts (ContractModule, 2026-10-31) ===== */
+/* A template's page: the placeholder chips by group (they stay in view while the long texts scroll), the rich-text editors
+   (TinyMCE: its own skin, local copy), the sample preview (the clause styles of pdf.css, repeated for the page) */
+.contract-placeholders {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    max-height: 11rem;
+    overflow-y: auto;
+    margin-top: 2rem;
+    padding: 0.6rem 0.75rem;
+    background-color: #fff;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 6px rgb(15 23 42 / 0.06);
+}
+.contract-placeholders__head {
+    margin-bottom: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgb(30 41 59);
+}
+.contract-placeholders__head span {
+    margin-left: 0.4rem;
+    font-weight: 400;
+    color: rgb(100 116 139);
+}
+.contract-placeholders__group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.3rem;
+}
+.contract-placeholders__label {
+    width: 4.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: rgb(100 116 139);
+}
+.contract-editor {
+    margin-bottom: 1.25rem;
+}
+.contract-editor__preview-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    color: rgb(var(--color-primary));
+}
+.contract-editor__preview-toggle svg {
+    width: 0.9rem;
+    height: 0.9rem;
+}
+.contract-editor__preview-toggle.is-open {
+    font-weight: 600;
+}
+.contract-preview {
+    margin-top: 0.5rem;
+    padding: 1.25rem 1.5rem;
+    background-color: #fff;
+    border: 1px dashed rgb(148 163 184);
+    border-radius: 0.5rem;
+}
+.contract-preview__empty {
+    color: rgb(100 116 139);
+}
+.contract-unknown {
+    padding: 0 0.15rem;
+    color: rgb(185 28 28);
+    background-color: rgb(254 226 226);
+    border-radius: 0.2rem;
+}
+.contract-blank {
+    padding: 0 0.15rem;
+    color: rgb(146 64 14);
+    background-color: rgb(254 243 199);
+    border-radius: 0.2rem;
+}
+/* the clauses (= pdf.css .contract-body, for the page preview) */
+.contract-body {
+    font-size: 0.9rem;
+    line-height: 1.75;
+    color: rgb(30 41 59);
+}
+.contract-body h2 {
+    margin: 0.9rem 0 0.35rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+.contract-body h3 {
+    margin: 0.9rem 0 0.3rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #164e63;
+}
+.contract-body h4 {
+    margin: 0.7rem 0 0.25rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+.contract-body p {
+    margin: 0.3rem 0;
+}
+.contract-body ul,
+.contract-body ol {
+    margin: 0.3rem 0;
+    padding-inline-start: 1.5rem;
+}
+.contract-body ul {
+    list-style: disc;
+}
+.contract-body ol {
+    list-style: decimal;
+}
+.contract-body table {
+    width: 100%;
+    margin: 0.5rem 0;
+    border-collapse: collapse;
+}
+.contract-body td,
+.contract-body th {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid rgb(148 163 184);
+}
+.contract-body th {
+    background-color: rgb(241 245 249);
 }

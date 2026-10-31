@@ -39,7 +39,11 @@ class MemberRequest extends FormRequest
                 },
             ],
             'email' => 'nullable|email:rfc,filter|max:255',
-            'national_number' => 'nullable|digits_between:5,15',
+            // contracts (2026-10-31): a national ID = digits, a passport = letters + digits
+            'id_type' => ['nullable', Rule::in(array_keys(Member::ID_TYPES))],
+            'national_number' => $this->input('id_type') === 'passport' ? ['nullable', 'regex:/^[A-Za-z0-9]{5,20}$/'] : 'nullable|digits_between:5,15',
+            'nationality' => 'nullable|string|max:100',
+            'address' => 'nullable|string|max:1000',
             'company_id' => ['nullable', 'integer', $ownedBy('companies')],
             'job_id' => ['nullable', 'integer', $ownedBy('job_positions')],
             'from_where' => 'nullable|string|max:1000',
@@ -52,6 +56,7 @@ class MemberRequest extends FormRequest
     {
         return [
             'phone.regex' => 'The phone must be a valid phone number: digits only (8-15), optionally starting with +.',
+            'national_number.regex' => 'A passport number is 5-20 letters and digits.',
         ];
     }
 
@@ -61,6 +66,8 @@ class MemberRequest extends FormRequest
             'company_id' => 'company',
             'job_id' => 'job',
             'from_where' => 'source',
+            'id_type' => 'ID type',
+            'national_number' => 'ID number',
             'message_language' => 'WhatsApp language',
         ];
     }

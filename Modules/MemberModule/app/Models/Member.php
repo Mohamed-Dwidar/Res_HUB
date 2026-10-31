@@ -30,7 +30,12 @@ class Member extends Model
         'account_id', 'name', 'company_id', 'job_id', 'phone', 'email', 'national_number', 'notes', 'from_where', 'created_by',
         // WhatsApp language (MessagingModule, 2026-10-29): ar | en, NULL = the account's default
         'message_language',
+        // contracts (ContractModule, 2026-10-31): the ID type (the number = national_number, text: passports have letters), nationality, address
+        'id_type', 'nationality', 'address',
     ];
+
+    // id_type values (NULL with a number = a national ID)
+    const ID_TYPES = ['national_id' => 'National ID', 'passport' => 'Passport'];
 
     protected static function booted(): void
     {
@@ -52,13 +57,15 @@ class Member extends Model
         return preg_match(self::EGYPT_MOBILE_REGEX, $digits, $match) ? $match[1] : $digits;
     }
 
-    protected $casts = [
-        'national_number' => 'integer',
-    ];
-
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    // "National ID" / "Passport" for the member's number, null without one
+    public function getIdTypeLabelAttribute(): ?string
+    {
+        return $this->national_number ? self::ID_TYPES[$this->id_type ?: 'national_id'] ?? null : null;
     }
 
     // still shows the name when the company / job was deleted later

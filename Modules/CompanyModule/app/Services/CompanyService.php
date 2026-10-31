@@ -62,6 +62,12 @@ class CompanyService
         return [
             'name_ar' => $data['name_ar'],
             'name_en' => $data['name_en'] ?? null,
+            'commercial_register' => ($data['commercial_register'] ?? null) ?: null,
+            'tax_number' => ($data['tax_number'] ?? null) ?: null,
+            'address' => ($data['address'] ?? null) ?: null,
+            'representative_name' => ($data['representative_name'] ?? null) ?: null,
+            'representative_title' => ($data['representative_title'] ?? null) ?: null,
+            'representative_national_id' => ($data['representative_national_id'] ?? null) ?: null,
         ];
     }
 }

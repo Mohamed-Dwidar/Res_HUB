@@ -71,7 +71,7 @@
         <tr>
             <td class="statement-summary-col">
                 <table class="statement-summary-table">
-                    <tr><th>Period</th><td class="nowrap">{{ $package->date_from?->format($dateFormat) ?? '-' }} → {{ $package->date_to?->format($dateFormat) ?? ($package->date_from ? 'continues' : '-') }}</td></tr>
+                    <tr><th>Period</th><td class="nowrap">{{ $package->date_from?->format($dateFormat) ?? '-' }} <span class="pdf-arrow">→</span> {{ $package->date_to?->format($dateFormat) ?? ($package->date_from ? 'continues' : '-') }}</td></tr>
                     <tr><th>Reservations</th><td>{{ $reservations->count() }}@if ($hours > 0) ({{ $hoursText($hours * 60) }} h)@endif @if ($cancelledCount)<span class="receipt-muted">+ {{ $cancelledCount }} cancelled</span>@endif</td></tr>
                     <tr><th>Reservations total</th><td>{{ $money($reservationsTotal) }}</td></tr>
                     <tr><th>Discount</th><td>{{ rtrim(rtrim(number_format((float) $package->discount_percentage, 2), '0'), '.') }}%</td></tr>
@@ -120,9 +120,9 @@
                         @elseif ($type?->auto_renew || $type?->is_contract)
                             until {{ $end?->format($dateFormat) ?? '-' }}
                         @elseif ($end && $start->isSameDay($end))
-                            {{ $start->format($timeFormat) }} → {{ $end->format($timeFormat) }}
+                            {{ $start->format($timeFormat) }} <span class="pdf-arrow">→</span> {{ $end->format($timeFormat) }}
                         @else
-                            {{ $start?->format($timeFormat) }} → {{ $end?->format($dateFormat . ' ' . $timeFormat) ?? '-' }}
+                            {{ $start?->format($timeFormat) }} <span class="pdf-arrow">→</span> {{ $end?->format($dateFormat . ' ' . $timeFormat) ?? '-' }}
                         @endif
                     </td>
                     <td {!! $rtl(($reservation->space?->name ?? '') . ($reservation->unit?->name ?? '')) !!}>

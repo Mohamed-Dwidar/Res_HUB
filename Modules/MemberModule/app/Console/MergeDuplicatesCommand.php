@@ -26,7 +26,7 @@ class MergeDuplicatesCommand extends Command
     // the member references (search the schema for member_id: these are all of them, 2026-10-18)
     const REFERENCES = ['reservations', 'packages', 'payments', 'withholding_certificates'];
     // filled on the primary when it has none (0 = none for the ids)
-    const FILL = ['email', 'company_id', 'national_number', 'job_id', 'from_where'];
+    const FILL = ['email', 'company_id', 'national_number', 'id_type', 'nationality', 'address', 'job_id', 'from_where'];
 
     protected $signature = 'members:merge-duplicates {--dry-run : print the groups and the rows to move, nothing is saved} {--account= : only this account id}';
 
