@@ -64,11 +64,12 @@ trait PaymentActions
         return $this->area() === 'employee' ? Auth::id() : null;
     }
 
-    // one payment: an employee opens their own, or one of a reservation / package (its payments block); not a colleague's other income
+    // one payment: an employee opens their own, one of a reservation / package (its payments block) or of a member (the member
+    // view's Cash In block, 2026-11-01); not a colleague's other income without a member
     private function findForViewer($id)
     {
         $payment = $this->paymentService->findOne($this->accountId(), $id);
-        abort_if($this->collectorId() && !$payment->payable_type && (int) $payment->creatable_id !== (int) $this->collectorId(), 404);
+        abort_if($this->collectorId() && !$payment->payable_type && !$payment->member_id && (int) $payment->creatable_id !== (int) $this->collectorId(), 404);
 
         return $payment;
     }
@@ -322,12 +323,21 @@ trait PaymentActions
         if ($error = $this->paymentService->editError($payment, Auth::user())) {
             abort(403, $error);
         }
+        $accountId = $this->accountId();
+        // "For" (2026-11-01, not a refund: it follows its payment): the Add Cash In fields with the current choice
+        $payableKind = $payment->payable_kind ?? '';
+        $payableOptions = $payableKind === 'reservation' && $payment->member_id
+            ? collect($this->paymentService->payableOptions($accountId, 'reservation', $payment->member_id))->pluck('name', 'id')->all() : [];
         return view('paymentmodule::Payment.edit', [
             'payment' => $payment,
             'payableName' => $this->paymentService->payableName($payment->payable, false),
             'closedShift' => $this->paymentService->closedShiftOf($payment),
-            'methods' => $this->methodService->options($this->accountId(), $payment->payment_method_id),
-            'categories' => $this->categoryService->options($this->accountId(), $payment->income_category_id),
+            'methods' => $this->methodService->options($accountId, $payment->payment_method_id),
+            'categories' => $this->categoryService->options($accountId, $payment->income_category_id),
+            'payableKind' => $payableKind,
+            'payableOptions' => $payableOptions,
+            'packageOptions' => $payment->type === 'refund' ? [] : collect($this->paymentService->packageOptions($accountId))->pluck('name', 'id')->all(),
+            'companies' => $payment->type === 'refund' ? [] : $this->companyService->options($accountId),
         ]);
     }
 

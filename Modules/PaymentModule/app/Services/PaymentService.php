@@ -123,6 +123,33 @@ class PaymentService
             ])->all();
     }
 
+    /**
+     * The member view's Cash In block (2026-11-01; owner AND employees: every payment of the member whoever recorded it):
+     * due / paid / remaining / credit over the member's reservations paid on their own (not inside a package) + packages (their
+     * stored paid_amount / remaining, kept by refresh()), and the member's payments (cash in, withholding, refunds; other income
+     * with this member too), newest first, at most $limit + the full count.
+     */
+    public function memberSummary($accountId, int $memberId, int $limit = 100): array
+    {
+        $totals = ['paid' => 0.0, 'remaining' => 0.0, 'credit' => 0.0];
+        foreach ([Reservation::where('package_id', 0), Package::query()] as $query) {
+            $row = $query->where('account_id', $accountId)->where('member_id', $memberId)->toBase()
+                ->selectRaw('COALESCE(SUM(paid_amount), 0) AS paid, COALESCE(SUM(GREATEST(remaining, 0)), 0) AS remaining, COALESCE(SUM(LEAST(remaining, 0)), 0) AS credit')
+                ->first();
+            foreach ($totals as $key => $value) {
+                $totals[$key] = $value + (float) $row->{$key};
+            }
+        }
+        $payments = Payment::where('account_id', $accountId)->where('member_id', $memberId);
+
+        return $totals + [
+            'due' => round($totals['paid'] + $totals['remaining'] + $totals['credit'], 2),
+            'count' => (clone $payments)->count(),
+            'payments' => $payments->with('paymentMethod', 'incomeCategory', 'creatable.userable', 'payable')
+                ->orderByDesc('paid_at')->orderByDesc('payment_no')->limit($limit)->get(),
+        ];
+    }
+
     // "#12 Space › Unit · 21-10-2026" / "#5 Package name · 01-10-2026 → 31-12-2026"; $withNumber false: without "#12 "
     // (the Cash In view / edit / refund / delete popups show the number as its own field, 2026-10-21)
     public function payableName(?Model $payable, bool $withNumber = true): string
@@ -220,13 +247,9 @@ class PaymentService
     }
 
     /**
-     * The owner's edit: amount, date, method, income category (other income), reference, notes.
-     * The payable / member / type are kept (a payment for another reservation = delete it and add a new one).
-     * In a CLOSED shift: $data['change_reason'] required; the shift's totals are recalculated and the change logged (before / after).
-     */
-    /**
-     * Who may edit a payment (2026-10-28): the owner any (a closed shift: with a reason); an employee only their OWN cash in /
-     * withholding while it is still in their OPEN shift (not a refund, not after closing). editError() = why not.
+     * Who may edit a payment: the owner any (a closed shift: with a reason); an employee only a cash in / withholding / refund
+     * they RECORDED while it is still in their OPEN shift (2026-10-28; refunds too since 2026-11-01); never after closing,
+     * never a colleague's. editError() = why not.
      */
     public function canEdit(Payment $payment, Model $user): bool
     {
@@ -238,19 +261,27 @@ class PaymentService
         if ($this->isOwner($user)) {
             return null;
         }
-        if ($payment->trashed() || $payment->type === 'refund') {
-            return 'Only the account owner can change a refund.';
+        if ($payment->trashed()) {
+            return 'This record was deleted.';
         }
         if ($payment->creatable_type !== $user->getMorphClass() || (int) $payment->creatable_id !== (int) $user->getKey()) {
-            return 'You can change only the cash in you recorded.';
+            return 'You can change only the cash in / refunds you recorded.';
         }
         if ($payment->shift_closing_id) {
-            return 'This cash in is in a closed shift: only the account owner can change it.';
+            return 'This ' . strtolower($payment->type_label) . ' is in a closed shift: only the account owner can change it.';
         }
         return null;
     }
 
-    // $user: the owner, or an employee for their own cash in of their open shift (canEdit(); the date stays as recorded)
+    /**
+     * The edit: amount, method, reference, notes, income category (other income); the owner also the date (an employee's stays as
+     * recorded). What it pays (2026-11-01, cash in / withholding, not a refund: it follows its payment): $data['payable']
+     * (reservation | package | null = other income) + payable_id — moved like a new cash in (not a reservation inside a package,
+     * a reservation not above what it owes), refused while it has refunds; the member follows the reservation / package (other
+     * income keeps it); the old and the new reservation / package are refreshed. Never the recorder or the shift.
+     * $user: the owner, or an employee for their own row of their open shift (canEdit()). In a CLOSED shift (the owner):
+     * $data['change_reason'] required; the shift's totals are recalculated. Every edit is logged (before / after).
+     */
     public function update($accountId, $id, array $data, Model $user): Payment
     {
         $payment = $this->findOne($accountId, $id);
@@ -263,14 +294,16 @@ class PaymentService
         }
 
         $amount = $this->assertAmount($data['amount'] ?? 0);
-        if (!$owner) {
+        [$target, $moved] = $this->editTarget($accountId, $payment, $data);
+        // an employee's amount on the same reservation / package (a moved one is checked like a new cash in, below)
+        if (!$owner && !$moved && $payment->type !== 'refund') {
             $this->assertEmployeeAmount($payment, $amount);
         }
         // withholding: no money received, no method
         if ($payment->type !== 'withholding') {
             $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
         }
-        if (!$payment->payable_type) {
+        if (!$target) {
             $this->assertCategory($accountId, $data['income_category_id'] ?? 0);
         }
         $paidAt = Carbon::parse($data['paid_at'] ?? $payment->paid_at)->startOfDay();
@@ -289,19 +322,32 @@ class PaymentService
             $this->assertRefundable($payment->refund_of ? Payment::withTrashed()->find($payment->refund_of) ?? $payment : $payment, $amount, $payment);
         }
 
-        return DB::transaction(function () use ($payment, $data, $amount, $paidAt, $closing, $reason, $user) {
+        return DB::transaction(function () use ($payment, $data, $amount, $paidAt, $closing, $reason, $user, $target, $moved) {
             $before = $this->snapshot($payment);
+            $old = $payment->payable;
+            // moved to a reservation: never more than what it still owes (its row locked, this payment not on it yet)
+            if ($moved && $target instanceof Reservation) {
+                $this->assertNotMoreThanOwed($target->load('status'), $amount);
+            }
             $payment->update([
                 'amount' => $amount,
                 'paid_at' => $paidAt,
                 'payment_method_id' => $payment->type === 'withholding' ? 0 : (int) $data['payment_method_id'],
-                'income_category_id' => $payment->payable_type ? 0 : (int) $data['income_category_id'],
+                'income_category_id' => $target ? 0 : (int) $data['income_category_id'],
                 'reference' => $data['reference'] ?? null,
                 'notes' => $data['notes'] ?? null,
-            ]);
+            ] + ($moved ? [
+                'payable_type' => $target?->getMorphClass(),
+                'payable_id' => $target ? $target->getKey() : 0,
+                'member_id' => $target ? $target->payableMemberId() : (int) $payment->member_id,
+            ] : []));
+            $payment->unsetRelation('payable');
             $this->refreshPayableOf($payment);
+            if ($moved && $old instanceof Payable) {
+                $this->refresh($old instanceof Reservation ? $old->load('status') : $old);
+            }
             // the audit log: every edit (2026-10-27), a closed shift also gets its totals recalculated
-            $changes = ['before' => $before, 'after' => $this->snapshot($payment)];
+            $changes = ['before' => $before, 'after' => $this->snapshot($payment->fresh())];
             $closing ? $this->shifts()->paymentChanged($closing, 'payment_edit', $payment, $user, $reason, $changes)
                 : $this->shifts()->logOpenChange('payment_edit', $payment, $user, trim((string) ($data['change_reason'] ?? '')) ?: null, $changes);
 
@@ -576,6 +622,27 @@ class PaymentService
         }
     }
 
+    // what an edited payment pays (2026-11-01): [the reservation / package or null (other income), moved?]; a refund, or a form
+    // without "For" (payable not sent), keeps its own
+    private function editTarget($accountId, Payment $payment, array $data): array
+    {
+        if ($payment->type === 'refund' || !array_key_exists('payable', $data)) {
+            return [$payment->payable_type ? $payment->payable : null, false];
+        }
+        $kind = $data['payable'] ?: null;
+        if ($kind === $payment->payable_kind && (!$kind || (int) ($data['payable_id'] ?? 0) === (int) $payment->payable_id)) {
+            return [$kind ? $payment->payable : null, false];
+        }
+        $target = $kind ? $this->findPayable($accountId, $kind, $data['payable_id'] ?? 0) : null;
+        if ($target && !$target->canTakePayments()) {
+            throw ValidationException::withMessages(['payable_id' => 'This reservation is inside a package, choose the package.']);
+        }
+        if (Payment::where('refund_of', $payment->getKey())->exists()) {
+            throw ValidationException::withMessages(['payable' => 'This cash in has refunds: it can\'t be moved to something else.']);
+        }
+        return [$target, true];
+    }
+
     // an employee's edit (2026-10-28): not below what was already refunded of it; a reservation's cash in not above what it
     // still owes with this payment's old amount (the "never more than owed" rule of a new cash in; packages may go to credit)
     private function assertEmployeeAmount(Payment $payment, float $amount): void
@@ -630,6 +697,10 @@ class PaymentService
             'payment_method_id' => (int) $payment->payment_method_id,
             'method' => $payment->paymentMethod?->name,
             'income_category_id' => (int) $payment->income_category_id,
+            // what it pays (2026-11-01: an edit may move it): Reservation / Package / Other income + its no., the member
+            'payable_type' => $payment->payable_type ? ucfirst((string) $payment->payable_kind) : 'Other income',
+            'payable_id' => (int) $payment->payable_id ?: null,
+            'member' => $payment->member?->name,
             'paid_at' => $payment->paid_at?->format('Y-m-d'),
             'reference' => $payment->reference,
             'notes' => $payment->notes,

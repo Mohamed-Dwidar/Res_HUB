@@ -9,7 +9,7 @@
 
 @section('content')
     <form method="POST" action="{{ route($area . '.payments.store') }}" data-ajax data-payment-form
-        data-confirm="The cash in will be added. Only the account owner can change or delete it later."
+        data-confirm="The cash in will be added. You can edit it until your shift is closed; after that only the account owner can change it. Only the owner can delete it."
         data-confirm-title="Add this cash in?"
         data-confirm-button="Add"
         data-confirm-variant="success">

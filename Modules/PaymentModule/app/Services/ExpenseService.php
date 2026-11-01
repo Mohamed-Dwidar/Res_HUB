@@ -48,10 +48,36 @@ class ExpenseService
         return $this->expenseRepository->forAccount($accountId)->with('creatable.userable')->findOrFail($id);
     }
 
-    // edit / delete: the account login only
+    // delete: the account login only; edit: also the recorder while it is in their open shift (canEdit())
     public function isOwner(Model $user): bool
     {
         return $user->userable instanceof Account;
+    }
+
+    /**
+     * Who may edit an expense (2026-11-01, the payments' rule): the owner any (a closed shift: with a reason); an employee only
+     * one they RECORDED while it is still in their OPEN shift (not the date); never a colleague's. editError() = why not.
+     */
+    public function canEdit(Expense $expense, Model $user): bool
+    {
+        return $this->editError($expense, $user) === null;
+    }
+
+    public function editError(Expense $expense, Model $user): ?string
+    {
+        if ($this->isOwner($user)) {
+            return null;
+        }
+        if ($expense->trashed()) {
+            return 'This cash out was deleted.';
+        }
+        if ($expense->creatable_type !== $user->getMorphClass() || (int) $expense->creatable_id !== (int) $user->getKey()) {
+            return 'You can change only the cash out you recorded.';
+        }
+        if ($expense->shift_closing_id) {
+            return 'This cash out is in a closed shift: only the account owner can change it.';
+        }
+        return null;
     }
 
     /**
@@ -78,13 +104,19 @@ class ExpenseService
     }
 
     /**
-     * The account's edit (category, item, amount, method, date, notes, receipt). In a CLOSED shift: $data['change_reason']
-     * is required; the shift's totals are recalculated and the change logged.
+     * The edit (category, item, amount, method, reference, notes, receipt; the date: the owner only, an employee's stays as
+     * recorded): the owner, or the recorder while it is in their open shift (canEdit()). In a CLOSED shift (the owner):
+     * $data['change_reason'] is required; the shift's totals are recalculated. Every edit is logged (before / after).
      */
     public function update($accountId, $id, array $data, Model $user): Expense
     {
-        $this->assertOwner($user);
         $expense = $this->findOne($accountId, $id);
+        if ($error = $this->editError($expense, $user)) {
+            abort(403, $error);
+        }
+        if (!$this->isOwner($user)) {
+            $data['spent_at'] = $expense->spent_at;
+        }
         $values = $this->values($accountId, $data, $expense);
         // Reference no.: checked when the method or the reference changes (old rows without one stay as they are)
         if ($values['payment_method_id'] !== (int) $expense->payment_method_id

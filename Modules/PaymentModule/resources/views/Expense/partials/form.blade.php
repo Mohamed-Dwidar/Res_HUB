@@ -16,8 +16,10 @@
         'attrs' => 'min="0.01" step="0.01" max="99999999"'])
     @include('layoutmodule::partials.field', ['name' => 'payment_method_id', 'label' => 'Paid By', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $methods, 'value' => $expense->payment_method_id ?: null])
-    {{-- add: the recording date (employees can't change it); edit (the account): the saved date --}}
-    @if ($expense->exists)
+    {{-- add: the recording date (employees can't change it); edit: the saved date (the owner changes it, an employee's stays) --}}
+    @if ($expense->exists && !(Auth::user()->userable instanceof \Modules\AccountModule\app\Models\Account))
+        <dl class="detail-list"><div><dt>Date</dt><dd>{{ $expense->spent_at?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</dd></div></dl>
+    @elseif ($expense->exists)
         @include('layoutmodule::partials.field', ['name' => 'spent_at', 'label' => 'Date', 'type' => 'date', 'required' => true, 'value' => $expense->spent_at?->format('Y-m-d')])
     @else
         @include('paymentmodule::Payment.partials.date-field', ['name' => 'spent_at', 'value' => $expense->spent_at])

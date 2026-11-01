@@ -115,7 +115,7 @@ class PaymentExceptionService
         $after = (array) ($event->changes['after'] ?? []);
         $labels = ['amount' => 'Amount', 'method' => 'Method', 'paid_at' => 'Date', 'spent_at' => 'Date', 'reference' => 'Reference',
             'item' => 'Item', 'category' => 'Category', 'income_category_id' => 'Income category', 'notes' => 'Notes',
-            'payable_type' => 'For', 'payable_id' => 'For no.'];
+            'payable_type' => 'For', 'payable_id' => 'For no.', 'member' => 'Member'];
         $changed = [];
         foreach ($labels as $key => $label) {
             if ((array_key_exists($key, $before) || array_key_exists($key, $after)) && ($before[$key] ?? null) != ($after[$key] ?? null)) {

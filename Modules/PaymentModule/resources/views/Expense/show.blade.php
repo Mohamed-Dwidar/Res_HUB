@@ -11,9 +11,11 @@
     @if ($hasAttachment)
         <a href="{{ route($area . '.expenses.attachment', $expense->id) }}" target="_blank" class="btn btn-secondary"><i data-lucide="paperclip"></i> Receipt</a>
     @endif
-    {{-- edit / delete: the account owner only --}}
+    {{-- edit: the owner, or the recorder while their shift is open (ExpenseService::canEdit()); delete: the account owner only --}}
+    @if (app(\Modules\PaymentModule\app\Services\ExpenseService::class)->canEdit($expense, Auth::user()))
+        <a href="{{ route($area . '.expenses.edit', $expense->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    @endif
     @if ($area === 'account')
-        <a href="{{ route('account.expenses.edit', $expense->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
         <a href="{{ route('account.expenses.delete', $expense->id) }}" data-modal class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</a>
     @endif
 @endsection

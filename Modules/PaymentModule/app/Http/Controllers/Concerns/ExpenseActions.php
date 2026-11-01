@@ -15,7 +15,8 @@ use Yajra\DataTables\Facades\DataTables;
 
 /**
  * Expenses actions shared by the account and the employee controllers (docs/payments-plan.md "Expenses"): both record and view
- * expenses (an expense joins the recorder's open shift); edit / delete = the account only (ExpenseAccountModuleController).
+ * expenses (an expense joins the recorder's open shift); edit = the owner, or the recorder while their shift is open
+ * (ExpenseService::canEdit(), 2026-11-01); delete = the account only (ExpenseAccountModuleController).
  * No page of its own since 2026-10-14 (index() → the Payments page, tab Cash Out = expenses + refunds); data() = the expenses
  * table of My Shift (shift=open) and any expenses list. The list = the payments list rules: the account sees all (tabs Today | This Month | All + date range); an employee sees only
  * their own, ONE day at a time (today by default, no tabs; forced on the server). shift=open (My Shift): the login's open
@@ -176,6 +177,39 @@ trait ExpenseActions
             'expense' => $expense,
             'hasAttachment' => (bool) $this->expenseService->attachmentPath($expense),
             'closedShift' => $this->expenseService->closedShiftOf($expense),
+        ]);
+    }
+
+    // edit (2026-11-01): the owner any expense (a closed shift: with a reason); an employee their own while their shift is open
+    // (ExpenseService::canEdit(); the date stays as recorded)
+    public function edit($id)
+    {
+        $expense = $this->findForViewer($id);
+        if ($error = $this->expenseService->editError($expense, Auth::user())) {
+            abort(403, $error);
+        }
+        return view('paymentmodule::Expense.edit', [
+            'expense' => $expense,
+            'categories' => $this->categoryService->options($this->accountId(), $expense->expense_category_id),
+            'methods' => $this->methodService->options($this->accountId(), $expense->payment_method_id),
+            'closedShift' => $this->expenseService->closedShiftOf($expense),
+            'hasAttachment' => (bool) $this->expenseService->attachmentPath($expense),
+        ]);
+    }
+
+    public function update(ExpenseRequest $request, $id)
+    {
+        $this->findForViewer($id);
+        $expense = $this->expenseService->update($this->accountId(), $id, $request->validated(), Auth::user());
+        $show = $this->route('show', $id);
+
+        return response()->json([
+            'message' => 'Cash Out #' . $expense->expense_no . ' has been updated successfully.',
+            'row' => $this->row($request, $id),
+            // a list without this row id (Payments All / Cash Out: row-expense-{id}) reloads
+            'reload' => true,
+            'modal' => $show,
+            'redirect' => $show,
         ]);
     }
 

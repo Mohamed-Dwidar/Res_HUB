@@ -6,7 +6,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Modules\PaymentModule\app\Models\Expense;
 
-// an expense (add: any login; edit: the account); ExpenseService checks the rules again (category / method of the account, amount)
+// an expense (add: any login; edit: the owner, or the recorder while their shift is open — no date, 2026-11-01); ExpenseService checks the rules again (category / method of the account, amount)
 class ExpenseRequest extends FormRequest
 {
     public function rules(): array
@@ -22,13 +22,15 @@ class ExpenseRequest extends FormRequest
             'item' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0.01|max:99999999',
             'payment_method_id' => ['required', 'integer', $ownedBy('payment_methods', $expense?->payment_method_id)],
-            'spent_at' => 'required|date',
+            // an employee's edit keeps the recorded date (ExpenseService::update())
+            'spent_at' => $expense && $this->routeIs('employee.*') ? ['exclude'] : 'required|date',
             'reference' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:5000',
             'attachment' => 'nullable|file|max:5120|mimes:pdf,jpg,jpeg,png,webp',
             'delete_attachment' => 'boolean',
             // why an expense of a closed shift is changed (kept in the shift's log)
-            'change_reason' => $expense?->shift_closing_id ? 'required|string|max:255' : 'exclude',
+            // (the owner only: an employee can't change a closed shift's cash out — ExpenseService answers 403 with why)
+            'change_reason' => $expense?->shift_closing_id && !$this->routeIs('employee.*') ? 'required|string|max:255' : 'exclude',
         ];
     }
 

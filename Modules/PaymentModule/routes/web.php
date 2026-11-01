@@ -80,7 +80,7 @@ Route::prefix('account/expense-categories')->name('account.expense-categories.')
 
 /**
  *  Expenses (docs/payments-plan.md "Expenses"): recorded by the account and its employees into their own open shift
- *  (Concerns\ExpenseActions); edit / delete = the account only
+ *  (Concerns\ExpenseActions); edit = the owner or the recorder while their shift is open; delete = the account only
  */
 $expenseRoutes = function ($controller) {
     Route::get('/', [$controller, 'index'])->name('index');
@@ -89,12 +89,13 @@ $expenseRoutes = function ($controller) {
     Route::post('/', [$controller, 'store'])->name('store');
     Route::get('{id}', [$controller, 'show'])->name('show');
     Route::get('{id}/attachment', [$controller, 'attachment'])->name('attachment');
+    // edit: the owner, or the recorder while their shift is open (2026-11-01, ExpenseService::canEdit())
+    Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
+    Route::put('{id}', [$controller, 'update'])->name('update');
 };
 
 Route::prefix('account/expenses')->name('account.expenses.')->middleware(['auth', 'user.active:' . Account::class])->group(function () use ($expenseRoutes) {
     $expenseRoutes(ExpenseAccountModuleController::class);
-    Route::get('{id}/edit', [ExpenseAccountModuleController::class, 'edit'])->name('edit');
-    Route::put('{id}', [ExpenseAccountModuleController::class, 'update'])->name('update');
     Route::get('{id}/delete', [ExpenseAccountModuleController::class, 'deleteForm'])->name('delete');
     Route::delete('{id}', [ExpenseAccountModuleController::class, 'destroy'])->name('destroy');
 });

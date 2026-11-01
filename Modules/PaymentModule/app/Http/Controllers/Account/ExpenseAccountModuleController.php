@@ -6,9 +6,8 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Modules\PaymentModule\app\Http\Controllers\Concerns\ExpenseActions;
-use Modules\PaymentModule\app\Http\Requests\ExpenseRequest;
 
-// logged in account: all the account's expenses (ExpenseActions) + the owner's edit / delete (a closed shift: reason, logged on it)
+// logged in account: all the account's expenses (ExpenseActions: also the edit) + the owner's delete (a closed shift: reason, logged on it)
 class ExpenseAccountModuleController extends Controller
 {
     use ExpenseActions;
@@ -16,32 +15,6 @@ class ExpenseAccountModuleController extends Controller
     protected function area(): string
     {
         return 'account';
-    }
-
-    public function edit($id)
-    {
-        $expense = $this->expenseService->findOne($this->accountId(), $id);
-        return view('paymentmodule::Expense.edit', [
-            'expense' => $expense,
-            'categories' => $this->categoryService->options($this->accountId(), $expense->expense_category_id),
-            'methods' => $this->methodService->options($this->accountId(), $expense->payment_method_id),
-            'closedShift' => $this->expenseService->closedShiftOf($expense),
-            'hasAttachment' => (bool) $this->expenseService->attachmentPath($expense),
-        ]);
-    }
-
-    public function update(ExpenseRequest $request, $id)
-    {
-        $expense = $this->expenseService->update($this->accountId(), $id, $request->validated(), Auth::user());
-
-        return response()->json([
-            'message' => 'Cash Out #' . $expense->expense_no . ' has been updated successfully.',
-            'row' => $this->row($request, $id),
-            // a list without this row id (Payments All / Cash Out: row-expense-{id}) reloads
-            'reload' => true,
-            'modal' => route('account.expenses.show', $id),
-            'redirect' => route('account.expenses.show', $id),
-        ]);
     }
 
     // the delete popup: the reason is required

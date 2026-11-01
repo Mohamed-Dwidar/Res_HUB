@@ -6,12 +6,13 @@
 
 @section('modal-size', 'lg')
 
-{{-- the owner (any payment) or an employee (their own cash in while their shift is open: no date, PaymentService::canEdit());
-     the payable, member and type are kept: a payment for something else = delete + add; in a closed shift (the owner only): a
+{{-- the owner (any payment) or an employee (their own cash in / withholding / refund while their shift is open: no date,
+     PaymentService::canEdit()); the type and the recorder are kept; "For" (2026-11-01, not a refund: it follows its payment) moves
+     it to another reservation / package / other income (Payment/partials/for-fields); in a closed shift (the owner only): a
      reason is required (logged on the shift, its totals recalculated); every edit is logged (Payment Exceptions › Edited) --}}
 @section('content')
     @php($area = request()->routeIs('employee.*') ? 'employee' : 'account')
-    <form method="POST" action="{{ route($area . '.payments.update', $payment->id) }}" data-ajax data-row="{{ $payment->id }}"
+    <form method="POST" action="{{ route($area . '.payments.update', $payment->id) }}" data-ajax data-payment-form data-row="{{ $payment->id }}"
         data-confirm="{{ $payment->type_label }} #{{ $payment->payment_no }} will be changed, the paid / remaining of what it pays are calculated again."
         data-confirm-title="Save the changes?"
         data-confirm-button="Save"
@@ -21,6 +22,11 @@
 
         @include('paymentmodule::Payment.partials.payment-summary')
         @include('paymentmodule::Payment.partials.closed-shift-note')
+
+        @unless ($payment->type === 'refund')
+            <div class="form-section mt-6">For</div>
+            @include('paymentmodule::Payment.partials.for-fields', ['kind' => $payableKind])
+        @endunless
 
         <div class="form-section mt-6">{{ $payment->type_label }}</div>
         <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -38,10 +44,11 @@
             @endunless
         </div>
         <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
-            @unless ($payment->payable_type)
+            {{-- a refund of other income: its category (cash in / withholding: in "For" above) --}}
+            @if ($payment->type === 'refund' && !$payment->payable_type)
                 @include('layoutmodule::partials.field', ['name' => 'income_category_id', 'label' => 'Income Category', 'type' => 'select', 'required' => true, 'searchable' => true,
                     'options' => ['' => '- Select -'] + $categories, 'value' => $payment->income_category_id ?: null])
-            @endunless
+            @endif
             @if ($payment->type === 'refund')
                 @include('paymentmodule::Payment.partials.reference-field', ['value' => $payment->reference, 'hint' => 'Checked when the method or the reference changes.'])
             @else

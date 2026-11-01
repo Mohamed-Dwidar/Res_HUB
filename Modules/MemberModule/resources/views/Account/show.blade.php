@@ -51,6 +51,9 @@
         <div class="wide"><dt>Notes</dt><dd>{{ $member->notes ?: '-' }}</dd></div>
     </dl>
 
+    {{-- every payment of the member (owner AND employees, whoever recorded it) + due / paid / remaining (2026-11-01) --}}
+    @include('paymentmodule::Payment.partials.member-payments', ['member' => $member])
+
     @unless (request()->ajax())
         <div class="form-actions">
             <a href="{{ route($area . '.members.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Members</a>
