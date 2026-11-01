@@ -53,16 +53,13 @@
         &rsaquo;
         {{ $reservation->unit?->name ?? '-' }}
     </div>
+    {{-- the plan under the place --}}
+    <div class="mt-1 text-slate-500">{{ $reservation->plan?->name ?? '-' }}</div>
     {{-- the period (the status is in the header menu) --}}
     <div class="mt-2 text-slate-500">{{ $reservation->period }}</div>
-
     {{-- a unit for 1 person (capacity 1, or 0 = not set): always 1, not shown (like the form) --}}
     @if ((int) $reservation->unit?->capacity > 1)
-        <div class="form-section">&nbsp;</div>
-
-        <dl class="detail-list">
-            <div><dt>Number of People</dt><dd>{{ $reservation->number_of_peoples }}</dd></div>
-        </dl>
+        <div class="mt-1 text-slate-500">Number of People: <b>{{ $reservation->number_of_peoples }}</b></div>
     @endif
 
    <div class="form-section">&nbsp;</div>

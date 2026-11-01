@@ -402,7 +402,7 @@ class ScheduleService
      * The period section's groups (after hydrate(): renewedBy = the counted renewal, its remaining), user 2026-10-29. Payment is due
      * at the start of a period. Rows are rendered by RenewalView (Schedule/partials/renewal-row).
      * - Starts today: new subscriptions starting on D (no renewal_of).
-     * - Renews today (renewal date = D): the period; its renewal owing → "Renewed · Unpaid" + Pay; paid → not listed; none → Renew,
+     * - Renews today (renewal date = D): the period; its renewal owing → "Renewed · Unpaid" + Pay; paid → "✓ Renewed & paid"; none → Renew,
      *   Left (+ Pay while it owes).
      * - Not renewed & Not paid (what needs action now): every period STARTED by D that still owes (the old one or a renewal), and
      *   every period ENDED before D with no renewal, not left. A member's rows together, oldest first (older_due on the newer ones,
@@ -427,9 +427,8 @@ class ScheduleService
             ->sortBy(fn ($reservation) => [(int) $reservation->space?->sort_order, (int) $reservation->unit?->sort_order,
                 mb_strtolower((string) $reservation->member?->name), $reservation->id])->values();
 
-        // Renews today: the period (a paid renewal is not listed)
-        $renewsToday = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on === $day
-            && (!$reservation->renewedBy || $owes($reservation->renewedBy)))
+        // Renews today: every period renewing on D — not renewed, renewed and owing, renewed and paid ("✓ Renewed & paid", user 2026-11-01)
+        $renewsToday = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on === $day)
             ->sortBy(fn ($reservation) => [(int) $reservation->member_id, $reservation->id])->values();
 
         // Not renewed & Not paid: started by D and owing, or ended before D with no renewal
