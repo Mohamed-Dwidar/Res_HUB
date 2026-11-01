@@ -31,21 +31,7 @@
         'hint' => 'Off: no new contracts from it (its units keep it, switch it on again any time).'])
 </div>
 
-{{-- the chips stay in view while the long texts scroll --}}
-<div class="contract-placeholders">
-    <div class="contract-placeholders__head">Placeholders <span>click one to insert it where the cursor is in the text you used last · hover for what it is</span></div>
-    @foreach (config('contractmodule.placeholders') as $group => $items)
-        <div class="contract-placeholders__group">
-            <span class="contract-placeholders__label">{{ $group }}</span>
-            @foreach ($items as $name => $description)
-                <button type="button" class="message-placeholders__item" data-contract-placeholder="{{ $name }}" title="{{ $description }}">{{ '{' . $name . '}' }}</button>
-            @endforeach
-        </div>
-    @endforeach
-    @if (empty($sample))
-        <div class="mt-1 text-xs text-slate-500">No reservation yet: the preview shows the placeholders.</div>
-    @endif
-</div>
+@include('contractmodule::partials.placeholders')
 
 @foreach ([
     'Contract Text' => ['body_ar' => ['Arabic', 'rtl', true], 'body_en' => ['English', 'ltr', false]],

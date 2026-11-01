@@ -39,6 +39,13 @@
             'url' => route('employee.members.index'),
             'active' => request()->routeIs('employee.members.*'),
         ],
+        // ContractModule (Phase 2): the account's contracts (made from a reservation)
+        [
+            'title' => 'Contracts',
+            'icon' => 'file-text',
+            'url' => route('employee.contracts.index'),
+            'active' => request()->routeIs('employee.contracts.*'),
+        ],
         // My Shift after Members (user 2026-10-22)
         [
             'title' => 'My Shift',

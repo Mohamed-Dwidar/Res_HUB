@@ -71,3 +71,30 @@ table { width: 100%; border-collapse: collapse; }
 .contract-body table { width: 100%; border-collapse: collapse; margin: 8px 0; }
 .contract-body td, .contract-body th { border: 1px solid #94a3b8; padding: 4px 6px; vertical-align: top; }
 .contract-body th { background-color: #f1f5f9; font-weight: bold; }
+
+/* ===== Contract PDF (contractmodule::Contract.pdf, Phase 2): header / footer on every page, title, the three tables, signatures.
+   Arabic = mpdf right to left (SetDirectionality + dir="rtl"): the first column is on the right. ===== */
+.contract-pdf { font-size: 10.5pt; color: #1e293b; }
+.contract-pdf--rtl { direction: rtl; }
+.contract-head { border-bottom: 1px solid #cbd5e1; }
+.contract-head td { vertical-align: bottom; padding-bottom: 4px; font-size: 9pt; color: #475569; }
+.contract-head__logo { height: 34px; }
+.contract-head__lessor { font-size: 10pt; font-weight: bold; color: #1e293b; }
+.contract-head__no { text-align: right; }
+.contract-pdf--rtl .contract-head__no { text-align: left; }
+.contract-head__number { font-size: 11pt; font-weight: bold; color: #164e63; }
+.contract-foot { border-top: 1px solid #e2e8f0; }
+.contract-foot td { font-size: 8pt; color: #64748b; padding-top: 4px; }
+.contract-foot__initials { text-align: right; }
+.contract-pdf--rtl .contract-foot__initials { text-align: left; }
+.contract-title { font-size: 16pt; font-weight: bold; text-align: center; color: #164e63; margin: 4px 0 2px 0; }
+.contract-subtitle { font-size: 11pt; text-align: center; color: #334155; margin-bottom: 4px; }
+.contract-table { margin-top: 10px; border: 1px solid #94a3b8; }
+.contract-table td, .contract-table th { border: 1px solid #cbd5e1; padding: 4px 7px; font-size: 10pt; vertical-align: top; }
+.contract-table__head { background-color: #e2e8f0; font-weight: bold; text-align: center; }
+.contract-table__label { width: 30%; background-color: #f8fafc; font-weight: bold; color: #334155; }
+.contract-pdf .contract-body { margin-top: 14px; }
+.contract-signatures { margin-top: 26px; page-break-inside: avoid; }
+.contract-signatures th { width: 50%; padding: 6px; background-color: #f1f5f9; border: 1px solid #cbd5e1; font-size: 10.5pt; }
+.contract-signatures td { padding: 8px 7px; border: 1px solid #cbd5e1; font-size: 10pt; vertical-align: top; }
+.contract-signatures__line { height: 60px; }

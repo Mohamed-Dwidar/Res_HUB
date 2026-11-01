@@ -1,7 +1,8 @@
 # Contracts (ContractModule) — plan
 
 > Approved by the user 2026-10-31 (analysis + decisions below). Read before any contracts work.
-> Status: Phase 1 done + committed (2026-10-31). Phase 2 in progress. Phases 3–4 not started.
+> Status: Phase 1 done + committed (2026-10-31, `a0f65dc`). Phase 2 built (2026-10-31), migration `2026_10_31_100027` waiting for the
+> user's review, not committed. Phases 3–4 not started.
 
 ---
 
@@ -29,9 +30,9 @@
    it. When the chain goes past `ends_on` → "Renew contract" = a new `contracts` row, `kind = renewal`, `renewal_of` = the previous
    contract, printed with the template's renewal annex text. Another unit = a new contract. Each template has its own
    `default_term_months` (12 for monthly units; NULL = the reservation's own period, e.g. a yearly plan).
-2. **Permissions** — employees: create / edit drafts (not the body), issue, print, mark signed, upload the signed scan, delete
-   their own drafts. Owner only: Settings › Contracts, templates, unit assignment, editing a contract's body / special clauses,
-   end, cancel (with a reason), replace a signed scan.
+2. **Permissions** — employees: create / edit drafts **and their wording (changed 2026-10-31 by the user: edited in the Create Contract / Edit Draft page itself, a full page with the editors)**, issue,
+   print, mark signed, upload the signed scan, delete their own drafts. Owner only: Settings › Contracts, templates, unit
+   assignment, end, cancel (with a reason), replace a signed scan. Nobody edits an issued contract.
 3. **Customer fields** — members: `address`, `nationality`, `id_type` (national_id | passport) + the number in
    `national_number` (DOUBLE → VARCHAR(30), passports have letters); companies: `commercial_register`, `tax_number`, `address`,
    `representative_name`, `representative_title`, `representative_national_id`. To ISSUE: an individual needs the ID number; a
@@ -46,7 +47,7 @@
    allowlist mpdf renders well: `p, br, strong/b, em/i, u, ol, ul, li, h2–h4, table, thead, tbody, tr, td, th, span`; `style`
    only `text-align` / `direction` (+ the `dir` attribute; `colspan` / `rowspan` on cells); no scripts, no event handlers, no
    links, no images. The editor has the same allowlist (`valid_elements`), so what you see = what is saved. Templates are
-   written by the owner; a draft starts from its template's body and only the OWNER may edit that contract's body before issuing;
+   written by the owner; a draft starts from its template's body and the owner OR an employee may edit that contract's body before issuing (2026-10-31; the template itself stays owner-only);
    at issue the (edited) body is the snapshot. Placeholders `{member_name}` … inserted with chips (like the WhatsApp form),
    unknown ones refused on save. **No ready-made wording in the code** (user 2026-10-31: the "Start from" texts — the old DMS
    terms + annex — were removed): the owner writes every template in the editor. Clause numbering = written in the text (no
@@ -55,6 +56,18 @@
    `public/assets/fonts/Cairo/` (config/pdf.php `font_path`) → every PDF (receipt, statement, contracts) uses Cairo.
 7. **`subscription_types.is_contract`**: unrelated to this module (it only switches display formats + package hours). Its uses
    become `booking_mode = period`; the column is dropped in the last phase (own migration).
+
+## 1b. The contract's own data (user 2026-11-01)
+
+Every printed value is the CONTRACT's own (like the old DMS form): pre-filled from the reservation / member / company / Settings ›
+Contracts (a renewal: from the previous contract), edited freely per contract, stored on the contract only (columns `unit_number`,
+`contract_date`, `duration_text`, `term_amount` = the contract value, `currency`, `tenant_name`, `tenant_representative`,
+`tenant_company`, `tenant_title`, `tenant_national_id`, `tenant_mobile`, `tenant_email`, `unit_address`, `activity`,
+`deposit_amount`, `notes`). The PDF and the placeholders use them. Never written to the member / company, except "Also save to member
+/ company" (unticked: their EMPTY fields only). To issue: tenant name + national ID (individual) / company name + legal
+representative (company). Fixed links: reservation, member, unit, template. The draft page = three sections (بيانات العقد /
+معلومات المستأجر / معلومات الوحدة, Arabic labels) + the editors (no placeholder chips there). This replaces decision 3's "the draft
+saves the party fields back to the member / company".
 
 ## 2. Data model
 
@@ -133,8 +146,14 @@ signature block (two columns: name, title, signature, date; kept on one page). F
    `contract_template_unit`, member + company fields; Settings › Contracts; template CRUD with the editor, placeholders,
    preview, units (no "Start from": the owner writes the texts); unit form / view section; member / company fields in their forms + views; Cairo fonts; TinyMCE files;
    HTMLPurifier sanitizer.
-2. **Contracts**: `contracts` migration; draft from the reservation view (term, deposit, activity, party, missing fields saved
-   back; owner: body editor); issue (number + snapshot); view popup; PDF; Contracts list + sidebar (both areas).
+2. **Contracts** (built 2026-10-31): `contracts` migration; created BY HAND only — Create / Renew Contract in the reservation view's
+   Contract block and the reservations list row menu (only when the unit has a switched on template; a covering contract shows
+   "Covered by #N" + its buttons; a period after the last issued contract's end = Renew = a renewal annex); the draft PAGE (a full page; term
+   from the template, start → end follows the term, party individual | company, the party fields saved back to the member /
+   company, deposit, activity, notes + this contract's wording in the editors — owner and employees; template text = kept
+   linked); Issue (account + employees; the number under the settings row lock; snapshot); Upload Signed (account + employees on an
+   issued one; replacing the scan = the owner); delete a draft (owner any, employee own); PDF AR / EN (DRAFT / CANCELLED
+   watermark); Contracts list (Management / Daily). Not in Phase 2: End / Cancel (Phase 3), contract_events.
 3. **Lifecycle**: signed scan / mark signed, end, cancel (reason), `contract_events`, renewal annex, "Covered by" in the
    reservation view, "reservation changed after issue" warning.
 4. **Optional / cleanup**: Schedule badge, amount in Arabic words, `is_contract` → `booking_mode = period` + drop the column,

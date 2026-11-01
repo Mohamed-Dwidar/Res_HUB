@@ -3240,3 +3240,23 @@ td.renewal-row__action > .wa-btn {
 .contract-body th {
     background-color: rgb(241 245 249);
 }
+/* the draft form's head (kind, renewed contract, template, the reservation) and the reservation view's Contract block */
+.contract-draft-head {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.875rem;
+    background-color: rgb(248 250 252);
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+}
+.contract-block {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+}
+.contract-block__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}

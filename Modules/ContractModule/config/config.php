@@ -6,14 +6,19 @@ return [
     /*
      * The placeholders of a contract text, by group (docs/contracts-plan.md §3): {name} => what it is (the chip's tooltip).
      * A new one = here + ContractService::variables(). Values are HTML-escaped when they replace {name}.
+     * Since 2026-11-01 the contract's OWN fields (the draft page) give the tenant / unit / term / value ones (the template page's
+     * preview: the same defaults the draft page pre-fills).
      */
     'placeholders' => [
         'Contract' => [
             'contract_no' => 'Contract number',
-            'contract_date' => 'The date the contract is issued',
+            'contract_date' => 'The contract date (the contract\'s own, default: the day it is made)',
             'start_date' => 'The contract term starts',
             'end_date' => 'The contract term ends',
-            'term' => 'The term, e.g. 12 شهرًا / 12 months',
+            'term' => 'The contract duration as written on the contract, e.g. سنة ميلادية',
+            'unit_number' => 'The unit number as written on the contract',
+            'contract_value' => 'The contract value (default: the price for the term)',
+            'currency' => 'The currency of the value, e.g. جنيه مصري',
             'activity' => 'The tenant\'s activity in the unit (typed on the contract)',
             'deposit' => 'Security deposit (typed on the contract)',
             'previous_contract_no' => 'Renewal annex: the number of the contract it renews',
@@ -27,10 +32,17 @@ return [
             'lessor_representative' => 'Lessor legal representative',
             'lessor_representative_title' => 'The representative\'s title',
             'lessor_representative_national_id' => 'The representative\'s national ID',
-            'property_address' => 'The address of the property (Settings › Contracts)',
+            'property_address' => 'The unit address on the contract (default: Settings › Contracts)',
+            'unit_address' => 'The unit address on the contract (= {property_address})',
         ],
         'Tenant' => [
-            'tenant_name' => 'The company for a company contract, else the member',
+            'tenant_name' => 'The tenant\'s name on the contract (default: the member)',
+            'tenant_representative' => 'The tenant\'s legal representative',
+            'tenant_company' => 'The tenant\'s company name',
+            'tenant_title' => 'The representative\'s title (الصفة)',
+            'tenant_national_id' => 'The tenant\'s national ID / ID number',
+            'tenant_mobile' => 'The tenant\'s mobile',
+            'tenant_email' => 'The tenant\'s email',
             'member_name' => 'Member name',
             'member_phone' => 'Member phone',
             'member_email' => 'Member email',
@@ -73,4 +85,10 @@ return [
 
     // the term choices of a template (months); NULL = the reservation's own period
     'terms' => [1, 3, 6, 12, 24, 36],
+
+    // the default currency label of a new contract's value (editable per contract)
+    'currency' => 'جنيه مصري',
+
+    // the Contracts list "Ending soon" filter: issued / signed contracts ending in the next N days
+    'ending_days' => 30,
 ];

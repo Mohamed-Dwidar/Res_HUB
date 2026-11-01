@@ -1,7 +1,8 @@
 {{--
     Row actions as a "more" drop menu (template viper-users.html).
     @include('layoutmodule::partials.row-menu', [
-        'links' => [['label' => 'View', 'icon' => 'eye', 'url' => route(...), 'modal' => true], ...],   (modal: open it in the popup)
+        'links' => [['label' => 'View', 'icon' => 'eye', 'url' => route(...), 'modal' => true], ...],   (modal: open it in the popup;
+                    blank: open it in a new tab, e.g. a PDF — 2026-10-31)
         'actions' => [['view' => 'module::...delete-form', 'data' => ['model' => $model]], ...],   (rendered with 'menu' => true)
     ])
 --}}
@@ -14,7 +15,7 @@
         <div class="dropdown-menu js-menu absolute z-[9999]">
             <div data-tw-merge="" class="dropdown-content rounded-md border-transparent bg-white p-2 shadow-[0px_3px_10px_#00000017] dark:border-transparent dark:bg-darkmode-600 w-44">
                 @foreach ($links ?? [] as $link)
-                    <a href="{{ $link['url'] }}" @if (!empty($link['modal'])) data-modal @endif data-tw-dismiss="dropdown" class="{{ config('layoutmodule.menu.item') }}">
+                    <a href="{{ $link['url'] }}" @if (!empty($link['modal'])) data-modal @endif @if (!empty($link['blank'])) target="_blank" rel="noopener" @endif data-tw-dismiss="dropdown" class="{{ config('layoutmodule.menu.item') }}">
                         <i data-tw-merge="" data-lucide="{{ $link['icon'] }}" class="{{ config('layoutmodule.menu.icon') }}"></i>
                         {{ $link['label'] }}
                     </a>

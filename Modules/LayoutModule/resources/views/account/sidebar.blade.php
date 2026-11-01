@@ -68,6 +68,13 @@
             'url' => route('account.payment-exceptions.index'),
             'active' => request()->routeIs('account.payment-exceptions.*'),
         ],
+        // ContractModule (Phase 2): the contracts (made from a reservation); Settings › Contracts = the templates
+        [
+            'title' => 'Contracts',
+            'icon' => 'file-signature',
+            'url' => route('account.contracts.index'),
+            'active' => request()->routeIs('account.contracts.*'),
+        ],
         ...($withholdingOn ? [[
             'title' => 'Withholding Certificates',
             'icon' => 'file-badge',

@@ -982,6 +982,46 @@ function reservationEndFromPlan(form, planChanged) {
     endEl.value = ymd(end);
 }
 
+// Hourly types (2026-11-01): when the start (date or time) or the plan changes, the end keeps the CURRENT duration (end − start
+// before the change) and moves with the start; only a fresh new form whose end was never changed takes the plan's default
+// (reservationEndFromPlan(): start + 1 hour). A duration exists on edit / Renew / a Schedule slot (the end field's
+// data-keep-duration) or once the end was changed (data-duration-set). form._span = the start / end after the last change, as
+// UTC wall clock times (no daylight saving jump; midnight crossing = the end date moves too). Period / full day types: unchanged.
+function reservationHourly(form) {
+    var typeEl = formField(form, "subscription_type_id");
+    var type = typeEl && (typeEl.selectedOptions ? typeEl.selectedOptions[0] : typeEl);
+    var planEl = formField(form, "plan_id");
+    var plan = planEl && planEl.selectedOptions && planEl.selectedOptions[0];
+    return !!(type && type.dataset.bookingMode === "hourly" && plan && plan.dataset.timeBased === "1");
+}
+
+function reservationMoment(form, date, time) {
+    var d = formField(form, date), t = formField(form, time);
+    if (!d || !d.value || !t || !t.value) return null;
+    var p = d.value.split("-").map(Number), hm = t.value.split(":").map(Number);
+    return Date.UTC(p[0], p[1] - 1, p[2], hm[0], hm[1]);
+}
+
+function reservationSpanSave(form) {
+    form._span = { start: reservationMoment(form, "start_at", "start_time"), end: reservationMoment(form, "end_at", "end_time") };
+}
+
+// true = the duration rule handled the change (the end moved, or stays: a plan change / an end not after the start — the save
+// shows "The end must be after the start."); false = no duration yet → the plan's default
+function reservationKeepDuration(form, name) {
+    var endEl = formField(form, "end_at");
+    var endTime = formField(form, "end_time");
+    if (!endEl || !endTime || !(form.dataset.durationSet || endEl.hasAttribute("data-keep-duration"))) return false;
+    var span = form._span;
+    var start = reservationMoment(form, "start_at", "start_time");
+    if (name === "plan_id" || start === null || !span || span.start === null || span.end === null || span.end <= span.start) return true;
+    var end = new Date(start + (span.end - span.start));
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    endEl.value = end.getUTCFullYear() + "-" + pad(end.getUTCMonth() + 1) + "-" + pad(end.getUTCDate());
+    endTime.value = pad(end.getUTCHours()) + ":" + pad(end.getUTCMinutes());
+    return true;
+}
+
 // the repeat section is shown only when the subscription type allows it
 // ([data-type-allows="can-repeat"] + the option data-can-repeat); hidden = unchecked
 function reservationTypeOptions(form) {
@@ -1508,6 +1548,7 @@ function initForms(root) {
             reservationAutoSingle(form);
             reservationAvailability(form);
             reservationTax(form, false);
+            reservationSpanSave(form);
         }
         if (form.matches("[data-message-template-form]")) {
             // a message: the live preview, the units by space ("Start from" fills it only when chosen)
@@ -1555,9 +1596,12 @@ document.addEventListener("change", function (e) {
         if (name === "subscription_type_id") reservationTypeOptions(form);
         if (name === "start_at") reservationEndAfterStart(form);
         if (name === "plan_id") reservationTimeBased(form);
-        // the end follows the plan's lease period (an end typed by hand is kept until the plan changes)
-        if (name === "end_at" || name === "end_time") form.dataset.endTouched = "1";
-        if (["plan_id", "start_at", "start_time"].indexOf(name) >= 0) reservationEndFromPlan(form, name === "plan_id");
+        // the end follows the plan's lease period (an end typed by hand is kept until the plan changes); an hourly type keeps
+        // its current duration instead, once it has one (reservationKeepDuration())
+        if (name === "end_at" || name === "end_time") form.dataset.endTouched = form.dataset.durationSet = "1";
+        if (["plan_id", "start_at", "start_time"].indexOf(name) >= 0 && !(reservationHourly(form) && reservationKeepDuration(form, name))) {
+            reservationEndFromPlan(form, name === "plan_id");
+        }
         // the amount follows the plan (and the start / end of a time based plan)
         if (["plan_id", "start_at", "start_time", "end_at", "end_time"].indexOf(name) >= 0) reservationPlanAmount(form);
         // the live availability line (after the end was set from the plan above)
@@ -1566,6 +1610,8 @@ document.addEventListener("change", function (e) {
         if (["plan_id", "start_at", "start_time", "end_at", "end_time", "invoice_requested", "book_for", "package_id", "member_id"].indexOf(name) >= 0) {
             reservationTax(form, name === "plan_id");
         }
+        // the start / end as they are now: the duration of the next start change
+        reservationSpanSave(form);
     }
 });
 
@@ -2332,4 +2378,52 @@ document.addEventListener("click", function (e) {
         toggle.classList.toggle("is-open", !box.hidden);
         contractPreview(toggle.form, field);
     }
+});
+
+// A contract draft ([data-contract-form], ContractModule Phase 2): the end follows the start + term (start + N months − 1 day,
+// the server's ContractService::termEnd(); no term = the reservation's last day [data-reservation-end]); it can still be typed
+function contractTermEnd(form) {
+    var start = form.querySelector("[data-contract-term-start]");
+    var months = form.querySelector("[data-contract-term-months]");
+    var end = form.querySelector("[data-contract-term-end]");
+    if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start.value)) return;
+    var count = parseInt(months && months.value, 10);
+    contractTermDefaults(form, count);
+    if (!count) {
+        end.value = end.getAttribute("data-reservation-end") || end.value;
+        return;
+    }
+    var parts = start.value.split("-").map(Number);
+    // months added without overflow (31-01 + 1 month = 28/29-02), then one day back
+    var target = new Date(Date.UTC(parts[0], parts[1] - 1 + count, 1));
+    var lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+    target.setUTCDate(Math.min(parts[2], lastDay));
+    target.setUTCDate(target.getUTCDate() - 1);
+    end.value = target.toISOString().slice(0, 10);
+}
+
+// the duration in words + the contract value follow the term while not typed in (ContractService::term() / termAmount(): the
+// period price × months for a month plan, × months / 12 for a year plan)
+function contractTermDefaults(form, count) {
+    var duration = form.querySelector("[data-contract-duration]");
+    if (duration && !duration.dataset.touched && count) {
+        duration.value = count === 1 ? "شهر واحد" : count === 2 ? "شهران" : count <= 10 ? count + " أشهر" : count + " شهرًا";
+    }
+    var value = form.querySelector("[data-contract-value]");
+    if (value && !value.dataset.touched) {
+        var price = parseFloat(value.getAttribute("data-price")) || 0;
+        var lease = value.getAttribute("data-lease");
+        var amount = count && lease === "month" ? price * count : count && lease === "year" ? price * count / 12 : price;
+        value.value = (Math.round(amount * 100) / 100).toFixed(2);
+    }
+}
+
+document.addEventListener("change", function (e) {
+    var form = e.target.form;
+    if (!form || !form.matches("[data-contract-form]")) return;
+    if (e.target.matches("[data-contract-term-start], [data-contract-term-months]")) contractTermEnd(form);
+});
+
+document.addEventListener("input", function (e) {
+    if (e.target.matches && e.target.matches("[data-contract-duration], [data-contract-value]")) e.target.dataset.touched = "1";
 });
