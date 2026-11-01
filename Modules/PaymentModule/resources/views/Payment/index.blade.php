@@ -47,8 +47,10 @@
         @endif
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}"
             placeholder="{{ $type === 'in' ? 'No., reference, member name or phone' : 'No., reference, item, member name or phone' }}" autocomplete="off">
-        @include('layoutmodule::partials.date-range-filter', $area === 'employee' ? ['single' => true, 'default' => today()->toDateString()] : [])
-        {{-- ?member_id= (the Members list): this member only, chosen when the list opens; Clear / "All Members" = everyone --}}
+        {{-- employees: one day, except one member's payments (?member_id=: any dates, empty = all) --}}
+        @include('layoutmodule::partials.date-range-filter', $area === 'employee' && !$member ? ['single' => true, 'default' => today()->toDateString()] : [])
+        {{-- ?member_id= (the member view / Members list): this member only, chosen when the list opens; Clear / "All Members" = everyone
+             (employees: back to their own rows of today) --}}
         @if ($member)
             <select name="member_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Member" data-initial="{{ $member->id }}">
                 <option value="">All Members</option>

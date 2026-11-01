@@ -8,11 +8,9 @@
 @section('modal-size', 'lg')
 
 @section('actions')
-    {{-- the member's lists (as in the Members list row menu; Payments = the account only), in a new tab --}}
+    {{-- the member's lists (as in the Members list row menu), in a new tab; Payments = every cash in of the member (employees too) --}}
     <a href="{{ route($area . '.reservations.index', ['member_id' => $member->id]) }}" target="_blank" class="btn btn-secondary"><i data-lucide="calendar-check"></i> Reservations</a>
-    @if ($area === 'account')
-        <a href="{{ route('account.payments.index', ['type' => 'in', 'member_id' => $member->id]) }}" target="_blank" class="btn btn-secondary"><i data-lucide="wallet"></i> Payments</a>
-    @endif
+    <a href="{{ route($area . '.payments.index', ['type' => 'in', 'member_id' => $member->id]) }}" target="_blank" class="btn btn-secondary"><i data-lucide="wallet"></i> Payments</a>
     <a href="{{ route($area . '.members.edit', $member->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     {{-- delete: the account only (a member is deleted for good) --}}
     @if ($area === 'account')

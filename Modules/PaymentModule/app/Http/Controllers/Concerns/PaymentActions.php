@@ -64,6 +64,19 @@ trait PaymentActions
         return $this->area() === 'employee' ? Auth::id() : null;
     }
 
+    // the list's member (?member_id=, the member view / Members list "Payments"): that member's rows, whoever recorded them
+    private function memberFilter(array $filters): ?int
+    {
+        return (int) ($filters['member_id'] ?? 0) ?: null;
+    }
+
+    // whose rows the list shows: the employee's own, except for one member (every payment of the member, any date, like the
+    // member view's Cash In block, 2026-11-01); the account: all
+    private function listCollector(array $filters)
+    {
+        return $this->memberFilter($filters) ? null : $this->collectorId();
+    }
+
     // one payment: an employee opens their own, one of a reservation / package (its payments block) or of a member (the member
     // view's Cash In block, 2026-11-01); not a colleague's other income without a member
     private function findForViewer($id)
@@ -94,8 +107,8 @@ trait PaymentActions
             'expenseCategories' => $type === 'out' ? $this->expenseCategoryService->filterOptions($accountId, $activeOnly) : [],
             // the "Created By" filter (the account only): its logins, the account first
             'logins' => $this->collectorId() ? [] : app(\Modules\PaymentModule\app\Services\PaymentExceptionService::class)->users($accountId),
-            // ?member_id= (the Members list, the account only): that member's cash in, the All date tab
-            'member' => $type === 'in' && !$this->collectorId() && $request->filled('member_id')
+            // ?member_id= (the member view / Members list "Payments"): that member's cash in, the All date tab (employees too)
+            'member' => $type === 'in' && $request->filled('member_id')
                 ? \Modules\MemberModule\app\Models\Member::where('account_id', $accountId)->find((int) $request->input('member_id')) : null,
         ]);
     }
@@ -113,14 +126,15 @@ trait PaymentActions
     // the list filters of a request: search (number, reference, member) + for / method / dates (Payment::scopeFilter)
     private function listFilters(array $filters): array
     {
-        // employees: always ONE day (the date from; none / not a date = today), never a period or all their payments
-        if ($this->collectorId()) {
+        // employees: always ONE day (the date from; none / not a date = today), never a period or all their payments — except one
+        // member's payments (any dates, empty = all)
+        if ($this->collectorId() && !$this->memberFilter($filters)) {
             $day = (string) ($filters['date_from'] ?? '');
             $filters['date_from'] = $filters['date_to'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', $day) && strtotime($day) ? $day : today()->toDateString();
         }
 
         // direction=in: the Cash In tab (no refunds, they are Cash Out)
-        // member_id: the Members list's Payments (account); created_by: the account only (employees see their own rows anyway)
+        // member_id: the member's Payments (both areas); created_by: the account only (employees see their own rows anyway)
         return ['search' => trim((string) ($filters['search'] ?? ''))]
             + Arr::only($filters, array_merge(['for', 'method', 'date_from', 'date_to', 'direction', 'member_id'], $this->collectorId() ? [] : ['created_by']));
     }
@@ -145,7 +159,7 @@ trait PaymentActions
             ->with('creatable.userable')
             // the reservation's place + start (the For column)
             ->with(['payable' => fn ($morph) => $morph->morphWith([Reservation::class => ['space', 'unit.color', 'plan']])])
-            ->when($this->collectorId(), fn ($query, $userId) => $query->collectedBy($userId))
+            ->when($openShift ? $this->collectorId() : $this->listCollector($filters), fn ($query, $userId) => $query->collectedBy($userId))
             ->when($openShift, fn ($query) => $query->collectedBy(Auth::id())->where('shift_closing_id', 0));
         if ($id) {
             $query->whereKey($id);
@@ -175,7 +189,7 @@ trait PaymentActions
 
         // the summary line above the table, for the same rows (datatables.js json "html" → [data-html])
         $summaryQuery = $this->paymentService->listQuery($this->accountId(), $this->listFilters($filters))->tab($tab)
-            ->when($this->collectorId(), fn ($query, $userId) => $query->collectedBy($userId));
+            ->when($this->listCollector($filters), fn ($query, $userId) => $query->collectedBy($userId));
         $summary = $this->paymentService->listSummary($summaryQuery);
 
         return $table->with('html', ['payments-summary' => view('paymentmodule::Payment.partials.list-summary', compact('summary'))->render()]);
