@@ -876,7 +876,7 @@ function reservationManualVat(form, box, active) {
 function taxStartConfirm(input) {
     var form = input.form;
     if (form.dataset.confirmBase === undefined) form.dataset.confirmBase = form.dataset.confirm || "";
-    if (!input.value || input.value === input.defaultValue) {
+    if (!input.value || input.value === (input._initialValue !== undefined ? input._initialValue : input.defaultValue)) {
         form.dataset.confirm = form.dataset.confirmBase;
         return;
     }
@@ -1536,7 +1536,56 @@ window.addEventListener("load", function () {
     });
 });
 
+// Date fields (2026-11-01, user): every <input type="date"> shows dd/mm/yyyy (e.g. 01/11/2026) on every browser — flatpickr
+// altInput (a text field shown, the date field becomes hidden and keeps Y-m-d: sent to the server, read by the code). Setting its
+// value from the code (the end from the plan, the business date swap, the contract term end, a form reset) updates the shown text;
+// flatpickr sends "change" + "input" on the date field after a pick. Read only fields: shown, no calendar.
+function dateFields(root) {
+    if (!window.flatpickr) return;
+    var arabic = document.documentElement.lang === "ar" && flatpickr.l10ns.ar;
+    var native = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    root.querySelectorAll('input[type="date"]').forEach(function (input) {
+        if (input._flatpickr) return;
+        var readOnly = input.readOnly;
+        // the page's value (a hidden field's defaultValue follows its value: taxStartConfirm() compares with this one)
+        input._initialValue = input.value;
+        var picker = flatpickr(input, {
+            dateFormat: "Y-m-d",
+            altInput: true,
+            altFormat: "d/m/Y",
+            allowInput: !readOnly,
+            clickOpens: !readOnly,
+            minDate: input.min || null,
+            maxDate: input.max || null,
+            disableMobile: true,
+            locale: arabic || "default",
+        });
+        var alt = picker.altInput;
+        alt.readOnly = readOnly;
+        alt.placeholder = input.placeholder || "dd/mm/yyyy";
+        var syncing = false;
+        Object.defineProperty(input, "value", {
+            configurable: true,
+            get: function () { return native.get.call(input); },
+            set: function (value) {
+                native.set.call(input, value);
+                if (syncing) return;
+                syncing = true;
+                if (value) picker.setDate(value, false, "Y-m-d"); else picker.clear(false);
+                syncing = false;
+            },
+        });
+        // disabled / min / max changed by the code (data-disable-if, the availability rules)
+        new MutationObserver(function () {
+            alt.disabled = input.disabled;
+            picker.set("minDate", input.min || null);
+            picker.set("maxDate", input.max || null);
+        }).observe(input, { attributes: true, attributeFilter: ["disabled", "min", "max"] });
+    });
+}
+
 function initForms(root) {
+    dateFields(root);
     initSearchable(root);
     (root.tagName === "FORM" ? [root] : root.querySelectorAll("form")).forEach(function (form) {
         applyConditions(form);

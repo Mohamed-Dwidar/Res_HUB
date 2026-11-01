@@ -36,13 +36,7 @@
     @endif
 @endsection
 
-@push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/vendor/flatpickr/flatpickr.min.css') }}">
-@endpush
-@push('scripts')
-    <script src="{{ asset('assets/vendor/flatpickr/flatpickr.min.js') }}"></script>
-    <script src="{{ asset('assets/vendor/flatpickr/l10n/ar.min.js') }}"></script>
-@endpush
+{{-- flatpickr (the date field between ‹ ›) is loaded by the main layout --}}
 
 @section('content')
     <div class="today" data-today data-url="{{ route($area . '.schedule.sections', ['date' => $date->toDateString()]) }}">

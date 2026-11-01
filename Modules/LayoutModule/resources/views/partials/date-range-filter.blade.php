@@ -13,13 +13,4 @@
     <input type="text" class="{{ config('layoutmodule.form.input') }}" data-date-range-input placeholder="{{ $placeholder ?? 'All dates' }}" aria-label="Date" autocomplete="off" readonly>
     <button type="button" class="date-range-filter__clear" data-date-range-clear title="Clear the date" hidden><i data-lucide="x"></i></button>
 </div>
-
-@once
-    @push('styles')
-        <link rel="stylesheet" href="{{ asset('assets/vendor/flatpickr/flatpickr.min.css') }}">
-    @endpush
-    @push('scripts')
-        <script src="{{ asset('assets/vendor/flatpickr/flatpickr.min.js') }}"></script>
-        <script src="{{ asset('assets/vendor/flatpickr/l10n/ar.min.js') }}"></script>
-    @endpush
-@endonce
+{{-- flatpickr: loaded by the main layout (every page, 2026-11-01: every date field = dd/mm/yyyy) --}}

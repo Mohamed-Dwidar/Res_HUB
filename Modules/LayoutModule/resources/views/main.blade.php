@@ -13,6 +13,8 @@
     <link rel="stylesheet" href="{{ asset('assets/css/vendors/tom-select.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/themes/dagger.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
+    {{-- flatpickr (MIT, local): the list date filters, the Schedule date, every date field (dd/mm/yyyy, custom.js dateFields()) --}}
+    <link rel="stylesheet" href="{{ asset('assets/vendor/flatpickr/flatpickr.min.css') }}">
     {{-- page vendor styles (e.g. DataTables) before custom.css, so custom.css can override them --}}
     @stack('styles')
     <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}?v={{ filemtime(public_path('assets/css/custom.css')) }}">
@@ -74,6 +76,8 @@
     <script src="{{ asset('assets/js/vendors/modal.js') }}"></script>
     <script src="{{ asset('assets/js/vendors/tom-select.js') }}"></script>
     <script src="{{ asset('assets/js/components/base/lucide.js') }}"></script>
+    <script src="{{ asset('assets/vendor/flatpickr/flatpickr.min.js') }}"></script>
+    <script src="{{ asset('assets/vendor/flatpickr/l10n/ar.min.js') }}"></script>
     {{-- ?v= file time: the browser loads the new file after every change --}}
     <script src="{{ asset('assets/js/custom.js') }}?v={{ filemtime(public_path('assets/js/custom.js')) }}"></script>
     <script src="{{ asset('assets/js/themes/dagger.js') }}"></script>

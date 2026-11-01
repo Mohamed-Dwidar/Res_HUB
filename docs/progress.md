@@ -179,6 +179,7 @@
   - No CDN (2026-10-16): `public/assets/vendor/{jquery (3.7.1), datatables (2.1.8 js + css), sweetalert2 (11.26.25), flatpickr}` + licenses, loaded by `main` (SweetAlert2) and `partials/datatable-assets`; template Google fonts in `public/assets/fonts/google/{montserrat, poppins, publicsans}` (OFL) with app.css's 198 `@font-face` repeated (local URLs) at the top of `custom.css`
   - Drag and drop rows (2026-10-16): `partials/drag-handle` (grip) + a DataTables table with `data-reorder-url`; custom.js "Drag and drop rows" (native HTML drag and drop, handle only, drop on the upper / lower half = before / after) sends PATCH `{id, target_id, position}` (ids from `row-{id}`) then `dataTables.reload()` — the spaces list and the units of a space
   - Popup back history (2026-10-21): custom.js `appModal` keeps a stack of the popup pages opened from inside the popup (`[data-modal]` in `#app-modal` = push); a content Cancel (`[data-tw-dismiss="modal"]`, not `.app-modal__close`) goes back; a save without `modal` in a nested form (not DELETE) goes back too; `json.modal` cuts the history to that page; opening from the page / × = a new history
+  - Date fields (2026-11-01, user): every `<input type="date">` (forms, popups, filters) shows dd/mm/yyyy — custom.js `dateFields()` in `initForms()` (flatpickr altInput `d/m/Y`, the field turns hidden and keeps Y-m-d; setting `.value` from the code updates the shown text; read only = no calendar; disabled / min / max followed); flatpickr css / js / ar now loaded once by `main` (removed from `partials/date-range-filter` and `Schedule/index`); `taxStartConfirm()` compares with `_initialValue`
   - Row menu (2026-10-31): `partials/row-menu` links take an optional `blank` (opens in a new tab, `rel="noopener"`): contract PDFs
   - Initial tab (2026-10-19): `partials/filter-tabs` optional `initial` → `data-initial-tab` on that tab button, datatables.js chooses it before the first load (Clear = the default tab); the reservations list from the Members count
   - List filter options (2026-10-14): `partials/filter-options` (`$options` = a service `filterOptions()` `[id => ['name', 'active']]`, inactive = `.option-inactive` + "(Inactive)", optional `prefix`)
@@ -389,6 +390,12 @@
 
 ## Session log
 
+### 2026-11-01 — Date fields dd/mm/yyyy; Renews today lists paid renewals; employees' member Payments; reservation view plan / people
+- **Changed:** custom.js `dateFields()` (+ `taxStartConfirm()`), `main` (flatpickr for every page), `partials/date-range-filter` + `Schedule/index` (no own flatpickr tags); `ScheduleService::periodGroups()` (Renews today keeps "✓ Renewed & paid"); `PaymentActions` (`memberFilter()` / `listCollector()`: an employee's list with a member = all its cash in, any date), `Payment/index`, MemberModule `Account/show` + `partials/row-actions` (Payments for employees); `Reservation/show` (plan under the place, people under the period)
+- **Why:** user
+- **Affects:** every date field, the Schedule period section, the employees' Payments page with `member_id`, the reservation view
+- **Commit:** none yet
+
 ### 2026-11-01 — Member page Cash In, employee edits of own open-shift rows, Renew → new period, member name links
 - **Changed:** `PaymentService` (`editError` refunds, `update` + `editTarget` "For", snapshot, `memberSummary`), `PaymentUpdateRequest` ("For"), `PaymentActions` (edit data, `findForViewer`), `Payment/{edit, partials/{for-fields (new), form, member-payments (new), payment-summary, payable-details}}`, `ExpenseService` (`canEdit` / `editError`, update), `ExpenseActions` (+ edit / update), `ExpenseAccountModuleController`, `ExpenseRequest`, routes, `Expense/{edit, show, partials/{form, row-actions}}`, `PaymentExceptionService::changedFields()` (Member), MemberModule `Account/show` + `partials/member-link` (new), `Reservation/show`, `ReservationActions::store()`, custom.css `.member-link`, CLAUDE.md shift line
 - **Why:** user
@@ -443,8 +450,3 @@
 - **Affects:** WhatsApp icon everywhere (only units with messages), Settings › WhatsApp Messages, the unit form / view
 - **Commit:** see suggested commit (user commits after testing)
 
-### 2026-10-29 — WhatsApp placement + Schedule buttons on one line
-- **Changed:** `Message/partials/button` (`$menu` = a row menu item), `Reservation/partials/row-actions` (WhatsApp action) + `ReservationActions::table()` (passes `messageFor` / `messageContext` to the menu, not the Member column), `Schedule/partials/{renewal-row, full-day, hourly, period}` (icon after the last button; Action header right), `Message/show` (Back) + custom.js `[data-message-back]`, custom.css (`.wa-menu-item*`, `.schedule-row-end`, one-line right-aligned Action cell)
-- **Why:** user
-- **Affects:** Schedule rows, reservations list row menu, WhatsApp popup
-- **Commit:** together with the MessagingModule commit (user commits after testing)
