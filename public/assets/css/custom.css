@@ -1020,6 +1020,12 @@ div.dt-container div.dt-processing > div:last-child {
     gap: 1rem 1.5rem;
 }
 
+/* "Total (incl. taxes)" of a reservation with an invoice: what the customer owes, larger than the other amounts */
+.amount-lines .amount-total {
+    font-size: 1.125rem;
+    font-weight: 700;
+}
+
 .account-logo {
     width: 5rem;
     height: 5rem;
@@ -1369,6 +1375,12 @@ tr.row-removing {
 
 .tax-breakdown b {
     color: rgb(30 41 59);
+    font-weight: 500;
+}
+
+/* the Total of the breakdown (what the customer owes, 2026-11-01) */
+.tax-breakdown b.tax-breakdown__total {
+    font-weight: 700;
 }
 
 .tax-warning {

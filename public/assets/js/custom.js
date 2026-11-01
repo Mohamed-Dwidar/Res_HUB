@@ -802,11 +802,12 @@ function reservationTax(form, planChanged) {
     var owed = price - discount;
 
     out.innerHTML = "";
-    var line = function (label, value) {
+    var line = function (label, value, total) {
         var span = document.createElement("span");
         span.textContent = label + " ";
         var b = document.createElement("b");
         b.textContent = value;
+        if (total) b.className = "tax-breakdown__total";
         span.appendChild(b);
         out.appendChild(span);
         out.appendChild(document.createTextNode("  ·  "));
@@ -824,7 +825,7 @@ function reservationTax(form, planChanged) {
         if (rule.table) line("Table tax " + rule.table / 100 + "%", moneyText(result.table));
         line(rule.vat ? "VAT " + rule.vat / 100 + "%" : "VAT", rule.vat ? moneyText(result.vat) : "exempt");
         if (result.extra) line("Extra discount", moneyText(result.extra));
-        line("Total", moneyText(result.total));
+        line("Total", moneyText(result.total), true);
         out.lastChild.remove();
         out.appendChild(document.createTextNode(rule.inclusive ? " (price includes tax)" : " (taxes added to the price)"));
     }

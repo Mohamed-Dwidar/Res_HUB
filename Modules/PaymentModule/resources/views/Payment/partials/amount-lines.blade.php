@@ -12,13 +12,15 @@
     $discount = round($price - $net, 2);
     $percentage = rtrim(rtrim(number_format((float) $payable->discount_percentage, 2), '0'), '.');
     $extras = method_exists($payable, 'extrasTotal') ? $payable->extrasTotal() : 0;
+    // with taxes (2026-11-01, user): "Net (after discount)" + a larger bold "Total (incl. taxes)" = what the customer owes
+    $taxed = $kind === 'reservation' && $payable->invoice_requested && $payable->isTaxed();
 @endphp
 <dl class="detail-list amount-lines">
     <div><dt>Amount</dt><dd>{{ number_format($price, 2) }}</dd></div>
     @if ($discount > 0)
         <div><dt>Discount</dt><dd>{{ number_format($discount, 2) }} ({{ $percentage }}%)</dd></div>
     @endif
-    <div><dt>Net Amount</dt><dd class="font-bold">{{ number_format($net, 2) }}
+    <div><dt>{{ $taxed ? 'Net (after discount)' : 'Net Amount' }}</dt><dd class="font-bold">{{ number_format($net, 2) }}
         @if ($extras != 0)
             <span class="block text-xs font-normal text-slate-500">+ extras {{ number_format($extras, 2) }} = due {{ number_format($payable->payableAmount(), 2) }}</span>
         @endif
@@ -40,7 +42,7 @@
             @if ((float) $payable->tax_extra_discount != 0)
                 <div><dt>Extra Discount</dt><dd>{{ number_format((float) $payable->tax_extra_discount, 2) }}</dd></div>
             @endif
-            <div><dt>Total</dt><dd class="font-bold">{{ number_format((float) $payable->tax_total, 2) }}</dd></div>
+            <div><dt>Total (incl. taxes)</dt><dd class="amount-total">{{ number_format((float) $payable->tax_total, 2) }}</dd></div>
         @endif
     </dl>
 @endif
