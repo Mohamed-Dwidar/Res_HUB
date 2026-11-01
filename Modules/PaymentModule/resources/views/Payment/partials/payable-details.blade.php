@@ -8,7 +8,7 @@
 @endphp
 <div class="form-section">Cash In For</div>
 <dl class="detail-list">
-    <div><dt>Member</dt><dd>{{ $member?->name ?? '-' }} @if ($member?->phone)<span class="text-xs text-slate-500">{{ $member->phone }}</span>@endif</dd></div>
+    <div><dt>Member</dt><dd>@include('membermodule::partials.member-link', ['member' => $member]) @if ($member?->phone)<span class="text-xs text-slate-500">{{ $member->phone }}</span>@endif</dd></div>
     @if ($kind === 'reservation')
         <div><dt>Reservation</dt><dd>#{{ $payable->id }} · {{ $payable->subscriptionType?->name ?? '-' }}</dd></div>
         <div><dt>Space &rsaquo; Unit</dt><dd>{{ $payable->space?->name ?? '-' }} &rsaquo; {{ $payable->unit?->name ?? '-' }}</dd></div>

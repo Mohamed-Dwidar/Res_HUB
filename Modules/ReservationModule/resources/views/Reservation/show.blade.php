@@ -5,7 +5,7 @@
     {{-- the member (name, phone under it) + the package badge (opens the package) --}}
     <span class="reservation-title">
         <div>
-            <div class="text-lg font-medium">{{ $reservation->member?->name ?? '-' }}</div>
+            <div class="text-lg font-medium">@include('membermodule::partials.member-link', ['member' => $reservation->member])</div>
             @if ($reservation->member?->phone)
                 <div class="text-xs text-slate-500">{{ $reservation->member->phone }}</div>
             @endif

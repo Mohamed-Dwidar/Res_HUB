@@ -2826,6 +2826,16 @@ button.today-summary__item:hover,
     text-decoration: underline;
 }
 
+/* a member's name opening the member popup (membermodule::partials.member-link: reservation view, Cash In add / edit) */
+.member-link {
+    color: inherit;
+}
+
+.member-link:hover {
+    color: rgb(var(--color-primary));
+    text-decoration: underline;
+}
+
 /* ===== WhatsApp messages (MessagingModule, 2026-10-29) ===== */
 /* the icon of a row / the reservation view (Message/partials/button): grey = the suggested message not sent yet, green + ✓ = sent,
    faded = the phone can't be used (the reason in its tooltip) */
