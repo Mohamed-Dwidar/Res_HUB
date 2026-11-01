@@ -33,13 +33,14 @@ class SubscriptionTypeService
         return $this->subscriptionTypeRepository->forAccount($accountId)->orderBy('name')->pluck('name', 'id')->all();
     }
 
-    // for the reservation form: [id => ['name', 'data' => ['can-repeat' => 0|1, 'auto-renew' => 0|1]]]
+    // for the reservation form: [id => ['name', 'data' => ['can-repeat' => 0|1, 'auto-renew' => 0|1, 'booking-mode' => hourly|full_day|period]]]
+    // (booking-mode: custom.js keeps an hourly reservation's duration when its start moves, 2026-11-01)
     public function reservationOptions($accountId): array
     {
         return $this->subscriptionTypeRepository->forAccount($accountId)->orderBy('name')->get()
             ->mapWithKeys(fn ($type) => [$type->id => [
                 'name' => $type->name,
-                'data' => ['can-repeat' => (int) $type->can_repeat, 'auto-renew' => (int) $type->auto_renew],
+                'data' => ['can-repeat' => (int) $type->can_repeat, 'auto-renew' => (int) $type->auto_renew, 'booking-mode' => (string) $type->booking_mode],
             ]])->all();
     }
 

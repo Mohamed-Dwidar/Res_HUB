@@ -96,6 +96,9 @@
     {{-- the Cash In block without its Due / Paid / Remaining (shown above), + the Add Cash In fields (Pay / "+ Cash In") --}}
     @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $reservation, 'kind' => 'reservation', 'summary' => false, 'methods' => $methods])
 
+    {{-- ContractModule (Phase 2): the contract covering this period, or Create / Renew Contract (only when its unit has a template on) --}}
+    @include('contractmodule::Contract.partials.reservation-block')
+
     <div class="form-section">&nbsp;</div>
 
     <dl class="detail-list">

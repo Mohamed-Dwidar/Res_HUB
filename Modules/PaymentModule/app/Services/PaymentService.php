@@ -185,9 +185,8 @@ class PaymentService
         $paidAt = $this->recordDate($accountId, $data['paid_at'] ?? null, $creator);
 
         return DB::transaction(function () use ($accountId, $data, $creator, $type, $payable, $amount, $paidAt) {
-            // the number first: its lock (nextNumber()) keeps two saves of the same reference apart
+            // Reference no.: optional on a cash in, duplicates allowed (2026-11-01, user: one transfer may pay several reservations)
             $number = $this->nextNumber($accountId);
-            $this->assertReference($accountId, $type === 'payment' ? (int) $data['payment_method_id'] : 0, $data['reference'] ?? null);
             // a reservation: never more than what it still owes (cash in or withholding); a package may be paid
             // beyond its due (the rest = the member's credit, user 2026-10-21)
             if ($payable instanceof Reservation) {
@@ -275,10 +274,12 @@ class PaymentService
             $this->assertCategory($accountId, $data['income_category_id'] ?? 0);
         }
         $paidAt = Carbon::parse($data['paid_at'] ?? $payment->paid_at)->startOfDay();
-        // Reference no.: checked when the method or the reference changes (old rows without one stay as they are)
+        // Reference no.: a refund's is checked when the method or the reference changes (old rows without one stay as they are);
+        // a cash in's is optional and may repeat (2026-11-01)
         $methodId = $payment->type === 'withholding' ? 0 : (int) $data['payment_method_id'];
         $reference = trim((string) ($data['reference'] ?? ''));
-        if ($methodId !== (int) $payment->payment_method_id || ($reference !== '' && $reference !== (string) $payment->reference)) {
+        if ($payment->type === 'refund'
+            && ($methodId !== (int) $payment->payment_method_id || ($reference !== '' && $reference !== (string) $payment->reference))) {
             $this->assertReference($accountId, $methodId, $reference, $payment->getKey());
         }
         $closing = $this->closedShiftOf($payment);
@@ -525,8 +526,9 @@ class PaymentService
     }
 
     /**
-     * Reference no. (2026-10-27): a method with "needs reference" (every method but cash) → required, and unique per account +
-     * method among the payments not deleted (cash in, refunds); $ignoreId = the payment being edited. Throws under "reference".
+     * Reference no. of a REFUND (2026-10-27; cash ins not checked since 2026-11-01): a method with "needs reference" (every
+     * method but cash) → required, and unique per account + method among the payments not deleted (cash in references included);
+     * $ignoreId = the payment being edited. Throws under "reference".
      */
     public function assertReference($accountId, int $methodId, ?string $reference, $ignoreId = null): void
     {

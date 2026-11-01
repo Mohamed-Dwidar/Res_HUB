@@ -53,6 +53,9 @@
     $bookFor = old('book_for', $reservation?->package_id ? 'package' : 'member');
     // the anchor day of the Renew / edit form (custom.js reservationEndFromPlan(): a month plan ends by it; new = the start day)
     $anchorDay = ($renewing || $reservation?->exists) && $reservation->subscription_day ? $reservation->subscription_day : null;
+    // an hourly reservation keeps its duration when the start / plan changes (custom.js reservationKeepDuration(), 2026-11-01):
+    // edit, Renew and a Schedule slot (?start=) have one from the start; a fresh new form once its end is changed
+    $keepDuration = $reservation?->exists || $renewing || ($prefilled && request()->filled('start'));
 @endphp
 
 @if ($renewing)
@@ -115,7 +118,7 @@
 {{-- every active space / unit / plan of the account by type (custom.js placeOptions()) --}}
 <script type="application/json" data-place-tree>@json($placeTree ?? ['spaces' => [], 'units' => [], 'plans' => []])</script>
 @if ($fixedType)
-    <input type="hidden" name="subscription_type_id" value="{{ $reservation->subscription_type_id }}" data-can-repeat="{{ $fixedType['data']['can-repeat'] }}">
+    <input type="hidden" name="subscription_type_id" value="{{ $reservation->subscription_type_id }}" data-can-repeat="{{ $fixedType['data']['can-repeat'] }}" data-booking-mode="{{ $fixedType['data']['booking-mode'] }}">
 @endif
 @unless ($renewing || $fixedType)
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -163,7 +166,7 @@
         {{-- always required ("The reservation continues" removed 2026-10-15: a subscription is renewed by a new period, renewal_of) --}}
         @include('layoutmodule::partials.field', ['name' => 'end_at', 'label' => 'End Date', 'type' => 'date', 'required' => true,
             'value' => old('end_at', $endAt),
-            'attrs' => 'data-default-from="start_at"' . ($anchorDay ? ' data-anchor="' . $anchorDay . '"' : '')
+            'attrs' => 'data-default-from="start_at"' . ($anchorDay ? ' data-anchor="' . $anchorDay . '"' : '') . ($keepDuration ? ' data-keep-duration' : '')
                 . ($nightDates ? $nightDates . ' data-real-date="' . $endDefault->format('Y-m-d') . '"' : '')])
         <div data-time-fields>
             @include('layoutmodule::partials.field', ['name' => 'end_time', 'label' => 'End Time', 'type' => 'time', 'required' => true, 'value' => $endTime])

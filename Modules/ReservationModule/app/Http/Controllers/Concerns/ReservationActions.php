@@ -328,8 +328,11 @@ trait ReservationActions
             'message' => $repeats ? 'The reservation has been added with ' . $repeats . ' repeated reservation(s).' : 'The reservation has been added successfully.',
             'reload' => true,
             'redirect' => $this->route('show', $reservation->id),
-            // the popup goes on to the WhatsApp message (the unit's "New booking" message; MessagingModule, null = none / no usable number)
-            'modal' => $reservation->renewal_of ? null : app(MessagingService::class)->popupUrl($reservation, 'new_booking'),
+            // the popup goes on to the WhatsApp message (the unit's "New booking" message; MessagingModule, null = none / no usable number);
+            // a renewal → the NEW period's view (without it a Renew opened from the old period's view went back to the old one)
+            'modal' => $reservation->renewal_of
+                ? $this->route('show', $reservation->id)
+                : app(MessagingService::class)->popupUrl($reservation, 'new_booking'),
         ]);
     }
 

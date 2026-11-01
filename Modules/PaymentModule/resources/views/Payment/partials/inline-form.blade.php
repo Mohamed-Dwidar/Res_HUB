@@ -37,7 +37,7 @@
                 'options' => ['' => '- Select -'] + $methods,
                 'hint' => empty($methods) ? 'No payment methods yet, add them from Settings > Payment Methods.' : null])
         </div>
-        @include('paymentmodule::Payment.partials.reference-field')
+        @include('paymentmodule::Payment.partials.reference-field', ['optional' => true])
         @include('layoutmodule::partials.field', ['name' => 'notes', 'label' => 'Notes'])
     </div>
 

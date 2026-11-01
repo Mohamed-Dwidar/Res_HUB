@@ -78,7 +78,7 @@
             'options' => ['' => '- Select -'] + $methods, 'value' => $payment->payment_method_id ?: null,
             'hint' => empty($methods) ? 'No payment methods yet, add them from Settings > Payment Methods.' : null])
     </div>
-    @include('paymentmodule::Payment.partials.reference-field', ['value' => $payment->reference])
+    @include('paymentmodule::Payment.partials.reference-field', ['value' => $payment->reference, 'optional' => true])
 </div>
 
 <div class="mt-5">
