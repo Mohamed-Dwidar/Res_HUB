@@ -6,7 +6,9 @@
 @endsection
 
 @section('actions')
-    <a href="{{ route($area . '.reservations.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Reservation</a>
+    @can('reservations.create')
+        <a href="{{ route($area . '.reservations.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Reservation</a>
+    @endcan
 @endsection
 
 @section('content')

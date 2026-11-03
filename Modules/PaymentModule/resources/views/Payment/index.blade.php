@@ -11,7 +11,9 @@
 
 @section('actions')
     @if ($area === 'employee')
-        <a href="{{ route('employee.shift.index') }}" class="btn btn-secondary"><i data-lucide="lock"></i> My Shift</a>
+        @can('shift.has')
+            <a href="{{ route('employee.shift.index') }}" class="btn btn-secondary"><i data-lucide="lock"></i> My Shift</a>
+        @endcan
     @else
         <a href="{{ route('account.shift.index') }}" class="btn btn-secondary"><i data-lucide="lock"></i> My Shift</a>
         <a href="{{ route('account.daily-summary.index') }}" class="btn btn-secondary"><i data-lucide="calendar-days"></i> Daily Summary</a>
@@ -19,8 +21,12 @@
     @if ($area === 'account' && $withholdingOn)
         <a href="{{ route('account.withholding-certificates.index') }}" class="btn btn-secondary"><i data-lucide="file-badge"></i> Withholding Certificates</a>
     @endif
-    <a href="{{ route($area . '.payments.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Cash In</a>
-    <a href="{{ route($area . '.expenses.create') }}" data-modal class="btn btn-danger"><i data-lucide="plus"></i> Cash Out</a>
+    @can('payments.create')
+        <a href="{{ route($area . '.payments.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Cash In</a>
+    @endcan
+    @can('expenses.create')
+        <a href="{{ route($area . '.expenses.create') }}" data-modal class="btn btn-danger"><i data-lucide="plus"></i> Cash Out</a>
+    @endcan
 @endsection
 
 @section('content')
@@ -34,21 +40,22 @@
         - Cash Out: expenses + refunds: search | date | Category (+ Refunds) | Method | Clear (cash-table).
     --}}
     <nav class="page-tabs">
-        @foreach (\Modules\PaymentModule\app\Services\CashListService::TYPES as $value => $label)
+        @foreach ($types as $value => $label)
             <a href="{{ route($area . '.payments.index', $value === 'all' ? [] : ['type' => $value]) }}" @class(['active' => $type === $value])>{{ $label }}</a>
         @endforeach
     </nav>
 
     <form id="payments-filters" class="filter-bar">
-        {{-- employees: no tabs, the date field only (one day, today by default, × / Clear = today) --}}
-        @if ($area === 'account')
+        {{-- any dates (the owner, payments / expenses .view_all / .date_range: PaymentModule CashScope, R1): the date tabs + a range;
+             else no tabs, the date field only (one day, today by default, × / Clear = today) --}}
+        @if ($canRange)
             {{-- opened from the Members list (?member_id=): the All tab --}}
             @include('layoutmodule::partials.filter-tabs', ['tabs' => \Modules\PaymentModule\app\Models\Payment::TABS, 'default' => 'today', 'initial' => $member ? 'all' : null, 'dates' => \Modules\PaymentModule\app\Models\Payment::tabDates()])
         @endif
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}"
             placeholder="{{ $type === 'in' ? 'No., reference, member name or phone' : 'No., reference, item, member name or phone' }}" autocomplete="off">
-        {{-- employees: one day, except one member's payments (?member_id=: any dates, empty = all) --}}
-        @include('layoutmodule::partials.date-range-filter', $area === 'employee' && !$member ? ['single' => true, 'default' => today()->toDateString()] : [])
+        {{-- one day without any-dates, except one member's payments (?member_id=: any dates, empty = all) --}}
+        @include('layoutmodule::partials.date-range-filter', !$canRange && !$member ? ['single' => true, 'default' => today()->toDateString()] : [])
         {{-- ?member_id= (the member view / Members list): this member only, chosen when the list opens; Clear / "All Members" = everyone
              (employees: back to their own rows of today) --}}
         @if ($member)
@@ -96,10 +103,10 @@
     {{-- employees see only their own rows: no Created By / By --}}
     @if ($type === 'in')
         <div class="list-summary" data-html="payments-summary"></div>
-        @include('paymentmodule::Payment.partials.list-table', ['filters' => '#payments-filters', 'showBy' => $area === 'account', 'dataParams' => ['direction' => 'in']])
+        @include('paymentmodule::Payment.partials.list-table', ['filters' => '#payments-filters', 'showBy' => $seesOthers, 'dataParams' => ['direction' => 'in']])
     @else
         <div class="list-summary" data-html="cash-summary"></div>
-        @include('paymentmodule::Payment.partials.cash-table', ['filters' => '#payments-filters', 'showBy' => $area === 'account', 'direction' => $type])
+        @include('paymentmodule::Payment.partials.cash-table', ['filters' => '#payments-filters', 'showBy' => $seesOthers, 'direction' => $type])
     @endif
 @endsection
 

@@ -23,4 +23,8 @@ interface Userable
 
     // The account whose data he works on (the account itself, or the account of an employee).
     public function ownerAccountId(): int;
+
+    // His area: the route name prefix of his pages and the area the shared views render for (account | employee | accountant).
+    // Views read it from the logged in user, not from the route (docs/accountant-plan.md §1.3).
+    public function area(): string;
 }

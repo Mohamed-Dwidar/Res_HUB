@@ -35,6 +35,7 @@
                     <th data-data="name_html" data-name="name">Employee</th>
                     <th data-data="phone" data-name="phone" data-class="whitespace-nowrap">Phone</th>
                     <th data-data="position">Position</th>
+                    <th data-data="role">Role</th>
                     <th data-data="shift">Shift</th>
                     <th data-data="join_date" data-name="join_date" data-class="whitespace-nowrap">Join Date</th>
                     <th data-data="status">Status</th>

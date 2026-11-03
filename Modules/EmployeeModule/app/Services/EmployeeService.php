@@ -102,6 +102,7 @@ class EmployeeService
             // the columns are not nullable: 0 = none
             'position_id' => $data['position_id'] ?? 0,
             'shift_id' => $data['shift_id'] ?? 0,
+            'role_id' => $data['role_id'] ?? 0,
             'phone' => $data['phone'],
             'another_phone' => $data['another_phone'] ?? null,
             'gender' => $data['gender'],

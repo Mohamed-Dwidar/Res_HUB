@@ -5,12 +5,14 @@ namespace Modules\PaymentModule\app\Http\Controllers\Concerns;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\PaymentModule\app\Http\Requests\PaymentRefundRequest;
 use Modules\PaymentModule\app\Http\Requests\PaymentRequest;
 use Modules\PaymentModule\app\Http\Requests\PaymentUpdateRequest;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Services\CashListService;
+use Modules\PaymentModule\app\Services\CashScope;
 use Modules\PaymentModule\app\Services\ExpenseCategoryService;
 use Modules\PaymentModule\app\Services\IncomeCategoryService;
 use Modules\PaymentModule\app\Services\PaymentMethodService;
@@ -58,10 +60,17 @@ trait PaymentActions
         return Auth::user()->userable->ownerAccountId();
     }
 
-    // the employee: only their own payments in the list (null = the account: all)
+    // whose cash in the lists show (CashScope, docs/roles-plan.md R1): null = everyone (the owner, payments.view_all), else
+    // the logged in login's own
     private function collectorId()
     {
-        return $this->area() === 'employee' ? Auth::id() : null;
+        return app(CashScope::class)->paymentsCollector();
+    }
+
+    // the list may cover any dates (owner, payments.view_all / date_range); false = one day (as before roles)
+    private function canRange(string $type = 'in'): bool
+    {
+        return app(CashScope::class)->rangeFor($type);
     }
 
     // the list's member (?member_id=, the member view / Members list "Payments"): that member's rows, whoever recorded them
@@ -96,27 +105,35 @@ trait PaymentActions
     public function index(Request $request)
     {
         $accountId = $this->accountId();
-        $type = isset(CashListService::TYPES[$request->input('type')]) ? $request->input('type') : 'all';
+        // R0 (docs/roles-plan.md): the All / Cash Out tabs show cash out too → only with expenses.view (else Cash In only)
+        $types = Gate::allows('expenses.view') ? CashListService::TYPES : array_intersect_key(CashListService::TYPES, ['in' => true]);
+        $type = isset($types[$request->input('type')]) ? $request->input('type') : array_key_first($types);
         $activeOnly = $this->area() === 'employee'; // employees: only the active methods / categories
+        $scope = app(CashScope::class);
         return view('paymentmodule::Payment.index', [
             'type' => $type,
+            // R1: date tabs + a range (else one day), the By column + Created By filter (rows of other logins)
+            'canRange' => $scope->rangeFor($type),
+            'seesOthers' => $scope->seesOthers($type),
+            'types' => $types,
             'methods' => $this->methodService->filterOptions($accountId, $activeOnly),
             // Cash In: the "For" drop menu: Reservations, Packages, then the "Other income" group (each category)
             'categories' => $this->categoryService->filterOptions($accountId, $activeOnly),
             // Cash Out: the category filter (+ Refunds)
             'expenseCategories' => $type === 'out' ? $this->expenseCategoryService->filterOptions($accountId, $activeOnly) : [],
             // the "Created By" filter (the account only): its logins, the account first
-            'logins' => $this->collectorId() ? [] : app(\Modules\PaymentModule\app\Services\PaymentExceptionService::class)->users($accountId),
+            'logins' => $scope->seesOthers($type) ? app(\Modules\PaymentModule\app\Services\PaymentExceptionService::class)->users($accountId) : [],
             // ?member_id= (the member view / Members list "Payments"): that member's cash in, the All date tab (employees too)
             'member' => $type === 'in' && $request->filled('member_id')
                 ? \Modules\MemberModule\app\Models\Member::where('account_id', $accountId)->find((int) $request->input('member_id')) : null,
         ]);
     }
 
-    // the list tab: today (default, also '') | month | all (on the payment date); employees have no tabs (one day: listFilters())
-    private function tab(array $filters): string
+    // the list tab: today (default, also '') | month | all (on the payment date); a login limited to one day has no tabs
+    // (listFilters()); $range = CashScope (cash in: payments; All / Cash Out: payments AND expenses)
+    private function tab(array $filters, bool $range): string
     {
-        if ($this->collectorId()) {
+        if (!$range) {
             return 'all';
         }
         $tab = (string) ($filters['tab'] ?? '');
@@ -124,19 +141,19 @@ trait PaymentActions
     }
 
     // the list filters of a request: search (number, reference, member) + for / method / dates (Payment::scopeFilter)
-    private function listFilters(array $filters): array
+    private function listFilters(array $filters, bool $range, bool $seesOthers): array
     {
-        // employees: always ONE day (the date from; none / not a date = today), never a period or all their payments — except one
-        // member's payments (any dates, empty = all)
-        if ($this->collectorId() && !$this->memberFilter($filters)) {
+        // a login without any-dates (CashScope): always ONE day (the date from; none / not a date = today), never a period —
+        // except one member's payments (any dates, empty = all)
+        if (!$range && !$this->memberFilter($filters)) {
             $day = (string) ($filters['date_from'] ?? '');
             $filters['date_from'] = $filters['date_to'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', $day) && strtotime($day) ? $day : today()->toDateString();
         }
 
         // direction=in: the Cash In tab (no refunds, they are Cash Out)
-        // member_id: the member's Payments (both areas); created_by: the account only (employees see their own rows anyway)
+        // member_id: the member's Payments (both areas); created_by: only when the list shows other logins' rows
         return ['search' => trim((string) ($filters['search'] ?? ''))]
-            + Arr::only($filters, array_merge(['for', 'method', 'date_from', 'date_to', 'direction', 'member_id'], $this->collectorId() ? [] : ['created_by']));
+            + Arr::only($filters, array_merge(['for', 'method', 'date_from', 'date_to', 'direction', 'member_id'], $seesOthers ? ['created_by'] : []));
     }
 
     // DataTables server side: tab + search + for / method / dates filters, + the summary line of those rows
@@ -154,7 +171,9 @@ trait PaymentActions
     private function table(array $filters, $id = null)
     {
         $openShift = ($filters['shift'] ?? '') === 'open';
-        $tab = $openShift ? 'all' : $this->tab($filters);
+        $range = $this->canRange('in');
+        $seesOthers = $this->collectorId() === null;
+        $tab = $openShift ? 'all' : $this->tab($filters, $range);
         $query = $this->paymentService->listQuery($this->accountId())
             ->with('creatable.userable')
             // the reservation's place + start (the For column)
@@ -169,7 +188,7 @@ trait PaymentActions
             // inside filter() so "of N total" counts all the payments
             ->filter(fn ($query) => $openShift
                 ? $query->filter(['search' => trim((string) ($filters['search'] ?? ''))])
-                : $query->filter($this->listFilters($filters))->tab($tab))
+                : $query->filter($this->listFilters($filters, $range, $seesOthers))->tab($tab))
             ->setRowId(fn ($payment) => 'row-' . $payment->id)
             ->orderColumn('paid_at', fn ($query, $order) => $query->orderBy('paid_at', $order)->orderBy('payment_no', $order))
             ->addColumn('member_html', fn ($payment) => view('paymentmodule::Payment.partials.row-member', compact('payment'))->render())
@@ -188,7 +207,7 @@ trait PaymentActions
         }
 
         // the summary line above the table, for the same rows (datatables.js json "html" → [data-html])
-        $summaryQuery = $this->paymentService->listQuery($this->accountId(), $this->listFilters($filters))->tab($tab)
+        $summaryQuery = $this->paymentService->listQuery($this->accountId(), $this->listFilters($filters, $range, $seesOthers))->tab($tab)
             ->when($this->listCollector($filters), fn ($query, $userId) => $query->collectedBy($userId));
         $summary = $this->paymentService->listSummary($summaryQuery);
 
@@ -203,14 +222,20 @@ trait PaymentActions
      */
     public function cashData(Request $request)
     {
+        Gate::authorize('expenses.view');
         $input = ['search' => $request->input('search.value')] + $request->all();
         $direction = ($input['direction'] ?? '') === 'out' ? 'out' : 'all';
-        $tab = $this->tab($input);
-        $filters = $this->listFilters($input) + Arr::only($input, $direction === 'out' ? ['category'] : []);
+        $scope = app(CashScope::class);
+        $range = $scope->rangeFor($direction);
+        $tab = $this->tab($input, $range);
+        $filters = $this->listFilters($input, $range, $scope->seesOthers($direction)) + Arr::only($input, $direction === 'out' ? ['category'] : []);
         $accountId = $this->accountId();
+        // R1: each part by its own rule (cash in / refunds = payments, cash out = expenses)
+        $paymentCollector = $scope->paymentsCollector();
+        $expenseCollector = $scope->expensesCollector();
 
-        $query = $this->cashListService->query($accountId, $direction, $filters, $tab, $this->collectorId());
-        $total = $this->cashListService->query($accountId, $direction, [], 'all', $this->collectorId())->count();
+        $query = $this->cashListService->query($accountId, $direction, $filters, $tab, $paymentCollector, $expenseCollector);
+        $total = $this->cashListService->query($accountId, $direction, [], 'all', $paymentCollector, $expenseCollector)->count();
         $filtered = (clone $query)->count();
 
         $order = $request->input('order.0', []);

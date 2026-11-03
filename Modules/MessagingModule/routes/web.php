@@ -12,8 +12,8 @@ use Modules\MessagingModule\app\Http\Controllers\Employee\MessageEmployeeModuleC
  *  {kind} = what the message is about (reservation now; package / payment later)
  */
 $messageRoutes = function ($controller) {
-    Route::get('{kind}/{id}', [$controller, 'show'])->name('show')->where('kind', 'reservation');
-    Route::post('{kind}/{id}', [$controller, 'send'])->name('send')->where('kind', 'reservation');
+    Route::get('{kind}/{id}', [$controller, 'show'])->name('show')->where('kind', 'reservation')->can('messages.send');
+    Route::post('{kind}/{id}', [$controller, 'send'])->name('send')->where('kind', 'reservation')->can('messages.send');
 };
 
 Route::prefix('account/messages')->name('account.messages.')->middleware(['auth', 'user.active:' . Account::class])

@@ -15,6 +15,6 @@ class EmployeeRepository extends BaseRepository
     // employees of one account only
     public function forAccount($accountId)
     {
-        return Employee::with('user', 'position', 'shift')->where('account_id', $accountId);
+        return Employee::with('user', 'position', 'shift', 'role')->where('account_id', $accountId);
     }
 }

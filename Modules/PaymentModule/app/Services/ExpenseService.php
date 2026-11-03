@@ -91,9 +91,8 @@ class ExpenseService
         $values['spent_at'] = app(PaymentService::class)->recordDate($accountId, $data['spent_at'] ?? null, $creator)->toDateString();
 
         return DB::transaction(function () use ($accountId, $data, $creator, $values) {
-            // the number first: its lock keeps two saves of the same reference apart
+            // Reference no.: optional for every method, may repeat (2026-11-03, user; was required + unique for "Needs Reference No.")
             $number = $this->nextNumber($accountId);
-            $this->assertReference($accountId, $values['payment_method_id'], $values['reference']);
             $expense = new Expense($values + ['account_id' => $accountId, 'expense_no' => $number]);
             $expense->creatable()->associate($creator);
             $expense->save();
@@ -118,11 +117,6 @@ class ExpenseService
             $data['spent_at'] = $expense->spent_at;
         }
         $values = $this->values($accountId, $data, $expense);
-        // Reference no.: checked when the method or the reference changes (old rows without one stay as they are)
-        if ($values['payment_method_id'] !== (int) $expense->payment_method_id
-            || ($values['reference'] !== null && $values['reference'] !== $expense->reference)) {
-            $this->assertReference($accountId, $values['payment_method_id'], $values['reference'], $expense->getKey());
-        }
         $closing = $this->closedShiftOf($expense);
         $reason = $closing ? $this->assertReason($data['change_reason'] ?? '', 'change_reason', 'Write why this expense of a closed shift is changed.') : null;
 
@@ -211,24 +205,6 @@ class ExpenseService
             'spent_at' => Carbon::parse($data['spent_at'] ?? today())->toDateString(),
             'notes' => $data['notes'] ?? null,
         ];
-    }
-
-    // Reference no. (2026-10-27): a method with "needs reference" → required, unique per account + method among the expenses
-    // not deleted ($ignoreId = the one being edited); throws under "reference"
-    private function assertReference($accountId, int $methodId, ?string $reference, $ignoreId = null): void
-    {
-        $method = PaymentMethod::where('account_id', $accountId)->find($methodId);
-        if (!$method?->requires_reference) {
-            return;
-        }
-        if ($reference === null || $reference === '') {
-            throw ValidationException::withMessages(['reference' => 'Write the reference no. of this ' . $method->name . ' payment.']);
-        }
-        $taken = Expense::where('account_id', $accountId)->where('payment_method_id', $methodId)->where('reference', $reference)
-            ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))->value('expense_no');
-        if ($taken) {
-            throw ValidationException::withMessages(['reference' => 'This ' . $method->name . ' reference is already used by cash out #' . $taken . '.']);
-        }
     }
 
     private function assertOwner(Model $user): void

@@ -139,7 +139,8 @@ var appModal = {
         return fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "text/html" } })
             .then(function (response) {
                 // the session ended (redirected to the login page): reload, the user logs in again
-                if (response.redirected && /\/(login|admin)\/?$/.test(new URL(response.url).pathname)) {
+                // 401 = logged out after the role's idle minutes (EmployeeIdleTimeout): the same, the login page says why
+                if (response.status === 401 || (response.redirected && /\/(login|admin)\/?$/.test(new URL(response.url).pathname))) {
                     window.location.reload();
                     throw null;
                 }
@@ -296,6 +297,11 @@ function ajaxSubmit(form) {
         })
         .then(function (result) {
             var json = result.json;
+            // logged out after the role's idle minutes (EmployeeIdleTimeout): to the login page
+            if (result.status === 401) {
+                window.location.reload();
+                return;
+            }
             if (result.status >= 400) {
                 failed();
             }
@@ -1281,7 +1287,8 @@ function memberSelect(select) {
             this.close();
             memberQuickOpen(select, input);
         },
-        createFilter: function (input) { return !state.failed && state.empty !== null && state.empty === input; },
+        // no "+ Add" when the role can't add members (data-member-no-add, docs/roles-plan.md)
+        createFilter: function (input) { return !select.hasAttribute("data-member-no-add") && !state.failed && state.empty !== null && state.empty === input; },
         render: {
             loading: function () { return '<div class="no-results">Searching…</div>'; },
             option_create: function (data, escape) {

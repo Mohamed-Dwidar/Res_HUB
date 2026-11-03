@@ -6,5 +6,5 @@
         'attrs' => 'min="0" max="65535" step="1"', 'hint' => $method ? 'Lower first in the lists.' : 'Lower first in the lists. Empty = after the last one.'])
     @include('layoutmodule::partials.checkbox', ['name' => 'is_active', 'label' => 'Active', 'checked' => $method?->is_active ?? true, 'hint' => 'Inactive methods are hidden from the payment form.'])
     @include('layoutmodule::partials.checkbox', ['name' => 'requires_reference', 'label' => 'Needs Reference No.', 'checked' => $method?->requires_reference ?? true,
-        'hint' => 'Every method but cash: a refund / cash out with it needs its reference no. (transfer / transaction no.), never used twice. Cash in: always optional.'])
+        'hint' => 'Every method but cash: a refund with it needs its reference no. (transfer / transaction no.), never used twice. Cash in / cash out: always optional.'])
 </div>

@@ -26,19 +26,19 @@ Route::prefix('account/settings/contracts')->name('account.settings.contracts.')
  *  ContractService::can(); a draft's wording = its page's editors, the owner AND the employees since 2026-10-31). Made by hand from a reservation (create?reservation_id=).
  */
 $contractRoutes = function ($controller) {
-    Route::get('/', [$controller, 'index'])->name('index');
-    Route::get('data', [$controller, 'data'])->name('data');
-    Route::get('create', [$controller, 'create'])->name('create');
-    Route::post('/', [$controller, 'store'])->name('store');
-    Route::get('{id}', [$controller, 'show'])->name('show');
-    Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
-    Route::put('{id}', [$controller, 'update'])->name('update');
-    Route::post('{id}/issue', [$controller, 'issue'])->name('issue');
-    Route::get('{id}/pdf', [$controller, 'pdf'])->name('pdf');
-    Route::get('{id}/signed', [$controller, 'signedForm'])->name('signed');
-    Route::post('{id}/signed', [$controller, 'signed'])->name('signed.store');
-    Route::get('{id}/signed/file', [$controller, 'signedFile'])->name('signed.file');
-    Route::delete('{id}', [$controller, 'destroy'])->name('destroy');
+    Route::get('/', [$controller, 'index'])->name('index')->can('contracts.view');
+    Route::get('data', [$controller, 'data'])->name('data')->can('contracts.view');
+    Route::get('create', [$controller, 'create'])->name('create')->can('contracts.draft');
+    Route::post('/', [$controller, 'store'])->name('store')->can('contracts.draft');
+    Route::get('{id}', [$controller, 'show'])->name('show')->can('contracts.view');
+    Route::get('{id}/edit', [$controller, 'edit'])->name('edit')->can('contracts.draft');
+    Route::put('{id}', [$controller, 'update'])->name('update')->can('contracts.draft');
+    Route::post('{id}/issue', [$controller, 'issue'])->name('issue')->can('contracts.issue');
+    Route::get('{id}/pdf', [$controller, 'pdf'])->name('pdf')->can('contracts.pdf');
+    Route::get('{id}/signed', [$controller, 'signedForm'])->name('signed')->can('contracts.upload_signed');
+    Route::post('{id}/signed', [$controller, 'signed'])->name('signed.store')->can('contracts.upload_signed');
+    Route::get('{id}/signed/file', [$controller, 'signedFile'])->name('signed.file')->can('contracts.view');
+    Route::delete('{id}', [$controller, 'destroy'])->name('destroy')->can('contracts.delete_own_draft');
 };
 
 Route::prefix('account/contracts')->name('account.contracts.')->middleware(['auth', 'user.active:' . Account::class])

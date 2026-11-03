@@ -8,9 +8,11 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Modules\EmployeeModule\app\Http\Requests\EmployeeRequest;
+use Modules\EmployeeModule\app\Services\AccessLogService;
 use Modules\EmployeeModule\app\Services\EmployeePositionService;
 use Modules\EmployeeModule\app\Services\EmployeeService;
 use Modules\EmployeeModule\app\Services\EmployeeShiftService;
+use Modules\EmployeeModule\app\Services\RoleService;
 use Yajra\DataTables\Facades\DataTables;
 
 // logged in account: manage his employees (profile + login), the employee himself can only change his password
@@ -39,6 +41,9 @@ class EmployeeAccountModuleController extends Controller
         return [
             'positions' => $this->positionService->options($this->accountId(), $employee?->position_id),
             'shifts' => $this->shiftService->options($this->accountId(), $employee?->shift_id),
+            // docs/roles-plan.md: one role per employee, the default role first (and pre-chosen for a new employee)
+            'roles' => app(RoleService::class)->options($this->accountId()),
+            'defaultRoleId' => app(RoleService::class)->defaultRole($this->accountId())->id,
         ];
     }
 
@@ -71,12 +76,13 @@ class EmployeeAccountModuleController extends Controller
             ->setRowId(fn ($employee) => 'row-' . $employee->id)
             ->addColumn('name_html', fn ($employee) => view('employeemodule::Account.Employee.partials.row-name', compact('employee'))->render())
             ->addColumn('position', fn ($employee) => e($employee->position?->name ?? '-'))
+            ->addColumn('role', fn ($employee) => e(app(RoleService::class)->roleOf($employee)?->name ?? '-'))
             ->addColumn('shift', fn ($employee) => e($employee->shift ? $employee->shift->name . ' (' . $employee->shift->time_range . ')' : '-'))
             ->editColumn('join_date', fn ($employee) => $employee->join_date?->format('Y-m-d') ?? '-')
             ->addColumn('status', fn ($employee) => view('employeemodule::Account.Employee.partials.status-badge', compact('employee'))->render())
             ->addColumn('actions', fn ($employee) => view('employeemodule::Account.Employee.partials.row-actions', compact('employee'))->render())
             ->rawColumns(['name_html', 'status', 'actions'])
-            ->only(['DT_RowId', 'name_html', 'phone', 'position', 'shift', 'join_date', 'status', 'actions']);
+            ->only(['DT_RowId', 'name_html', 'phone', 'position', 'role', 'shift', 'join_date', 'status', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -101,10 +107,13 @@ class EmployeeAccountModuleController extends Controller
         ]);
     }
 
-    public function show($id)
+    // + his last 10 Access Log lines (docs/roles-plan.md)
+    public function show($id, AccessLogService $logService)
     {
         $employee = $this->employeeService->findOne($this->accountId(), $id);
-        return view('employeemodule::Account.Employee.show', compact('employee'));
+        $logs = $employee->user ? $logService->latestOf($employee->user->id, 10) : collect();
+        $role = app(RoleService::class)->roleOf($employee);
+        return view('employeemodule::Account.Employee.show', compact('employee', 'logs', 'role'));
     }
 
     public function edit($id)

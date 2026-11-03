@@ -17,7 +17,7 @@ class PaymentMethod extends Model
     // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
     protected array $localizedFields = ['name'];
 
-    // requires_reference (2026-10-27): every method but cash — a refund / cash out with it needs a unique "Reference no." (cash in: optional since 2026-11-01)
+    // requires_reference (2026-10-27): every method but cash — a refund with it needs a unique "Reference no." (cash in: optional since 2026-11-01, cash out since 2026-11-03)
     protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'requires_reference', 'sort_order'];
 
     protected $casts = [

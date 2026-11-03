@@ -27,20 +27,25 @@
     @include('messagingmodule::Message.partials.button')
     {{-- the status: a drop menu like its badge, changed by ajax --}}
     @include('reservationmodule::Reservation.partials.status-menu')
-    @unless ($reservation->isCounted())
+    @unless ($reservation->isCounted() || Gate::denies('reservations.status'))
         <a href="{{ route($area . '.reservations.restore', [$reservation->id, 'back_to_view' => 1]) }}" data-modal class="btn btn-secondary"><i data-lucide="rotate-ccw"></i> Restore</a>
     @endunless
     {{-- a counted subscription period not renewed yet: the next period, pre-filled (renewal_of = this one); an unpaid one too
          (2026-10-29: the Renew form shows what the member will owe and asks a reason) --}}
-    @if ($reservation->canRenew())
+    @if ($reservation->canRenew() && Gate::allows('reservations.renew'))
         <a href="{{ route($area . '.reservations.create', ['renew' => $reservation->id]) }}" data-modal class="btn btn-secondary"><i data-lucide="refresh-cw"></i> Renew</a>
     @endif
     {{-- Pay: opens the Add Cash In fields of this view (Cash In block; still owed, paid on its own: not inside a package / not counted) --}}
-    @if ($reservation->canTakePayments() && $reservation->remaining > 0)
+    @if ($reservation->canTakePayments() && $reservation->remaining > 0 && Gate::allows('payments.create'))
         <button type="button" data-reveal="#cash-in-form" class="btn btn-pay"><i data-lucide="wallet"></i> Pay</button>
     @endif
-    <a href="{{ route($area . '.reservations.edit', $reservation->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
-    @include('reservationmodule::Reservation.partials.delete-form')
+    {{-- roles (docs/roles-plan.md, R0): the buttons follow the employee's permissions (the owner: all) --}}
+    @can('reservations.edit')
+        <a href="{{ route($area . '.reservations.edit', $reservation->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    @endcan
+    @can('reservations.delete')
+        @include('reservationmodule::Reservation.partials.delete-form')
+    @endcan
 @endsection
 
 @section('content')

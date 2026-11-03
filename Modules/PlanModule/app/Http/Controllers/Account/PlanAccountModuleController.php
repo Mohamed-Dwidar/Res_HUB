@@ -33,7 +33,9 @@ class PlanAccountModuleController extends Controller
     public function index()
     {
         $spaces = $this->spaceService->filterOptions($this->accountId());
-        return view('planmodule::Account.index', compact('spaces'));
+        // the Taxes column only while VAT is on (like the plan form / view)
+        $taxesOn = (bool) \Modules\AccountModule\app\Models\Account::current()?->vatEnabled();
+        return view('planmodule::Account.index', compact('spaces', 'taxesOn'));
     }
 
     // DataTables server side: search + space_id / is_active filters
@@ -50,6 +52,8 @@ class PlanAccountModuleController extends Controller
             $query->whereKey($id);
         }
 
+        $taxAccount = \Modules\AccountModule\app\Models\Account::current();
+
         return DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the plans
             ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['space_id', 'is_active'])))
@@ -61,9 +65,10 @@ class PlanAccountModuleController extends Controller
             ->addColumn('status', fn ($plan) => view('layoutmodule::partials.row-toggle', [
                 'url' => route('account.plans.active', $plan->id), 'row' => $plan->id, 'name' => 'is_active', 'checked' => $plan->is_active,
             ])->render())
+            ->addColumn('taxes', fn ($plan) => view('planmodule::Account.partials.row-taxes', ['plan' => $plan, 'taxAccount' => $taxAccount])->render())
             ->addColumn('actions', fn ($plan) => view('planmodule::Account.partials.row-actions', compact('plan'))->render())
-            ->rawColumns(['name_html', 'status', 'actions'])
-            ->only(['DT_RowId', 'name_html', 'lease_period_label', 'capacity', 'amount', 'spaces_count', 'units_count', 'status', 'actions']);
+            ->rawColumns(['name_html', 'taxes', 'status', 'actions'])
+            ->only(['DT_RowId', 'name_html', 'lease_period_label', 'capacity', 'amount', 'spaces_count', 'units_count', 'taxes', 'status', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more

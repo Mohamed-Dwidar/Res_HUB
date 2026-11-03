@@ -12,20 +12,22 @@
     $area = request()->routeIs('employee.*') ? 'employee' : 'account';
     $dateFormat = \Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT;
     $paymentService = app(\Modules\PaymentModule\app\Services\PaymentService::class);
+    // roles (docs/roles-plan.md, R0): "+ Cash In" only with payments.create
+    $canAdd = $payable->canTakePayments() && ($kind === 'package' || $payable->remaining > 0) && Gate::allows('payments.create');
 @endphp
 
 <div class="form-section mt-8 payments-block__head">
     {{-- "Cash In" (2026-10-14): its payments, withholding and refunds --}}
     <span>Cash In</span>
-    @if ($payable->canTakePayments() && ($kind === 'package' || $payable->remaining > 0) && isset($methods))
+    @if ($canAdd && isset($methods))
         <button type="button" data-reveal="#cash-in-form" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Cash In</button>
-    @elseif ($payable->canTakePayments() && ($kind === 'package' || $payable->remaining > 0))
+    @elseif ($canAdd)
         <a href="{{ route($area . '.payments.create', ['payable' => $kind, 'payable_id' => $payable->getKey()]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Cash In</a>
     @endif
 </div>
 
 {{-- $methods given (the reservation view): the Add Cash In fields here, hidden until "+ Cash In" / "Pay" --}}
-@if ($payable->canTakePayments() && ($kind === 'package' || $payable->remaining > 0) && isset($methods))
+@if ($canAdd && isset($methods))
     @include('paymentmodule::Payment.partials.inline-form')
 @endif
 

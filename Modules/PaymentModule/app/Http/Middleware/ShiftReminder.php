@@ -33,7 +33,8 @@ class ShiftReminder
         $employee = $user?->userable;
         $page = !$request->ajax() && $request->isMethod('GET');
         $action = $request->ajax() && !$request->isMethod('GET');
-        if (!$employee instanceof Employee || (!$page && !$action) || $request->routeIs('employee.shift.*', 'logout')) {
+        // a role that doesn't collect money (no shift.has, docs/roles-plan.md): no shift, no reminders
+        if (!$employee instanceof Employee || (!$page && !$action) || $request->routeIs('employee.shift.*', 'logout') || !$user->can('shift.has')) {
             return $next($request);
         }
 

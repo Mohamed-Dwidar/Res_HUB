@@ -12,6 +12,10 @@
 <div class="form-section mt-8">Work</div>
 <dl class="detail-list">
     <div><dt>Position</dt><dd>{{ $employee->position?->name ?? '-' }}</dd></div>
+    {{-- the account's view only (docs/roles-plan.md); his own profile unchanged --}}
+    @if (!empty($role))
+        <div><dt>Role</dt><dd><a href="{{ route('account.settings.roles.edit', $role->id) }}" data-modal>{{ $role->name }}</a></dd></div>
+    @endif
     <div><dt>Shift</dt><dd>{{ $employee->shift ? $employee->shift->name . ' (' . $employee->shift->time_range . ')' : '-' }}</dd></div>
     <div><dt>Join Date</dt><dd>{{ $employee->join_date?->format('Y-m-d') ?? '-' }}</dd></div>
     <div><dt>Leave Date</dt><dd>{{ $employee->leave_date?->format('Y-m-d') ?? '-' }}</dd></div>

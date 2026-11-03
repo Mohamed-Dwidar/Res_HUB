@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Modules\PaymentModule\app\Http\Requests\ExpenseRequest;
 use Modules\PaymentModule\app\Models\Expense;
+use Modules\PaymentModule\app\Services\CashScope;
 use Modules\PaymentModule\app\Services\ExpenseCategoryService;
 use Modules\PaymentModule\app\Services\ExpenseService;
 use Modules\PaymentModule\app\Services\PaymentMethodService;
@@ -42,13 +43,13 @@ trait ExpenseActions
         return Auth::user()->userable->ownerAccountId();
     }
 
-    // the employee: only their own expenses (null = the account: all)
+    // whose cash out (CashScope, docs/roles-plan.md R1): null = everyone (the owner, expenses.view_all), else the login's own
     private function collectorId()
     {
-        return $this->area() === 'employee' ? Auth::id() : null;
+        return app(CashScope::class)->expensesCollector();
     }
 
-    // one expense: an employee opens only their own
+    // one expense: a login limited to its own rows opens only those
     private function findForViewer($id): Expense
     {
         $expense = $this->expenseService->findOne($this->accountId(), $id);
@@ -68,20 +69,20 @@ trait ExpenseActions
         return redirect()->route($this->area() . '.payments.index', ['type' => 'out']);
     }
 
-    // the list tab: today (default, also '') | month | all; employees have no tabs (one day: listFilters())
+    // the list tab: today (default, also '') | month | all; a login limited to one day has no tabs (listFilters())
     private function tab(array $filters): string
     {
-        if ($this->collectorId()) {
+        if (!app(CashScope::class)->expensesRange()) {
             return 'all';
         }
         $tab = (string) ($filters['tab'] ?? '');
         return isset(Expense::TABS[$tab]) ? $tab : 'today';
     }
 
-    // search (no., item, notes) + category / method / dates; employees: always ONE day (none / not a date = today)
+    // search (no., item, notes) + category / method / dates; without any-dates (CashScope): always ONE day (none / not a date = today)
     private function listFilters(array $filters): array
     {
-        if ($this->collectorId()) {
+        if (!app(CashScope::class)->expensesRange()) {
             $day = (string) ($filters['date_from'] ?? '');
             $filters['date_from'] = $filters['date_to'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', $day) && strtotime($day) ? $day : today()->toDateString();
         }

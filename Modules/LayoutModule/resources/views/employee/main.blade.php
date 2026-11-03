@@ -5,7 +5,8 @@
 
 @section('header')
     @include('layoutmodule::header', [
-        'homeUrl' => route('employee.schedule.index'),
+        // the Schedule, else the first page his role opens (Employee::homeRoute(), docs/roles-plan.md)
+        'homeUrl' => route($authUser->userable->homeRoute()),
         'userName' => $authUser->userable->displayName(),
         'userSubtitle' => $authUser->email,
         'menuLinks' => [

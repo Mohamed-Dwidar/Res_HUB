@@ -3,9 +3,17 @@
     @include('layoutmodule::partials.row-menu', [
         'links' => [['label' => 'View', 'icon' => 'eye', 'url' => route(...), 'modal' => true], ...],   (modal: open it in the popup;
                     blank: open it in a new tab, e.g. a PDF — 2026-10-31)
-        'actions' => [['view' => 'module::...delete-form', 'data' => ['model' => $model]], ...],   (rendered with 'menu' => true)
+        'actions' => [['view' => 'module::...delete-form', 'data' => ['model' => $model], 'can' => 'x.delete'], ...],   (rendered with
+                    'menu' => true; can: shown only with that permission)
     ])
+    Roles (docs/roles-plan.md, R0): a link an employee's role can't open (its route's can: permission) is left out
+    (RoleService::allowsUrl(); the owner sees every link).
 --}}
+@php
+    $roleService = app(\Modules\EmployeeModule\app\Services\RoleService::class);
+    $links = array_values(array_filter($links ?? [], fn ($link) => $roleService->allowsUrl($link['url'])));
+    $actions = array_values(array_filter($actions ?? [], fn ($action) => empty($action['can']) || Gate::allows($action['can'])));
+@endphp
 <div class="flex items-center justify-end">
     <div data-tw-merge="" data-tw-placement="bottom-end" class="dropdown relative h-5">
         <button type="button" data-tw-toggle="dropdown" aria-expanded="false" class="cursor-pointer h-5 w-5 text-slate-500" title="Actions">

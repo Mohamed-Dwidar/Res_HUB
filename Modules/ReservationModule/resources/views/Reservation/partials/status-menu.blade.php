@@ -8,6 +8,10 @@
     $area = request()->routeIs('employee.*') ? 'employee' : 'account';
     $menuId = 'status-menu-' . $reservation->id . '-' . uniqid();
 @endphp
+{{-- roles (docs/roles-plan.md, R0): without reservations.status = the badge only --}}
+@cannot('reservations.status')
+    <span class="{{ $reservation->status?->badge_class ?? 'badge badge-status-slate' }}">{{ $reservation->status?->name ?? 'No status' }}</span>
+@else
 <div data-tw-merge="" data-tw-placement="bottom-end" class="dropdown relative">
     <button type="button" id="{{ $menuId }}" data-tw-toggle="dropdown" aria-expanded="false" title="Change the status"
         class="{{ $reservation->status?->badge_class ?? 'badge badge-status-slate' }} status-menu__toggle">
@@ -32,3 +36,4 @@
         </div>
     </div>
 </div>
+@endcannot

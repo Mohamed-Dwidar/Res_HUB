@@ -26,7 +26,7 @@
     @endif
 </div>
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
-    @include('paymentmodule::Payment.partials.reference-field', ['value' => $expense->reference])
+    @include('paymentmodule::Payment.partials.reference-field', ['value' => $expense->reference, 'optional' => true])
 </div>
 <div class="mt-5">
     @include('layoutmodule::partials.field', ['name' => 'notes', 'label' => 'Notes', 'type' => 'textarea', 'value' => $expense->notes])

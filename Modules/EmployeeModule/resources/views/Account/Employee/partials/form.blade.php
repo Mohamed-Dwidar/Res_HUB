@@ -1,4 +1,4 @@
-{{-- Employee create / edit fields. $employee is null on create. $positions / $shifts = [id => name] --}}
+{{-- Employee create / edit fields. $employee is null on create. $positions / $shifts / $roles = [id => name]; $defaultRoleId --}}
 <div class="form-section">Employee Data</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
     @include('layoutmodule::partials.field', ['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $employee?->name, 'attrs' => 'autofocus'])
@@ -30,9 +30,12 @@
     @include('layoutmodule::partials.field', ['name' => 'shift_id', 'label' => 'Shift', 'type' => 'select',
         'options' => ['' => '- None -'] + $shifts, 'value' => $employee?->shift_id ?: null,
         'hint' => empty($shifts) ? 'No shifts yet, add them from Employees > Shifts.' : null])
+    {{-- docs/roles-plan.md: what he may do (Settings › Roles); a missing / deleted role = the default one --}}
+    @include('layoutmodule::partials.field', ['name' => 'role_id', 'label' => 'Role', 'type' => 'select', 'required' => true,
+        'options' => $roles, 'value' => $employee && isset($roles[$employee->role_id]) ? $employee->role_id : $defaultRoleId,
+        'hint' => 'What he can do in the system (Settings › Roles).'])
     @include('layoutmodule::partials.field', ['name' => 'salary', 'label' => 'Salary', 'type' => 'number', 'value' => $employee?->salary,
         'attrs' => 'min="0" step="0.01" max="99999999"'])
-    <div></div>
     @include('layoutmodule::partials.field', ['name' => 'join_date', 'label' => 'Join Date', 'type' => 'date', 'value' => $employee?->join_date?->format('Y-m-d')])
     @include('layoutmodule::partials.field', ['name' => 'leave_date', 'label' => 'Leave Date', 'type' => 'date', 'value' => $employee?->leave_date?->format('Y-m-d'),
         'hint' => 'From this date the employee can not log in.'])

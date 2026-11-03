@@ -25,22 +25,22 @@ use Modules\PaymentModule\app\Http\Middleware\WithholdingEnabled;
  *  refund = both (into the refunder's shift); edit / delete = the account only
  */
 $paymentRoutes = function ($controller) {
-    Route::get('/', [$controller, 'index'])->name('index');
-    Route::get('data', [$controller, 'data'])->name('data');
+    Route::get('/', [$controller, 'index'])->name('index')->can('payments.view');
+    Route::get('data', [$controller, 'data'])->name('data')->can('payments.view');
     // the All / Cash Out tabs: payments + expenses together (2026-10-14)
-    Route::get('cash-data', [$controller, 'cashData'])->name('cash-data');
+    Route::get('cash-data', [$controller, 'cashData'])->name('cash-data')->can('payments.view');
     // the member's reservations / packages drop menu of the form
-    Route::get('options/payables', [$controller, 'payables'])->name('options.payables');
-    Route::get('create', [$controller, 'create'])->name('create');
-    Route::post('/', [$controller, 'store'])->name('store');
-    Route::get('{id}', [$controller, 'show'])->name('show');
-    Route::get('{id}/receipt', [$controller, 'receipt'])->name('receipt');
+    Route::get('options/payables', [$controller, 'payables'])->name('options.payables')->can('payments.form');
+    Route::get('create', [$controller, 'create'])->name('create')->can('payments.create');
+    Route::post('/', [$controller, 'store'])->name('store')->can('payments.create');
+    Route::get('{id}', [$controller, 'show'])->name('show')->can('payments.view');
+    Route::get('{id}/receipt', [$controller, 'receipt'])->name('receipt')->can('payments.receipt');
     // edit: the owner any payment, an employee their own cash in while their shift is open (PaymentService::canEdit())
-    Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
-    Route::put('{id}', [$controller, 'update'])->name('update');
+    Route::get('{id}/edit', [$controller, 'edit'])->name('edit')->can('payments.edit_own_open');
+    Route::put('{id}', [$controller, 'update'])->name('update')->can('payments.edit_own_open');
     // a refund (reason required) goes into the refunder's own open shift
-    Route::get('{id}/refund', [$controller, 'refundForm'])->name('refund');
-    Route::post('{id}/refund', [$controller, 'refund'])->name('refund.store');
+    Route::get('{id}/refund', [$controller, 'refundForm'])->name('refund')->can('payments.refund');
+    Route::post('{id}/refund', [$controller, 'refund'])->name('refund.store')->can('payments.refund');
 };
 
 Route::prefix('account/payments')->name('account.payments.')->middleware(['auth', 'user.active:' . Account::class])
@@ -83,15 +83,15 @@ Route::prefix('account/expense-categories')->name('account.expense-categories.')
  *  (Concerns\ExpenseActions); edit = the owner or the recorder while their shift is open; delete = the account only
  */
 $expenseRoutes = function ($controller) {
-    Route::get('/', [$controller, 'index'])->name('index');
-    Route::get('data', [$controller, 'data'])->name('data');
-    Route::get('create', [$controller, 'create'])->name('create');
-    Route::post('/', [$controller, 'store'])->name('store');
-    Route::get('{id}', [$controller, 'show'])->name('show');
-    Route::get('{id}/attachment', [$controller, 'attachment'])->name('attachment');
+    Route::get('/', [$controller, 'index'])->name('index')->can('expenses.view');
+    Route::get('data', [$controller, 'data'])->name('data')->can('expenses.view');
+    Route::get('create', [$controller, 'create'])->name('create')->can('expenses.create');
+    Route::post('/', [$controller, 'store'])->name('store')->can('expenses.create');
+    Route::get('{id}', [$controller, 'show'])->name('show')->can('expenses.view');
+    Route::get('{id}/attachment', [$controller, 'attachment'])->name('attachment')->can('expenses.view');
     // edit: the owner, or the recorder while their shift is open (2026-11-01, ExpenseService::canEdit())
-    Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
-    Route::put('{id}', [$controller, 'update'])->name('update');
+    Route::get('{id}/edit', [$controller, 'edit'])->name('edit')->can('expenses.edit_own_open');
+    Route::put('{id}', [$controller, 'update'])->name('update')->can('expenses.edit_own_open');
 };
 
 Route::prefix('account/expenses')->name('account.expenses.')->middleware(['auth', 'user.active:' . Account::class])->group(function () use ($expenseRoutes) {
@@ -157,7 +157,8 @@ Route::prefix('account/shifts')->name('account.shifts.')->middleware(['auth', 'u
 /**
  *  The employee's shift: their open shift (own payments only), close it (confirmation popup), their past closings, the reminders
  */
-Route::prefix('employee/shift')->name('employee.shift.')->middleware(['auth', 'user.active:' . Employee::class])->group(function () {
+// R0 (docs/roles-plan.md): only a role that collects money (shift.has)
+Route::prefix('employee/shift')->name('employee.shift.')->middleware(['auth', 'user.active:' . Employee::class, 'can:shift.has'])->group(function () {
     Route::get('/', [ShiftClosingEmployeeModuleController::class, 'index'])->name('index');
     Route::get('data', [ShiftClosingEmployeeModuleController::class, 'data'])->name('data');
     Route::get('confirm', [ShiftClosingEmployeeModuleController::class, 'confirm'])->name('confirm');
@@ -179,7 +180,7 @@ Route::prefix('account/extras')->name('account.extras.')->middleware(['auth', 'u
     Route::put('{id}', [ExtraAccountModuleController::class, 'update'])->name('update');
     Route::delete('{id}', [ExtraAccountModuleController::class, 'destroy'])->name('destroy');
 });
-Route::prefix('employee/extras')->name('employee.extras.')->middleware(['auth', 'user.active:' . Employee::class])->group(function () {
+Route::prefix('employee/extras')->name('employee.extras.')->middleware(['auth', 'user.active:' . Employee::class, 'can:extras.create'])->group(function () {
     Route::get('create', [ExtraEmployeeModuleController::class, 'create'])->name('create');
     Route::post('/', [ExtraEmployeeModuleController::class, 'store'])->name('store');
 });

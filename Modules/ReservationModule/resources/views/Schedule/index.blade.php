@@ -20,7 +20,7 @@
         <a href="{{ route($area . '.schedule.index', ['date' => $date->copy()->addDay()->toDateString()]) }}" class="btn btn-secondary" title="The day after"><i data-lucide="chevron-right"></i></a>
     </div>
     {{-- + New: pick the type first (the form opens with it, for the selected day) --}}
-    @if ($newTypes->isNotEmpty())
+    @if ($newTypes->isNotEmpty() && Gate::allows('reservations.create'))
         <div data-tw-merge="" data-tw-placement="bottom-end" class="dropdown relative">
             <button type="button" data-tw-toggle="dropdown" aria-expanded="false" class="btn btn-primary"><i data-lucide="plus"></i> New <i data-lucide="chevron-down"></i></button>
             <div class="dropdown-menu js-menu absolute z-[9999]">

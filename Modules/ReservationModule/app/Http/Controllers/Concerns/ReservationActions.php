@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Modules\CompanyModule\app\Services\CompanyService;
+use Modules\EmployeeModule\app\Services\RoleService;
 use Modules\MessagingModule\app\Services\MessagingService;
 use Modules\PackageModule\app\Services\PackageService;
 use Modules\PaymentModule\app\Services\PaymentMethodService;
@@ -312,6 +314,8 @@ trait ReservationActions
     // (renewal_of = it); else ?subscription_type_id / space_id / unit_id / start (the Schedule page: + New, a timeline slot)
     public function create(Request $request)
     {
+        // R0 (docs/roles-plan.md): the route allows add OR renew (reservations.form); a Renew needs reservations.renew
+        Gate::authorize(app(RoleService::class)->reservationCreateAbility($request->filled('renew')));
         $reservation = $request->filled('renew')
             ? $this->reservationService->renewalOf($this->reservationService->findOne($this->accountId(), (int) $request->input('renew')))
             : $this->reservationService->prefill($this->accountId(), $request->only(['subscription_type_id', 'space_id', 'unit_id', 'start']));
@@ -321,6 +325,7 @@ trait ReservationActions
 
     public function store(ReservationRequest $request)
     {
+        Gate::authorize(app(RoleService::class)->reservationCreateAbility($request->filled('renewal_of')));
         $reservation = $this->reservationService->create($this->accountId(), $request->validated(), Auth::user());
         $repeats = $reservation->repeats()->count();
 

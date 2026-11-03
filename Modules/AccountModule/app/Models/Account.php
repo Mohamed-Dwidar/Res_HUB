@@ -311,4 +311,9 @@ class Account extends Model implements Userable
     {
         return $this->id;
     }
+
+    public function area(): string
+    {
+        return 'account';
+    }
 }

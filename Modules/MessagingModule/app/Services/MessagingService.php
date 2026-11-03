@@ -7,6 +7,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Modules\AccountModule\app\Models\Account;
@@ -418,7 +419,8 @@ class MessagingService
     public function button(Reservation $reservation, ?string $context = null, ?Carbon $date = null): ?array
     {
         $accountId = (int) $reservation->account_id;
-        if (!$this->settings($accountId)->is_enabled || $this->unitTemplates($accountId, (int) $reservation->unit_id)->isEmpty()) {
+        // roles (docs/roles-plan.md, R0): no icon without messages.send
+        if (Gate::denies('messages.send') || !$this->settings($accountId)->is_enabled || $this->unitTemplates($accountId, (int) $reservation->unit_id)->isEmpty()) {
             return null;
         }
         [, $error] = $this->phone($reservation->member);
@@ -448,7 +450,7 @@ class MessagingService
     public function popupUrl(Reservation $reservation, string $when): ?string
     {
         $accountId = (int) $reservation->account_id;
-        if (!$this->settings($accountId)->is_enabled || $this->phone($reservation->member)[1] || !$this->templateFor($accountId, $when, (int) $reservation->unit_id)) {
+        if (Gate::denies('messages.send') || !$this->settings($accountId)->is_enabled || $this->phone($reservation->member)[1] || !$this->templateFor($accountId, $when, (int) $reservation->unit_id)) {
             return null;
         }
         return route(self::area() . '.messages.show', ['reservation', $reservation->id, 'suggest' => $when]);

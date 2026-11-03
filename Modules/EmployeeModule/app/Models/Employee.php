@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\AccountModule\app\Models\Account;
+use Modules\EmployeeModule\app\Services\RoleService;
 use Modules\UserModule\app\Contracts\Userable;
 use Modules\UserModule\app\Models\User;
 
@@ -16,13 +17,15 @@ class Employee extends Model implements Userable
 {
     use SoftDeletes;
 
+    private ?array $permissionList = null;
+
     const GENDERS = [
         'male' => 'Male',
         'female' => 'Female',
     ];
 
     protected $fillable = [
-        'account_id', 'name', 'position_id', 'shift_id', 'phone', 'another_phone', 'gender', 'birth_date', 'address', 'image',
+        'account_id', 'name', 'position_id', 'shift_id', 'role_id', 'phone', 'another_phone', 'gender', 'birth_date', 'address', 'image',
         'salary', 'educational_qualification', 'join_date', 'leave_date',
     ];
 
@@ -52,6 +55,18 @@ class Employee extends Model implements Userable
     public function shift(): BelongsTo
     {
         return $this->belongsTo(EmployeeShift::class, 'shift_id');
+    }
+
+    // his role (docs/roles-plan.md; 0 / a deleted role = the account's default role: RoleService::roleOf())
+    public function role(): BelongsTo
+    {
+        return $this->belongsTo(Role::class);
+    }
+
+    // his permission keys, read once per request (the Gate asks many times)
+    public function permissions(): array
+    {
+        return $this->permissionList ??= app(RoleService::class)->permissionsOf($this);
     }
 
     public function attachments(): HasMany
@@ -116,10 +131,11 @@ class Employee extends Model implements Userable
         return null;
     }
 
-    // the Schedule page (2026-10-14); the old dashboard is their profile (header menu "My Profile")
+    // the Schedule page (2026-10-14), else the first page his role opens (R0, RoleService::homeRoute()); the old dashboard is
+    // their profile (header menu "My Profile")
     public function homeRoute(): string
     {
-        return 'employee.schedule.index';
+        return app(RoleService::class)->homeRoute($this);
     }
 
     public function layout(): string
@@ -142,5 +158,18 @@ class Employee extends Model implements Userable
     public function ownerAccountId(): int
     {
         return $this->account_id;
+    }
+
+    public function area(): string
+    {
+        return 'employee';
+    }
+
+    // minutes without a request before he is logged out (EmployeeIdleTimeout); null = no limit (his role's idle_hours × 60,
+    // docs/roles-plan.md; Front desk = none, as before R0)
+    public function idleMinutes(): ?int
+    {
+        $hours = app(RoleService::class)->roleOf($this)?->idle_hours;
+        return $hours ? $hours * 60 : null;
     }
 }

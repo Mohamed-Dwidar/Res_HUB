@@ -39,6 +39,14 @@
         <div class="text-slate-500">No attachments.</div>
     @endif
 
+    <div class="form-section mt-8 payments-block__head">
+        <span>Access Log</span>
+        @if ($employee->user)
+            <a href="{{ route('account.access-log.index', ['user_id' => $employee->user->id]) }}" class="btn btn-secondary btn-sm">All</a>
+        @endif
+    </div>
+    @include('employeemodule::Account.AccessLog.partials.table', ['logs' => $logs])
+
     @unless (request()->ajax())
         <div class="form-actions">
             <a href="{{ route('account.employees.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Employees</a>

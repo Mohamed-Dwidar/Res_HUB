@@ -14,12 +14,15 @@
 @php
     $area = request()->routeIs('employee.*') ? 'employee' : 'account';
     $selected = !empty($member) ? [$member->id => $member->name . ' ' . $member->phone] : [];
+    // roles (docs/roles-plan.md, R0): no quick add without members.create (no link, no box, no "+ Add" in the search)
+    $canAdd = Gate::allows('members.create');
 @endphp
 @include('layoutmodule::partials.field', ['name' => 'member_id', 'label' => $label ?? 'Member', 'type' => 'select', 'searchable' => true,
     'required' => $required ?? false, 'width' => $width ?? 'long', 'wrapperClass' => $wrapperClass ?? null,
     'options' => ['' => $placeholder ?? '- Select -'] + $selected, 'value' => $member->id ?? null,
-    'attrs' => 'data-member-select data-search-url="' . route($area . '.members.search') . '"' . (empty($required) ? ' data-member-optional' : ''),
+    'attrs' => 'data-member-select data-search-url="' . route($area . '.members.search') . '"' . (empty($required) ? ' data-member-optional' : '') . ($canAdd ? '' : ' data-member-no-add'),
     'hint' => $hint ?? 'Search by name or mobile.'])
+@if ($canAdd)
 <div class="member-quick-link-row">
     <button type="button" class="member-quick-link" data-member-quick-open><i data-lucide="user-plus"></i> New member</button>
 </div>
@@ -59,3 +62,4 @@
         <button type="button" class="btn btn-secondary btn-sm" data-quick-cancel>Cancel</button>
     </div>
 </div>
+@endif

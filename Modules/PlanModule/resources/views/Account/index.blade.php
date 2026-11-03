@@ -34,6 +34,9 @@
                     <th data-data="amount" data-name="amount">Amount</th>
                     <th data-data="spaces_count" data-name="spaces_count">Spaces</th>
                     <th data-data="units_count" data-name="units_count">Units</th>
+                    @if ($taxesOn)
+                        <th data-data="taxes" data-orderable="false">Taxes</th>
+                    @endif
                     <th data-data="status" data-name="is_active">Status</th>
                     <th data-data="actions"></th>
                 </tr>

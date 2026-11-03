@@ -15,7 +15,7 @@
     ],
     'actions' => [
         // WhatsApp (MessagingModule; $messageFor = the reservation the message is about, the reservations list only)
-        ...(!empty($messageFor) ? [['view' => 'messagingmodule::Message.partials.button', 'data' => ['reservation' => $messageFor, 'messageContext' => $messageContext ?? null]]] : []),
-        ['view' => 'reservationmodule::Reservation.partials.delete-form', 'data' => ['reservation' => $reservation]],
+        ...(!empty($messageFor) ? [['view' => 'messagingmodule::Message.partials.button', 'data' => ['reservation' => $messageFor, 'messageContext' => $messageContext ?? null], 'can' => 'messages.send']] : []),
+        ['view' => 'reservationmodule::Reservation.partials.delete-form', 'data' => ['reservation' => $reservation], 'can' => 'reservations.delete'],
     ],
 ])

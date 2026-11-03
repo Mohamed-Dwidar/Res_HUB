@@ -34,8 +34,11 @@ class CashListService
      * $direction all | out; $filters: search, method (an id), category (out: an expense category id | refund), date_from / date_to;
      * $tab today | month | all (on the date); $collectorId: only what this login added (employees), null = all.
      */
-    public function query($accountId, string $direction, array $filters, string $tab, $collectorId = null)
+    // $collectorId: whose payments (cash in / refunds), $expenseCollectorId: whose expenses (CashScope, docs/roles-plan.md R1;
+    // null = everyone; not given = the same as $collectorId)
+    public function query($accountId, string $direction, array $filters, string $tab, $collectorId = null, $expenseCollectorId = false)
     {
+        $expenseCollectorId = $expenseCollectorId === false ? $collectorId : $expenseCollectorId;
         $common = Arr::only($filters, ['search', 'date_from', 'date_to', 'created_by']);
         $method = ctype_digit((string) ($filters['method'] ?? '')) ? (int) $filters['method'] : null;
         $category = (string) ($filters['category'] ?? '');
@@ -49,7 +52,7 @@ class CashListService
             ->selectRaw("'payment' AS kind, id, type, paid_at AS at_date, created_at, amount, payment_method_id");
 
         $expenses = $this->expenseService->listQuery($accountId, $common + ['method' => (string) $method, 'expense_category_id' => ctype_digit($category) ? (int) $category : null])->tab($tab)
-            ->when($collectorId, fn ($query, $userId) => $query->collectedBy($userId))
+            ->when($expenseCollectorId, fn ($query, $userId) => $query->collectedBy($userId))
             // "Refunds" chosen in the category filter: refunds only
             ->when($category === 'refund', fn ($query) => $query->whereRaw('0 = 1'))
             ->setEagerLoads([])->toBase()

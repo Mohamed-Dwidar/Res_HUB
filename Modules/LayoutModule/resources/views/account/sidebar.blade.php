@@ -87,6 +87,13 @@
             'url' => route('account.employees.index'),
             'active' => request()->routeIs('account.employees.*'),
         ],
+        // EmployeeModule (2026-11-03, docs/roles-plan.md): the employees' logins, timeouts, exports
+        [
+            'title' => 'Access Log',
+            'icon' => 'scroll-text',
+            'url' => route('account.access-log.index'),
+            'active' => request()->routeIs('account.access-log.*'),
+        ],
 
         ['divider' => 'Settings'],
         [
@@ -179,6 +186,13 @@
                     'icon' => 'clock',
                     'url' => route('account.employee-shifts.index'),
                     'active' => request()->routeIs('account.employee-shifts.*'),
+                ],
+                // EmployeeModule (R0 2026-11-03, docs/roles-plan.md): what each employee may do
+                [
+                    'title' => 'Roles',
+                    'icon' => 'shield-check',
+                    'url' => route('account.settings.roles.index'),
+                    'active' => request()->routeIs('account.settings.roles.*'),
                 ],
             ],
         ],

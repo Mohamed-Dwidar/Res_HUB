@@ -13,25 +13,25 @@ use Modules\ReservationModule\app\Http\Controllers\Employee\ScheduleEmployeeModu
  *  Reservations: managed by the account and by its employees (same actions, see Concerns\ReservationActions)
  */
 $reservationRoutes = function ($controller) {
-    Route::get('/', [$controller, 'index'])->name('index');
-    Route::get('data', [$controller, 'data'])->name('data');
+    Route::get('/', [$controller, 'index'])->name('index')->can('reservations.view');
+    Route::get('data', [$controller, 'data'])->name('data')->can('reservations.view');
     // the form's live availability check (unit + dates + times; custom.js reservationAvailability())
-    Route::get('availability', [$controller, 'availability'])->name('availability');
+    Route::get('availability', [$controller, 'availability'])->name('availability')->can('reservations.form');
     // the double-tax guard: the member's VAT (manual) cash ins near the dates (custom.js reservationTax())
-    Route::get('manual-vat', [$controller, 'manualVat'])->name('manual-vat');
-    Route::get('create', [$controller, 'create'])->name('create');
-    Route::post('/', [$controller, 'store'])->name('store');
-    Route::get('{id}', [$controller, 'show'])->name('show');
-    Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
-    Route::put('{id}', [$controller, 'update'])->name('update');
-    Route::patch('{id}/status', [$controller, 'changeStatus'])->name('status');
+    Route::get('manual-vat', [$controller, 'manualVat'])->name('manual-vat')->can('reservations.form');
+    Route::get('create', [$controller, 'create'])->name('create')->can('reservations.form');
+    Route::post('/', [$controller, 'store'])->name('store')->can('reservations.form');
+    Route::get('{id}', [$controller, 'show'])->name('show')->can('reservations.view');
+    Route::get('{id}/edit', [$controller, 'edit'])->name('edit')->can('reservations.edit');
+    Route::put('{id}', [$controller, 'update'])->name('update')->can('reservations.edit');
+    Route::patch('{id}/status', [$controller, 'changeStatus'])->name('status')->can('reservations.status');
     // a not counted reservation (cancelled ...) back to the default counted status, after the availability check
-    Route::get('{id}/restore', [$controller, 'restoreForm'])->name('restore');
-    Route::patch('{id}/restore', [$controller, 'restore'])->name('restore.store');
+    Route::get('{id}/restore', [$controller, 'restoreForm'])->name('restore')->can('reservations.status');
+    Route::patch('{id}/restore', [$controller, 'restore'])->name('restore.store')->can('reservations.status');
     // a not renewed subscription period: marked "left" (off the Schedule page's Not renewed list) / undone
-    Route::patch('{id}/left', [$controller, 'markLeft'])->name('left');
-    Route::patch('{id}/left/undo', [$controller, 'undoLeft'])->name('left.undo');
-    Route::delete('{id}', [$controller, 'destroy'])->name('destroy');
+    Route::patch('{id}/left', [$controller, 'markLeft'])->name('left')->can('reservations.mark_left');
+    Route::patch('{id}/left/undo', [$controller, 'undoLeft'])->name('left.undo')->can('reservations.mark_left');
+    Route::delete('{id}', [$controller, 'destroy'])->name('destroy')->can('reservations.delete');
 };
 
 Route::prefix('account/reservations')->name('account.reservations.')->middleware(['auth', 'user.active:' . Account::class])
@@ -45,9 +45,9 @@ Route::prefix('employee/reservations')->name('employee.reservations.')->middlewa
  *  renamed from Today 2026-10-16: the old /today URLs redirect (bookmarks)
  */
 $scheduleRoutes = function ($controller) {
-    Route::get('/', [$controller, 'index'])->name('index');
-    Route::get('sections', [$controller, 'sections'])->name('sections');
-    Route::get('cancelled', [$controller, 'cancelled'])->name('cancelled');
+    Route::get('/', [$controller, 'index'])->name('index')->can('schedule.view');
+    Route::get('sections', [$controller, 'sections'])->name('sections')->can('schedule.view');
+    Route::get('cancelled', [$controller, 'cancelled'])->name('cancelled')->can('schedule.view');
 };
 
 Route::prefix('account/schedule')->name('account.schedule.')->middleware(['auth', 'user.active:' . Account::class])

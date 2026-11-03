@@ -11,14 +11,19 @@ class EventServiceProvider extends ServiceProvider
      *
      * @var array<string, array<int, string>>
      */
-    protected $listen = [];
+    protected $listen = [
+        // the employees' Access Log (docs/roles-plan.md)
+        \Illuminate\Auth\Events\Login::class => [\Modules\EmployeeModule\app\Listeners\LogEmployeeAccess::class . '@handleLogin'],
+        \Illuminate\Auth\Events\Failed::class => [\Modules\EmployeeModule\app\Listeners\LogEmployeeAccess::class . '@handleFailed'],
+        \Illuminate\Auth\Events\Logout::class => [\Modules\EmployeeModule\app\Listeners\LogEmployeeAccess::class . '@handleLogout'],
+    ];
 
     /**
      * Indicates if events should be discovered.
      *
      * @var bool
      */
-    protected static $shouldDiscoverEvents = true;
+    protected static $shouldDiscoverEvents = false;
 
     /**
      * Configure the proper event listeners for email verification.

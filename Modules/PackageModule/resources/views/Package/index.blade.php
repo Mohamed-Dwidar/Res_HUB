@@ -6,7 +6,9 @@
 @endsection
 
 @section('actions')
-    <a href="{{ route($area . '.packages.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Package</a>
+    @can('packages.create')
+        <a href="{{ route($area . '.packages.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Package</a>
+    @endcan
 @endsection
 
 @section('content')

@@ -10,16 +10,16 @@ use Modules\MemberModule\app\Http\Controllers\Employee\MemberEmployeeModuleContr
  *  Members: managed by the account and by its employees (same actions, see Concerns\MemberActions); delete = the account only
  */
 $memberRoutes = function ($controller) {
-    Route::get('/', [$controller, 'index'])->name('index');
-    Route::get('data', [$controller, 'data'])->name('data');
+    Route::get('/', [$controller, 'index'])->name('index')->can('members.view');
+    Route::get('data', [$controller, 'data'])->name('data')->can('members.view');
     // the Member drop menus of the reservation / package / cash in / withholding forms: search + the quick add duplicate check
-    Route::get('search', [$controller, 'search'])->name('search');
-    Route::get('lookup', [$controller, 'lookup'])->name('lookup');
-    Route::get('create', [$controller, 'create'])->name('create');
-    Route::post('/', [$controller, 'store'])->name('store');
-    Route::get('{id}', [$controller, 'show'])->name('show');
-    Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
-    Route::put('{id}', [$controller, 'update'])->name('update');
+    Route::get('search', [$controller, 'search'])->name('search')->can('members.pick');
+    Route::get('lookup', [$controller, 'lookup'])->name('lookup')->can('members.create');
+    Route::get('create', [$controller, 'create'])->name('create')->can('members.create');
+    Route::post('/', [$controller, 'store'])->name('store')->can('members.create');
+    Route::get('{id}', [$controller, 'show'])->name('show')->can('members.view');
+    Route::get('{id}/edit', [$controller, 'edit'])->name('edit')->can('members.edit');
+    Route::put('{id}', [$controller, 'update'])->name('update')->can('members.edit');
 };
 
 Route::prefix('account/members')->name('account.members.')->middleware(['auth', 'user.active:' . Account::class])->group(function () use ($memberRoutes) {

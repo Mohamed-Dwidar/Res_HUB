@@ -40,6 +40,7 @@ class EmployeeRequest extends FormRequest
             'image' => 'nullable|image|max:2048',
             'position_id' => ['nullable', 'integer', $ownedBy('emp_positions')],
             'shift_id' => ['nullable', 'integer', $ownedBy('emp_shifts')],
+            'role_id' => ['required', 'integer', $ownedBy('roles')],
             'salary' => 'nullable|numeric|min:0|max:99999999',
             'educational_qualification' => 'nullable|string|max:255',
             'join_date' => 'nullable|date',
@@ -75,6 +76,7 @@ class EmployeeRequest extends FormRequest
         return [
             'position_id' => 'position',
             'shift_id' => 'shift',
+            'role_id' => 'role',
             'educational_qualification' => 'educational qualification',
             'attachments.*.label' => 'attachment label',
             'attachments.*.file' => 'attachment',

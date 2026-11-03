@@ -6,7 +6,9 @@
 @endsection
 
 @section('actions')
-    <a href="{{ route($area . '.members.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Member</a>
+    @can('members.create')
+        <a href="{{ route($area . '.members.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Member</a>
+    @endcan
 @endsection
 
 @section('content')

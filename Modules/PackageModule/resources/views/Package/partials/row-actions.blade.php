@@ -7,6 +7,6 @@
         ['label' => 'Add Cash In', 'icon' => 'wallet', 'url' => route($area . '.payments.create', ['payable' => 'package', 'payable_id' => $package->id]), 'modal' => true],
     ],
     'actions' => [
-        ['view' => 'packagemodule::Package.partials.delete-form', 'data' => ['package' => $package]],
+        ['view' => 'packagemodule::Package.partials.delete-form', 'data' => ['package' => $package], 'can' => 'packages.delete'],
     ],
 ])
