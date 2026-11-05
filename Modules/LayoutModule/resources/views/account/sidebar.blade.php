@@ -93,6 +93,13 @@
             'active' => request()->routeIs('account.hr.staff.*'),
             'badge' => $hrAlerts ?: null,
         ],
+        // PayrollModule H5 (2026-11-06): the month's payroll
+        [
+            'title' => 'Payroll',
+            'icon' => 'wallet',
+            'url' => route('account.payroll.runs.index'),
+            'active' => request()->routeIs('account.payroll.runs.*'),
+        ],
         // the HR setup lists (user 2026-11-05: moved here from Settings; hr.manage — the owner always has it; employees: later)
         ...(Gate::allows('hr.manage') ? [
             [

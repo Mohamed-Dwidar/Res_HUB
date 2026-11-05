@@ -3763,6 +3763,29 @@ td.renewal-row__action > .wa-btn {
     background-color: rgb(var(--color-warning) / 0.1);
 }
 
+/* HR › Payroll (H5): the month bar + actions, the table */
+.payroll-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.payroll-head__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.payroll-table th,
+.payroll-table td {
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+    white-space: nowrap;
+}
+
 /* the staff page tabs */
 .staff-tabs a {
     cursor: pointer;

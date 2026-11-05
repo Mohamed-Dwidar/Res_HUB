@@ -4,9 +4,11 @@ use Illuminate\Support\Facades\Route;
 use Modules\AccountModule\app\Models\Account;
 use Modules\EmployeeModule\app\Models\Employee;
 use Modules\PayrollModule\app\Http\Controllers\Account\AdvanceAccountModuleController;
+use Modules\PayrollModule\app\Http\Controllers\Account\PayrollAccountModuleController;
 use Modules\PayrollModule\app\Http\Controllers\Account\PayrollSettingAccountModuleController;
 use Modules\PayrollModule\app\Http\Controllers\Account\SalaryAccountModuleController;
 use Modules\PayrollModule\app\Http\Controllers\Employee\AdvanceEmployeeModuleController;
+use Modules\PayrollModule\app\Http\Controllers\Employee\PayrollEmployeeModuleController;
 use Modules\PayrollModule\app\Http\Controllers\Employee\SalaryEmployeeModuleController;
 
 /**
@@ -50,6 +52,34 @@ Route::prefix('employee/hr/staff')->name('employee.payroll.')->middleware(['auth
     $salaryRoutes(SalaryEmployeeModuleController::class);
     $advanceRoutes(AdvanceEmployeeModuleController::class);
 });
+
+/**
+ *  HR › Payroll (H5; Concerns\PayrollActions): the month page + draft (hr.salary), lock / reopen (payroll.approve), pay (payroll.pay).
+ */
+$payrollRoutes = function ($controller) {
+    Route::get('/', [$controller, 'index'])->name('index')->can('hr.salary');
+    Route::post('calculate', [$controller, 'calculate'])->name('calculate')->can('hr.salary');
+    Route::get('{run}/lines/{line}', [$controller, 'line'])->name('line')->can('hr.salary');
+    Route::get('{run}/lines/{line}/edit', [$controller, 'lineEdit'])->name('line.edit')->can('hr.salary');
+    Route::put('{run}/lines/{line}', [$controller, 'lineUpdate'])->name('line.update')->can('hr.salary');
+    Route::get('{run}/lines/{line}/payslip', [$controller, 'payslip'])->name('payslip')->can('hr.salary');
+    Route::get('{run}/lock', [$controller, 'lockForm'])->name('lock.form')->can('payroll.approve');
+    Route::post('{run}/lock', [$controller, 'lock'])->name('lock')->can('payroll.approve');
+    Route::get('{run}/reopen', [$controller, 'reopenForm'])->name('reopen.form')->can('payroll.approve');
+    Route::post('{run}/reopen', [$controller, 'reopen'])->name('reopen')->can('payroll.approve');
+    Route::get('{run}/pay', [$controller, 'payForm'])->name('pay-all.form')->can('payroll.pay');
+    Route::post('{run}/pay', [$controller, 'payAll'])->name('pay-all')->can('payroll.pay');
+    Route::get('{run}/lines/{line}/pay', [$controller, 'payForm'])->name('pay.form')->can('payroll.pay');
+    Route::post('{run}/lines/{line}/pay', [$controller, 'pay'])->name('pay')->can('payroll.pay');
+    Route::get('{run}/payments/{payment}/undo', [$controller, 'undoForm'])->name('undo.form')->can('payroll.pay');
+    Route::post('{run}/payments/{payment}/undo', [$controller, 'undo'])->name('undo')->can('payroll.pay');
+};
+
+Route::prefix('account/hr/payroll')->name('account.payroll.runs.')->middleware(['auth', 'user.active:' . Account::class])
+    ->group(fn () => $payrollRoutes(PayrollAccountModuleController::class));
+
+Route::prefix('employee/hr/payroll')->name('employee.payroll.runs.')->middleware(['auth', 'user.active:' . Employee::class])
+    ->group(fn () => $payrollRoutes(PayrollEmployeeModuleController::class));
 
 /**
  *  Payroll setup (the account only, the sidebar's HR section): HR › Allowance Types, HR › Payroll Settings.

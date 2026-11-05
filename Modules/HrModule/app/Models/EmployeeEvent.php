@@ -45,11 +45,15 @@ class EmployeeEvent extends Model
         'leave_added' => 'Leave added',
         'leave_cancelled' => 'Leave cancelled',
         'leave_balance_changed' => 'Leave balance changed',
+        // payroll (H5)
+        'salary_paid' => 'Salary paid',
+        'salary_payment_undone' => 'Salary payment undone',
     ];
 
     // their changes / reason only with hr.salary (the History of the Profile tab)
     const PRIVATE_TYPES = ['salary_added', 'salary_edited', 'salary_deleted', 'insurance_changed', 'advance_given', 'advance_cancelled',
-        'advance_repaid', 'advance_extra', 'advance_changed', 'advance_move_cancelled', 'adjustment_added', 'adjustment_cancelled'];
+        'advance_repaid', 'advance_extra', 'advance_changed', 'advance_move_cancelled', 'adjustment_added', 'adjustment_cancelled',
+        'salary_paid', 'salary_payment_undone'];
 
     public function isPrivate(): bool
     {

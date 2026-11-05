@@ -2,7 +2,7 @@
 
 > APPROVED by the user 2026-11-04 (with the answers + rules of §A / §B). Read before any HR / payroll work.
 > Order: H1 → H1b → H2 → H4 → H3 (user 2026-11-05) → H5 → (H6 attendance, only if needed) → H7 recruitment.
-> Status: H1 `49708fd`; H2 `1bdf163`; H4 part 1 `0af039e`; H4 part 2 `8a81b0f`; H3 built 2026-11-05 (§3.3 – §3.5b). Next: H5 payroll.
+> Status: H1 `49708fd`; H2 `1bdf163`; H4 part 1 `0af039e`; H4 part 2 `8a81b0f`; H3 built 2026-11-05 (§3.3 – §3.5b). H5 payroll: plan approved 2026-11-06 (§3.6, §6), building.
 > Every number of the law (rates, brackets, leave days, overtime %) is a SETTING with an effective date, reviewed by the accounting
 > office (§9). Nothing legal is written in the code.
 
@@ -272,23 +272,17 @@ Salary in force (a change inside M prorated by days) + insured wage × the setti
 `payroll_line_id` 0 (days × daily rate); each open advance's installment for M (+ planned extras, never above the remaining);
 unpaid leave days inside M (a leave crossing months split). Locking stamps `payroll_line_id` → those rows freeze.
 
-### 3.6 Payroll (PayrollModule, H5)
+### 3.6 Payroll (PayrollModule, H5 — approved by the user 2026-11-06; replaces the earlier rule-set design)
 
-- `payroll_rule_sets` — account_id, `effective_from`, name, `rules` JSON (§5), `confirmed_note` + confirmed_by / at ("reviewed by
-  the accounting office on …"); an unconfirmed set = a WARNING on the Payroll page and in the run (§B), not a block; a set used
-  by a locked run is read only.
-- `payroll_runs` — account_id, run_no, period (month), period_from / to, type regular | off_cycle (bonus month, final
-  settlement), status draft | review | locked, rule_set_id + `rules` snapshot, totals JSON, created / sent_to_review / locked by +
-  at, reopen_count, notes.
-- `payroll_lines` — run_id, staff_id, snapshot (staff_no, name ar / en, position, department, national_id, insurance_number,
-  pay_method, bank / wallet masked), days_in_period, days_in_service, absence_days, unpaid_leave_days, overtime_hours, basic,
-  gross, insurable_wage, insurance_employee, insurance_employer, taxable, tax, statutory_employee / employer, total_deductions,
-  net, paid_amount, payment_status, notes.
-- `payroll_line_items` — line_id, pay_item_id + code / name_ar / name_en / kind / flags (snapshot), quantity, rate, amount,
-  source (compensation, adjustment, leave, advance, calc), source_id.
-- `payroll_payments` — line_id, staff_id, period, expense_id, amount, payment_method_id, paid_on, creatable, cancelled_at / by /
-  reason (an undo cancels its Cash Out).
-- `payroll_events` — run_id, type (created, review, locked, reopened, paid, payment_undone), reason, data, creatable, created_at.
+- `payroll_runs` — account_id, `period` (the month, unique per account), status draft | locked, totals JSON, calculated_at,
+  locked_at / locked_by, reopen_count, `history` JSON (calculated / locked / reopened / paid: who, when, reason), notes.
+- `payroll_lines` — run_id, employee_id, `snapshot` JSON (name, no., job title, insurance no.), days_in_service, month_days,
+  basic, allowances, gross, bonuses, deductions, unpaid_leave_days, unpaid_leave, advance_installment, insurance_employee,
+  insurance_company (shown, not deducted), income_tax (typed per line, default 0), net, paid_amount, warnings JSON, notes.
+- `payroll_line_items` — line_id, kind earning | deduction | info, source (salary | allowance | adjustment | unpaid_leave |
+  advance | insurance | tax), source_id, label, quantity (days), amount.
+- `payroll_payments` — line_id, run_id, employee_id, amount, payment_method_id, paid_on, expense_id (company Cash Out
+  "Salaries"), creatable, cancelled_at / cancelled_by / cancel_reason.
 
 ## 4. Permissions (roles catalog; none in Front desk)
 
@@ -333,30 +327,32 @@ How dates work:
 - Locked = snapshot: line + items + rules + staff names copied; payslips / reports read ONLY the snapshot (like issued contracts).
   Reopen (user 2026-11-04): the owner only, the LAST locked run, no salary payment from it yet, reason required — logged.
 
-## 6. Payroll flow
+## 6. Payroll flow (H5 as approved 2026-11-06)
 
-ONE Payroll page per month (§B): the current month pre-selected, one table, one row per person, totals at the bottom, the
-button of the next step only.
+ONE page HR › Payroll, a month at a time.
+1. **Draft** (`hr.salary`): Calculate / Recalculate = one line per person on payroll in the month (not External; joiners /
+   leavers by days in service). gross = (basic + allowances) × days in service ÷ `month_days` (a salary change inside the month:
+   each salary for its days) + bonuses (amount or days × daily rate) − deductions (same) − unpaid leave days inside the month ×
+   daily rate − advance installment (the advance's planned month; lowered so net ≥ 0, warned) − insurance employee share
+   (insured wage × %; company share shown) − income tax (typed per line, default 0; a calculator later when the accounting
+   office sends the brackets) = net. Daily rate = the salary in force at the month's end ÷ month_days. A recalculation keeps
+   each line's tax and notes. **A draft never changes any advance / bonus / deduction / leave data** (it only reads them).
+2. **Lock** (`payroll.approve`, owner only for now): recalculates, then freezes: bonuses / deductions stamped with
+   payroll_line_id, each advance gets a `deduct` move (settled at 0). Payslip PDF (mpdf + Cairo, AR / EN, like contracts).
+3. **Pay** (`payroll.pay`, owner only): per row (part payments) or Pay all → one company Cash Out "Salaries" each (outside
+   shifts); undo = voids it (reason, who, when). Refused until "Salaries" is the system category (go-live step below).
+4. **Reopen** (`payroll.approve`): the LAST locked month, no payment left, reason: deduct moves cancelled, stamps removed → draft.
+Warnings (yellow, never block): no salary, insured without a number, insurance % not set, installment lowered, prorated.
 
-1. **Draft** (`payroll.run`): "Calculate · October 2026" → a line per staff active in the month (status active / on_leave, or
-   ended inside it). Inputs pulled: compensation, approved leaves, adjustments of the month, advance installments. Editable per
-   line in the review grid: absence days, overtime hours (= the manual attendance), skip an installment, notes. "Recalculate" any
-   time (sync; ~10 people = instant, so no "calculating" state).
-2. **Calculation** (`PayrollCalculator`, pure): basic + allowances (prorated) + earning adjustments = gross → minus before-tax
-   deductions (absence, unpaid leave) → insurance (insurable wage clamped × employee %) → taxable = taxable items − insurance −
-   exemption → tax → statutory → after-tax deductions (penalties capped, advance installment, others) → net (not below the minimum
-   net: the installment shrinks, the rest stays on the advance). Unit tests with the office's own examples before H5 ships.
-3. **Review** → inputs frozen; send back to draft or **Lock** (`payroll.approve`): snapshot written, adjustments / leaves / advance
-   moves of the month get the line id, payslips available.
-4. **Pay** (`payroll.pay`, locked runs only): [Pay] on each row (amount = the remaining, editable for a partial payment; "Paid
-   from" = a payment method: owner / company cash, bank transfer, wallet; date today; reference optional) and "Pay all" (every
-   row with a remaining, one popup: method + date). Each payment = one **account-level** Cash Out (category "Salaries", item
-   "Salary 10-2026 · <name>", `is_company` = 1, `shift_closing_id` 0 forever) + a `payroll_payments` row; the row shows paid /
-   remaining. Undo a payment (reason, the owner or `payroll.pay`) cancels its Cash Out (soft delete + reason) — logged. A run
-   with a payment can't be reopened.
-5. **Outputs:** payslip PDF (mpdf, Cairo, AR / EN, from the snapshot, "received by" signature line for cash), run summary PDF,
-   Excel export (bank / wallet list, full grid), **insurance monthly report** (staff, insurance no., insurable wage, employee /
-   employer shares, totals — Excel + PDF in the office's layout), tax report (taxable, tax per person + total). All exports logged.
+**Go-live = the November 2026 payroll, paid early December (user 2026-11-06; no parallel run — was Nov – Dec drafts, live in January).**
+
+**Go-live checklist (on the server, right before paying November):**
+1. The H2 – H5 deploy is done (migrations 100039 – 100053) and the staff data is entered (salaries, insurance + Payroll Settings %,
+   advances, bonuses / deductions, leaves of November).
+2. Back up the DB (+ APP_KEY, + `storage/app/hr`).
+3. Run `database/fixes/2026-11-06-payroll-salaries-system-category.sql` (marks "Salaries" #28 as the system category
+   `generated_key = 'salaries'`: from then on salaries are paid only from Payroll; the old manual rows stay as they are).
+4. November: Calculate → check against the accounting office (tax per line) → Lock (writes the advance deductions) → Pay.
 
 ## 6b. Account-level Cash Out vs shifts / expenses / Daily Summary (checked in the code 2026-11-04)
 
@@ -421,14 +417,14 @@ categories ("Salaries" = the existing #28, "Advances" new).
 | **H2** Salary & insurance | PayrollModule; allowance_types, employee_salaries + employee_salary_items, employee_insurance, payroll_settings (§3.3); Salary tab | 1 | the 3 old salaries copied |
 | **H3** Leaves (after H4) | leave_types, employee_leave_balances, employee_leaves (§3.4); Leaves tab | 1 | a year's balances |
 | **H4** Advances & adjustments (after H2) | first the account-level Cash Out (§6b, own commit + test); adjustment_types, employee_adjustments, employee_advances + moves (§3.5); Cash In "Advance repayment" | 2 | — |
-| **H5** Payroll | runs, lines, items, payments, events; the one Payroll page, lock, reopen, pay → account-level Cash Out "Salaries" (generated only from go-live); payslips, insurance / tax exports | 1 | **parallel run** Nov + Dec 2026 next to today's manual Cash Out (same totals or explained), live from January 2027 with the 2027 rule set |
+| **H5** Payroll | runs, lines, items, payments, events; the one Payroll page, lock, reopen, pay → account-level Cash Out "Salaries" (generated only from go-live); payslips, insurance / tax exports | 1 | **live with the November 2026 payroll** (paid early December; no parallel run, user 2026-11-06): the office checks each line before Lock |
 | H6 Attendance | only if needed (§7) | 1 | — |
 | H7 Recruitment | §8 | 1 | — |
 
 ## 11. Risks / notes
 
 - Wrong legal numbers = wrong salaries → nothing locks without a confirmed rule set; calculator unit tests from the office's
-  examples; the parallel run.
+  examples; the accounting office checks November line by line before Lock (no parallel run).
 - Sensitive data in a live system: private disk only, encrypted bank / wallet columns, `hr.sensitive` separate from `hr.view`,
   every view / download / export logged, no HR data in the front desk role.
 - Salaries already in Cash Out (244 rows, 794,578.00) stay as they are (history); no import into payroll runs.

@@ -88,6 +88,11 @@ return [
             // H2 (2026-11-05): salaries + social insurance (H4: advances, bonuses / deductions)
             'hr.salary' => 'See and edit salaries and social insurance',
         ],
+        // H5 payroll (2026-11-06): preparing a draft = hr.salary; locking / paying = these two (no preset: the owner only for now)
+        'Payroll' => [
+            'payroll.approve' => 'Lock / reopen a month\'s payroll (salaries frozen, advances deducted)',
+            'payroll.pay' => 'Pay salaries from a locked payroll (company Cash Out)',
+        ],
         // 2026-11-04 (user): logins are made / changed / switched off ONLY from the staff form's System Access section
         'System Access' => [
             'users.manage' => 'Turn system access on / off, set the login email / password / role (staff form)',
@@ -131,6 +136,8 @@ return [
         'documents.view' => ['hr.view'],
         'documents.manage' => ['documents.view'],
         'hr.salary' => ['hr.view'],
+        'payroll.approve' => ['hr.salary'],
+        'payroll.pay' => ['hr.salary'],
         'users.manage' => ['hr.manage'],
     ],
 

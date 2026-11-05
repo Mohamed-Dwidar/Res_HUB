@@ -80,16 +80,17 @@ class AdvanceService
     }
 
     /**
-     * The planned deductions of an open advance, from max(first month, this month): [['month' => Carbon, 'installment',
+     * The planned deductions of an open advance, from max(first month, this month | $from): [['month' => Carbon, 'installment',
      * 'planned' (never above what is left), 'left' (after it)]] until nothing is left (max 60 rows). H5 reads the month.
      */
-    public function schedule(EmployeeAdvance $advance): array
+    public function schedule(EmployeeAdvance $advance, ?Carbon $from = null): array
     {
         if ($advance->status !== 'open') {
             return [];
         }
         $left = $this->remaining($advance);
-        $month = $advance->first_period->copy()->max(Carbon::today()->startOfMonth());
+        // payroll asks from its own month ($from); the tab from this month
+        $month = $advance->first_period->copy()->max(($from ?? Carbon::today())->copy()->startOfMonth());
         $rows = [];
         while ($left > 0.004 && count($rows) < 60) {
             $installment = $this->installmentFor($advance, $month);

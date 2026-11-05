@@ -71,6 +71,14 @@
             'badge' => Gate::allows('documents.view')
                 ? (app(\Modules\HrModule\app\Services\StaffService::class)->alertCount(Auth::user()->userable->ownerAccountId()) ?: null) : null,
         ],
+        // PayrollModule H5: preparing drafts (hr.salary); lock / pay need payroll.approve / payroll.pay
+        [
+            'title' => 'Payroll',
+            'can' => 'hr.salary',
+            'icon' => 'wallet',
+            'url' => route('employee.payroll.runs.index'),
+            'active' => request()->routeIs('employee.payroll.runs.*'),
+        ],
     ];
     $items = array_values(array_filter($items, fn ($item) => empty($item['can']) || Gate::allows($item['can'])));
     // nothing left under "Daily": no divider either
