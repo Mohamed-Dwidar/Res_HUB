@@ -14,5 +14,6 @@
     "PackageModule": true,
     "PaymentModule": true,
     "MessagingModule": true,
-    "ContractModule": true
+    "ContractModule": true,
+    "HrModule": true
 }

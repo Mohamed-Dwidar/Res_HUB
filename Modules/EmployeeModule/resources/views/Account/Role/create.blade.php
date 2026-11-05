@@ -19,7 +19,7 @@
     @endif
 
     <form method="POST" action="{{ route('account.settings.roles.store') }}" data-ajax
-        data-confirm="The role will be added; it changes nothing until you give it to an employee."
+        data-confirm="The role will be added; it changes nothing until you give it to a user."
         data-confirm-title="Add this role?"
         data-confirm-button="Add"
         data-confirm-variant="success">

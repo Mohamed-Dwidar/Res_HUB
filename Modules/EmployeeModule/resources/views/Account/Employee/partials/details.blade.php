@@ -1,5 +1,5 @@
 {{-- Employee data (account view + the employee's own "My Profile"). --}}
-<div class="form-section mt-6">Employee Data</div>
+<div class="form-section mt-6">Personal Data</div>
 <dl class="detail-list">
     <div><dt>Phone</dt><dd>{{ $employee->phone ?: '-' }}</dd></div>
     <div><dt>Another Phone</dt><dd>{{ $employee->another_phone ?: '-' }}</dd></div>
@@ -18,7 +18,7 @@
     @endif
     <div><dt>Shift</dt><dd>{{ $employee->shift ? $employee->shift->name . ' (' . $employee->shift->time_range . ')' : '-' }}</dd></div>
     <div><dt>Join Date</dt><dd>{{ $employee->join_date?->format('Y-m-d') ?? '-' }}</dd></div>
-    <div><dt>Leave Date</dt><dd>{{ $employee->leave_date?->format('Y-m-d') ?? '-' }}</dd></div>
+    <div><dt>Inactive From</dt><dd>{{ $employee->leave_date?->format('Y-m-d') ?? '-' }}</dd></div>
     @if (!empty($withSalary))
         <div><dt>Salary</dt><dd>{{ $employee->salary !== null ? number_format($employee->salary, 2) : '-' }}</dd></div>
     @endif

@@ -226,7 +226,7 @@ class ShiftClosingService
         $this->assertCollectorOf($accountId, $collector);
         $onBehalf = $by->getKey() !== $collector->getKey();
         if ($onBehalf && !$this->paymentService->isOwner($by)) {
-            abort(403, 'Only the account can close another employee\'s shift.');
+            abort(403, 'Only the account can close another user\'s shift.');
         }
         $action = $onBehalf ? 'close_on_behalf' : (in_array($action, ['close', 'logout_closed'], true) ? $action : 'close');
 

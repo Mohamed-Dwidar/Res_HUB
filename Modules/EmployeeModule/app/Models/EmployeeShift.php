@@ -13,7 +13,7 @@ class EmployeeShift extends Model
 {
     use SoftDeletes;
 
-    protected $table = 'emp_shifts';
+    protected $table = 'employee_shifts';
 
     protected $fillable = ['account_id', 'name', 'start_time', 'end_time', 'is_active'];
 

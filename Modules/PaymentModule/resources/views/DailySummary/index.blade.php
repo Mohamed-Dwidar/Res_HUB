@@ -33,7 +33,7 @@
         <div class="table-wrap">
             <table class="data-table">
                 {{-- the name opens the open shift's popup (account.shifts.open, 2026-10-28); Cash Out header added (the cell was there) --}}
-                <thead><tr><th>Employee</th><th>Open Since</th><th>Cash In</th><th>Collected</th><th>Cash Out</th><th>"Still Working"</th><th></th></tr></thead>
+                <thead><tr><th>User</th><th>Open Since</th><th>Cash In</th><th>Collected</th><th>Cash Out</th><th>"Still Working"</th><th></th></tr></thead>
                 <tbody>
                     @foreach ($longOpen as $userId => $period)
                         <tr>

@@ -12,6 +12,12 @@ checklist, one role per employee. An accountant (external or internal), a superv
 
 ## 1. Decisions (user 2026-11-03)
 
+> **2026-11-04 (user, docs/hr-plan.md §B):** logins are no longer managed on an Employees / Users page — HR › Staff is the one
+> place for people; a staff file's **System Access** section makes / changes / switches off its login (`employees` + `users`
+> rows, 1:1 with `staff`). The role of a login is chosen there. New key **`users.manage`** (System Access group: access on /
+> off, login email, password, role; owner by default, in no preset, never on one's own file). A staff status other than Active
+> switches the login off. Risk: a role with `users.manage` can give others any role — give it only to trusted people.
+
 1. **Custom roles + Laravel's Gate** (no package: spatie/laravel-permission is not installed; its tables / per-account teams /
    users-attached roles / boolean-only permissions do not fit). Permission catalog in code (config, grouped by page); `roles`
    table (account, name, ticked permissions json, idle minutes, default flag); `employees.role_id`.

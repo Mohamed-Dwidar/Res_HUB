@@ -28,6 +28,19 @@ class EmployeeRoutesTest extends TestCase
     // employee routes open to every role: his profile (the header menu "My Profile")
     const PERMISSION_FREE = ['employee.dashboard'];
 
+    // permission groups never in Front desk: their routes are for roles made for them (HR, docs/hr-plan.md)
+    const NOT_FRONT_DESK = ['hr.', 'documents.', 'users.'];
+
+    private function notFrontDesk(string $ability): bool
+    {
+        foreach (self::NOT_FRONT_DESK as $prefix) {
+            if (str_starts_with($ability, $prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // $permissions = his role's keys (in memory, no query): null = Front desk
     private function employeeUser(?array $permissions = null): User
     {
@@ -175,7 +188,7 @@ class EmployeeRoutesTest extends TestCase
         $refused = [];
         foreach ($this->employeeRoutes() as [$route, $middleware]) {
             foreach ($this->abilities($middleware) as $ability) {
-                if (!Gate::forUser($user)->allows($ability)) {
+                if (!$this->notFrontDesk($ability) && !Gate::forUser($user)->allows($ability)) {
                     $refused[] = $this->label($route) . ' → ' . $ability;
                 }
             }
@@ -208,6 +221,35 @@ class EmployeeRoutesTest extends TestCase
         }
         $this->assertNotContains('expenses.view_all', $roles->normalize(['payments.view_all']), 'the two view_all keys are separate');
         $this->assertNotContains('payments.view_all', $roles->normalize(['expenses.view_all']), 'the two view_all keys are separate');
+    }
+
+    // HR (docs/hr-plan.md H1): the hr.* / documents.* keys are in the catalog, never in Front desk (a Front desk employee gets
+    // 403 on every HR route), each brings hr.view with it
+    public function test_hr_keys_are_not_in_front_desk(): void
+    {
+        $catalog = array_merge(...array_values(array_map('array_keys', config('employeemodule.permissions'))));
+        $frontDesk = config('employeemodule.role_presets.front_desk.permissions');
+        $roles = app(\Modules\EmployeeModule\app\Services\RoleService::class);
+        foreach (['hr.view', 'hr.sensitive', 'hr.manage', 'documents.view', 'documents.manage', 'users.manage'] as $key) {
+            $this->assertContains($key, $catalog);
+            $this->assertNotContains($key, $frontDesk, "$key must not be in Front desk");
+            $this->assertContains('hr.view', $roles->normalize([$key]), "$key must tick hr.view");
+        }
+        $this->assertContains('documents.view', $roles->normalize(['documents.manage']));
+        $this->assertContains('hr.manage', $roles->normalize(['users.manage']));
+
+        $this->actingAs($this->employeeUser(), 'web');
+        $hrRoutes = 0;
+        foreach ($this->employeeRoutes() as [$route, $middleware]) {
+            if (!array_filter($this->abilities($middleware), fn ($ability) => $this->notFrontDesk($ability))) {
+                continue;
+            }
+            $hrRoutes++;
+            $method = collect($route->methods())->first(fn ($method) => $method !== 'HEAD');
+            $status = $this->call($method, $this->uri($route), [], [], [], ['HTTP_X_REQUESTED_WITH' => 'XMLHttpRequest', 'HTTP_ACCEPT' => 'application/json'])->getStatusCode();
+            $this->assertSame(403, $status, 'Front desk opened ' . $this->label($route));
+        }
+        $this->assertGreaterThan(10, $hrRoutes, 'The HR employee routes did not load.');
     }
 
     // CashScope = the only rule for whose rows / which dates the Payments lists (and any export) show

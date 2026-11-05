@@ -980,7 +980,7 @@ class ContractService
     {
         $contract = $this->contractRepository->forAccount($accountId)->findOrFail($id);
         if (!$this->can($contract, 'delete', $user)) {
-            throw ValidationException::withMessages(['status' => $contract->isDraft() ? 'Only the owner or the employee who made this draft can delete it.'
+            throw ValidationException::withMessages(['status' => $contract->isDraft() ? 'Only the owner or the user who made this draft can delete it.'
                 : 'An issued contract can\'t be deleted.']);
         }
         $contract->delete();

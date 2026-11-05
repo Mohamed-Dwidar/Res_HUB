@@ -9,22 +9,16 @@ use Modules\EmployeeModule\app\Http\Controllers\Account\EmployeeShiftAccountModu
 use Modules\EmployeeModule\app\Http\Controllers\Account\RoleAccountModuleController;
 
 /**
- *  Logged in account: employees + their positions / shifts lists
+ *  Logged in account: the positions / shifts lists (+ the old employees urls → HR › Staff)
  *  (the employee's own pages: LayoutModule employee.dashboard, his password: UserModule user.account.edit)
  */
 Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
+    // the old Users (logins) pages, removed 2026-11-04: HR › Staff (System Access in the staff form); old GET urls redirect there
     Route::prefix('employees')->name('employees.')->group(function () {
-        Route::get('/', [EmployeeAccountModuleController::class, 'index'])->name('index');
-        Route::get('data', [EmployeeAccountModuleController::class, 'data'])->name('data');
-        Route::get('create', [EmployeeAccountModuleController::class, 'create'])->name('create');
-        Route::post('/', [EmployeeAccountModuleController::class, 'store'])->name('store');
-        Route::get('{id}', [EmployeeAccountModuleController::class, 'show'])->name('show');
-        Route::get('{id}/edit', [EmployeeAccountModuleController::class, 'edit'])->name('edit');
-        Route::put('{id}', [EmployeeAccountModuleController::class, 'update'])->name('update');
-        Route::delete('{id}', [EmployeeAccountModuleController::class, 'destroy'])->name('destroy');
-        Route::patch('{id}/left', [EmployeeAccountModuleController::class, 'left'])->name('left');
-        Route::patch('{id}/left/undo', [EmployeeAccountModuleController::class, 'undoLeft'])->name('left.undo');
-        Route::get('{id}/attachments/{attachmentId}', [EmployeeAccountModuleController::class, 'downloadAttachment'])->name('attachments.download');
+        Route::get('/', [EmployeeAccountModuleController::class, 'redirectToStaff'])->name('index');
+        Route::get('create', [EmployeeAccountModuleController::class, 'redirectToStaff'])->name('create');
+        Route::get('{id}', [EmployeeAccountModuleController::class, 'redirectToStaff'])->name('show');
+        Route::get('{id}/edit', [EmployeeAccountModuleController::class, 'redirectToStaff'])->name('edit');
     });
 
     Route::prefix('employee-positions')->name('employee-positions.')->group(function () {

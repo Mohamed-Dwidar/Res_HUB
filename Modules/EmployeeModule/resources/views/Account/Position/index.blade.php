@@ -25,7 +25,10 @@
             <thead>
                 <tr>
                     <th data-data="name_html" data-name="name">Name</th>
-                    <th data-data="employees_count" data-name="employees_count">Employees</th>
+                    @if ($departments)
+                        <th data-data="department" data-orderable="false">Department</th>
+                    @endif
+                    <th data-data="employees_count" data-name="employees_count">Users</th>
                     <th data-data="status" data-name="is_active">Status</th>
                     <th data-data="actions"></th>
                 </tr>

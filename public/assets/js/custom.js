@@ -528,8 +528,12 @@ document.addEventListener("click", function (e) {
         var box = add.closest("[data-repeat]");
         var template = box.querySelector("template[data-repeat-template]");
         box.dataset.next = Number(box.dataset.next || box.querySelectorAll("[data-repeat-list] [data-repeat-row]").length) + 1;
-        box.querySelector("[data-repeat-list]").insertAdjacentHTML("beforeend", template.innerHTML.replace(/__INDEX__/g, box.dataset.next));
+        var list = box.querySelector("[data-repeat-list]");
+        list.insertAdjacentHTML("beforeend", template.innerHTML.replace(/__INDEX__/g, box.dataset.next));
         createIcons({ icons: icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
+        // the new row: its date fields (dd/mm/yyyy) and its show-if fields (e.g. the staff documents rows, 2026-11-04)
+        dateFields(list.lastElementChild);
+        if (box.closest("form")) applyConditions(box.closest("form"));
         return;
     }
     var remove = e.target.closest("[data-repeat-remove]");
@@ -1503,6 +1507,9 @@ document.addEventListener("change", function (e) {
 //  - select[data-filter-parents="a b"]: only its options whose data-match ("a:1 b:5" tokens) has every chosen parent value;
 //    a value no longer offered goes back to "" (All)
 //  - [data-filter-requires="a"]: hidden until a has a value
+//  - an option with data-match="*" is offered for every parent value (the staff form: job titles with no department)
+//  - select[data-filter-reset]: emptied whenever a parent changes (the staff form: Department → Job Title, 2026-11-05)
+//  - also on forms opened in the popup (initForms)
 // Runs in the capture phase, before datatables.js reads the filters (one reload per change), after a Clear and on page load.
 // ------------------------------------------------------------------
 function filterChain(form) {
@@ -1514,7 +1521,7 @@ function filterChain(form) {
         }).filter(Boolean);
         var value = select.value;
         select.replaceChildren.apply(select, select._allOptions.filter(function (option) {
-            if (!option.value) return true;
+            if (!option.value || option.dataset.match === "*") return true;
             var match = (option.dataset.match || "").split(" ");
             return parents.every(function (token) { return match.indexOf(token) >= 0; });
         }));
@@ -1529,7 +1536,11 @@ function filterChain(form) {
 
 document.addEventListener("change", function (e) {
     var form = e.target.form;
-    if (form && e.target.name && form.querySelector('select[data-filter-parents~="' + e.target.name + '"]')) filterChain(form);
+    if (!form || !e.target.name) return;
+    var children = form.querySelectorAll('select[data-filter-parents~="' + e.target.name + '"]');
+    if (!children.length) return;
+    children.forEach(function (child) { if (child.hasAttribute("data-filter-reset")) child.value = ""; });
+    filterChain(form);
 }, true);
 
 document.addEventListener("reset", function (e) {
@@ -1597,6 +1608,7 @@ function initForms(root) {
     initSearchable(root);
     (root.tagName === "FORM" ? [root] : root.querySelectorAll("form")).forEach(function (form) {
         applyConditions(form);
+        if (form.querySelector("select[data-filter-parents]")) filterChain(form);
         if (form.matches("[data-reservation-form]")) {
             reservationLockMember(form);
             reservationCapacity(form);
@@ -2483,4 +2495,17 @@ document.addEventListener("change", function (e) {
 
 document.addEventListener("input", function (e) {
     if (e.target.matches && e.target.matches("[data-contract-duration], [data-contract-value]")) e.target.dataset.touched = "1";
+});
+
+// ------------------------------------------------------------------
+// HR (HrModule, docs/hr-plan.md H1): the Staff list notice "Documents: 2 expired · 1 expire soon · 4 missing" — a click picks
+// that value in the list's Documents filter (the list reloads by its own change handler)
+// ------------------------------------------------------------------
+document.addEventListener("click", function (e) {
+    var link = e.target.closest && e.target.closest("[data-staff-alert]");
+    if (!link) return;
+    var select = document.querySelector('#staff-filters [name="documents"]');
+    if (!select) return;
+    select.value = link.dataset.staffAlert;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
 });

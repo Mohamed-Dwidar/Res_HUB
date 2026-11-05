@@ -114,7 +114,7 @@ class EmployeeShiftAccountModuleController extends Controller
     public function destroy($id)
     {
         if (!$this->shiftService->deleteOne($this->accountId(), $id)) {
-            return response()->json(['message' => 'This shift is used by employees, change their shift first.'], 422);
+            return response()->json(['message' => 'This shift is used by users, change their shift first.'], 422);
         }
 
         return response()->json([

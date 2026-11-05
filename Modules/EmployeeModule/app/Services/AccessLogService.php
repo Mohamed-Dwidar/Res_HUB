@@ -3,13 +3,15 @@
 namespace Modules\EmployeeModule\app\Services;
 
 use Illuminate\Http\Request;
+use Modules\AccountModule\app\Models\Account;
 use Modules\EmployeeModule\app\Models\AccessLog;
 use Modules\EmployeeModule\app\Models\Employee;
 use Modules\UserModule\app\Models\User;
 
 /**
  * The Access Log (docs/roles-plan.md): the employees' logins, failed logins, logouts, idle timeouts (R0), exports and sensitive
- * actions (R1+). Only employees' logins are written (the owner's are not); nothing is ever edited.
+ * actions (R1+). Only employees' events are written, except $withOwner (HR downloads / exports, docs/hr-plan.md: the owner's
+ * too); nothing is ever edited.
  */
 class AccessLogService
 {
@@ -22,10 +24,11 @@ class AccessLogService
         return $user?->userable instanceof Employee;
     }
 
-    // an event of a logged in employee (another user type = nothing); $extra: page, format, filters, rows, subject (a model)
-    public function record(string $event, ?User $user, array $extra = []): ?AccessLog
+    // an event of a logged in employee (another user type = nothing; $withOwner: the account owner's too); $extra: page,
+    // format, filters, rows, subject (a model)
+    public function record(string $event, ?User $user, array $extra = [], bool $withOwner = false): ?AccessLog
     {
-        if (!$this->isEmployee($user)) {
+        if (!$this->isEmployee($user) && !($withOwner && $user?->userable instanceof Account)) {
             return null;
         }
 
@@ -59,7 +62,7 @@ class AccessLogService
     // the Access Log "Employee" filter: users.id => name (left employees too: their lines stay)
     public function loginOptions($accountId): array
     {
-        return Employee::with(['user' => fn ($query) => $query->select('id', 'userable_type', 'userable_id')])
+        return Employee::withTrashed()->withLogin()->with(['user' => fn ($query) => $query->select('id', 'userable_type', 'userable_id')])
             ->where('account_id', $accountId)->orderBy('name')->get()
             ->filter(fn ($employee) => $employee->user)
             ->mapWithKeys(fn ($employee) => [$employee->user->id => $employee->name])

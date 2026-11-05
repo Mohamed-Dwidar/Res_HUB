@@ -9,7 +9,7 @@
         'attrs' => 'min="1" max="24" step="1"', 'hint' => 'Logged out after this many hours without using the system (1–24). Empty = no limit.'])
 </div>
 @if ($role?->is_default)
-    <div class="role-default-note">The default role: new employees get it, and so does an employee without a role. It can't be deleted.</div>
+    <div class="role-default-note">The default role: new users get it, and so does a user without a role. It can't be deleted.</div>
 @endif
 
 @foreach ($catalog as $group => $permissions)

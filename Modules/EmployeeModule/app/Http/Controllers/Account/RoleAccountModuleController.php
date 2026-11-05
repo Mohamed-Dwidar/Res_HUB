@@ -63,7 +63,7 @@ class RoleAccountModuleController extends Controller
         $this->roleService->create($this->accountId(), $request->validated(), Auth::id());
 
         return response()->json([
-            'message' => 'The role has been added. Give it to employees from their Edit form.',
+            'message' => 'The role has been added. Give it from HR › Staff (Edit › System Access).',
             'reload' => true,
             'redirect' => route('account.settings.roles.index'),
         ]);
@@ -82,7 +82,7 @@ class RoleAccountModuleController extends Controller
         $this->roleService->update($this->accountId(), $id, $request->validated());
 
         return response()->json([
-            'message' => 'The role has been saved. Its employees get the change on their next page.',
+            'message' => 'The role has been saved. Its users get the change on their next page.',
             'reload' => true,
             'redirect' => route('account.settings.roles.index'),
         ]);

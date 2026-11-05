@@ -30,6 +30,18 @@ class EmployeePositionService
             ->orderBy('name')->get()->mapWithKeys(fn ($position) => [$position->id => $this->optionLabel($position)])->all();
     }
 
+    // the staff form's Job Title (Department → Job Title): [id => ['name', 'data' => ['match' => 'department_id:N' | '*']]] —
+    // '*' = a title with no department, offered with every department (custom.js filterChain)
+    public function optionsWithDepartment($accountId, $currentId = null): array
+    {
+        return $this->positionRepository->forAccount($accountId)
+            ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $currentId))
+            ->orderBy('name')->get()->mapWithKeys(fn ($position) => [$position->id => [
+                'name' => $this->optionLabel($position),
+                'data' => ['match' => $position->department_id ? 'department_id:' . $position->department_id : '*'],
+            ]])->all();
+    }
+
     // the list filters: [id => ['name', 'active']], all of them, the active ones first (the inactive ones marked)
     public function filterOptions($accountId): array
     {
@@ -82,6 +94,7 @@ class EmployeePositionService
     {
         return [
             'name' => $data['name'],
+            'department_id' => (int) ($data['department_id'] ?? 0),
             'is_active' => !empty($data['is_active']),
         ];
     }

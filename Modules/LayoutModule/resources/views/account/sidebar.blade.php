@@ -7,6 +7,8 @@
      * Settings › General: withholding tax off → no Withholding Certificates item.
      */
     $withholdingOn = Auth::user()->userable->withholdingEnabled();
+    // HrModule (docs/hr-plan.md H1): expired + expiring staff documents
+    $hrAlerts = app(\Modules\HrModule\app\Services\StaffService::class)->alertCount(Auth::user()->userable_id);
     $items = [
         ['divider' => 'Daily'],
         [
@@ -81,25 +83,65 @@
             'url' => route('account.withholding-certificates.index'),
             'active' => request()->routeIs('account.withholding-certificates.*'),
         ]] : []),
+
+        // HrModule (docs/hr-plan.md, H1 2026-11-04): ONE Staff list + the staff page; later Payroll
+        ['divider' => 'HR'],
         [
-            'title' => 'Employees',
+            'title' => 'Staff',
             'icon' => 'contact',
-            'url' => route('account.employees.index'),
-            'active' => request()->routeIs('account.employees.*'),
+            'url' => route('account.hr.staff.index'),
+            'active' => request()->routeIs('account.hr.staff.*'),
+            'badge' => $hrAlerts ?: null,
         ],
-        // EmployeeModule (2026-11-03, docs/roles-plan.md): the employees' logins, timeouts, exports
-        [
-            'title' => 'Access Log',
-            'icon' => 'scroll-text',
-            'url' => route('account.access-log.index'),
-            'active' => request()->routeIs('account.access-log.*'),
-        ],
+        // the HR setup lists (user 2026-11-05: moved here from Settings; hr.manage — the owner always has it; employees: later)
+        ...(Gate::allows('hr.manage') ? [
+            [
+                'title' => 'Employee Departments',
+                'icon' => 'network',
+                'url' => route('account.hr.departments.index'),
+                'active' => request()->routeIs('account.hr.departments.*'),
+            ],
+            [
+                'title' => 'Employee Positions',
+                'icon' => 'award',
+                'url' => route('account.employee-positions.index'),
+                'active' => request()->routeIs('account.employee-positions.*'),
+            ],
+            [
+                'title' => 'Employee Shifts',
+                'icon' => 'clock',
+                'url' => route('account.employee-shifts.index'),
+                'active' => request()->routeIs('account.employee-shifts.*'),
+            ],
+            [
+                'title' => 'Document Types',
+                'icon' => 'files',
+                'url' => route('account.hr.document-types.index'),
+                'active' => request()->routeIs('account.hr.document-types.*'),
+            ],
+        ] : []),
 
         ['divider' => 'Settings'],
         [
             'title' => 'Settings',
             'icon' => 'settings',
             'children' => [
+                // 2026-11-04 (user): no Users page — HR › Staff is the one place for people (System Access in the staff form);
+                // Roles and Access Log first in Settings
+                // EmployeeModule (R0 2026-11-03, docs/roles-plan.md): what each user may do
+                [
+                    'title' => 'Roles',
+                    'icon' => 'shield-check',
+                    'url' => route('account.settings.roles.index'),
+                    'active' => request()->routeIs('account.settings.roles.*'),
+                ],
+                // EmployeeModule (2026-11-03): the users' logins, timeouts, exports, HR views / downloads
+                [
+                    'title' => 'Access Log',
+                    'icon' => 'scroll-text',
+                    'url' => route('account.access-log.index'),
+                    'active' => request()->routeIs('account.access-log.*'),
+                ],
                 [
                     'title' => 'General',
                     'icon' => 'sliders-horizontal',
@@ -174,25 +216,6 @@
                     'icon' => 'clipboard-list',
                     'url' => route('account.jobs.index'),
                     'active' => request()->routeIs('account.jobs.*') && !request()->routeIs('account.jobs.create'),
-                ],
-                [
-                    'title' => 'Employee Positions',
-                    'icon' => 'award',
-                    'url' => route('account.employee-positions.index'),
-                    'active' => request()->routeIs('account.employee-positions.*'),
-                ],
-                [
-                    'title' => 'Employee Shifts',
-                    'icon' => 'clock',
-                    'url' => route('account.employee-shifts.index'),
-                    'active' => request()->routeIs('account.employee-shifts.*'),
-                ],
-                // EmployeeModule (R0 2026-11-03, docs/roles-plan.md): what each employee may do
-                [
-                    'title' => 'Roles',
-                    'icon' => 'shield-check',
-                    'url' => route('account.settings.roles.index'),
-                    'active' => request()->routeIs('account.settings.roles.*'),
                 ],
             ],
         ],

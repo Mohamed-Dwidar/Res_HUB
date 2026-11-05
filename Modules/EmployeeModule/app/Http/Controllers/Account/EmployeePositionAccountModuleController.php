@@ -29,7 +29,7 @@ class EmployeePositionAccountModuleController extends Controller
     // the list page, the rows come from data() (DataTables)
     public function index()
     {
-        return view('employeemodule::Account.Position.index');
+        return view('employeemodule::Account.Position.index', ['departments' => $this->departments()]);
     }
 
     // DataTables server side: search + is_active filter
@@ -41,7 +41,7 @@ class EmployeePositionAccountModuleController extends Controller
     // the list columns, for data() and for one row after a change (row())
     private function table(array $filters, $id = null)
     {
-        $query = $this->positionService->listQuery($this->accountId());
+        $query = $this->positionService->listQuery($this->accountId())->with('department');
         if ($id) {
             $query->whereKey($id);
         }
@@ -50,12 +50,13 @@ class EmployeePositionAccountModuleController extends Controller
             ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['is_active'])))
             ->setRowId(fn ($position) => 'row-' . $position->id)
             ->addColumn('name_html', fn ($position) => '<a href="' . route('account.employee-positions.edit', $position->id) . '" data-modal class="font-medium">' . e($position->name) . '</a>')
+            ->addColumn('department', fn ($position) => e($position->department?->name ?? '-'))
             ->addColumn('status', fn ($position) => view('layoutmodule::partials.row-toggle', [
                 'url' => route('account.employee-positions.active', $position->id), 'row' => $position->id, 'name' => 'is_active', 'checked' => $position->is_active,
             ])->render())
             ->addColumn('actions', fn ($position) => view('employeemodule::Account.Position.partials.row-actions', compact('position'))->render())
             ->rawColumns(['name_html', 'status', 'actions'])
-            ->only(['DT_RowId', 'name_html', 'employees_count', 'status', 'actions']);
+            ->only(['DT_RowId', 'name_html', 'department', 'employees_count', 'status', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -66,7 +67,7 @@ class EmployeePositionAccountModuleController extends Controller
 
     public function create()
     {
-        return view('employeemodule::Account.Position.create');
+        return view('employeemodule::Account.Position.create', ['departments' => $this->departments()]);
     }
 
     public function store(EmployeePositionRequest $request)
@@ -83,7 +84,7 @@ class EmployeePositionAccountModuleController extends Controller
     public function edit($id)
     {
         $position = $this->positionService->findOne($this->accountId(), $id);
-        return view('employeemodule::Account.Position.edit', compact('position'));
+        return view('employeemodule::Account.Position.edit', ['position' => $position, 'departments' => $this->departments($position->department_id)]);
     }
 
     public function update(EmployeePositionRequest $request, $id)
@@ -113,7 +114,7 @@ class EmployeePositionAccountModuleController extends Controller
     public function destroy($id)
     {
         if (!$this->positionService->deleteOne($this->accountId(), $id)) {
-            return response()->json(['message' => 'This position is used by employees, change their position first.'], 422);
+            return response()->json(['message' => 'This position is used by users, change their position first.'], 422);
         }
 
         return response()->json([
@@ -121,5 +122,11 @@ class EmployeePositionAccountModuleController extends Controller
             'row' => null,
             'redirect' => route('account.employee-positions.index'),
         ]);
+    }
+
+    // HrModule departments [id => name] (the active ones + the title's current one); empty = no Department field / column
+    private function departments($currentId = 0): array
+    {
+        return app(\Modules\HrModule\app\Services\HrSettingService::class)->departmentOptions($this->accountId(), $currentId);
     }
 }

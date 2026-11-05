@@ -237,7 +237,7 @@ class RoleService
             throw ValidationException::withMessages(['role' => 'The default role can\'t be deleted.']);
         }
         if ($role->employees_count > 0) {
-            throw ValidationException::withMessages(['role' => 'This role is given to ' . $role->employees_count . ' employee(s): give them another role first.']);
+            throw ValidationException::withMessages(['role' => 'This role is given to ' . $role->employees_count . ' user(s): give them another role first.']);
         }
         $role->delete();
     }

@@ -5,12 +5,12 @@
 @endsection
 
 @section('content')
-    <div class="text-slate-500">Your employees' logins, failed logins, logouts, idle timeouts, exports and sensitive actions, newest first.</div>
+    <div class="text-slate-500">Your users' logins, failed logins, logouts, idle timeouts, exports and sensitive actions, newest first.</div>
 
     <form id="access-log-filters" class="filter-bar mt-5">
         @include('layoutmodule::partials.date-range-filter')
-        <select name="user_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Employee" @if (request()->filled('user_id')) data-initial="{{ (int) request('user_id') }}" @endif>
-            <option value="">All Employees</option>
+        <select name="user_id" class="{{ config('layoutmodule.form.select') }}" aria-label="User" @if (request()->filled('user_id')) data-initial="{{ (int) request('user_id') }}" @endif>
+            <option value="">All Users</option>
             @foreach ($logins as $id => $name)
                 <option value="{{ $id }}">{{ $name }}</option>
             @endforeach

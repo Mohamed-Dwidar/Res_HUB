@@ -1,0 +1,11 @@
+{
+    "name": "HrModule",
+    "alias": "hrmodule",
+    "description": "HR: staff files, documents (docs/hr-plan.md)",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\HrModule\\Providers\\HrModuleServiceProvider"
+    ],
+    "files": []
+}

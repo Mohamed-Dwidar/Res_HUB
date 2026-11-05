@@ -13,7 +13,7 @@
 
 @section('content')
     <form method="POST" action="{{ route('account.settings.roles.update', $role->id) }}" data-ajax data-row="{{ $role->id }}"
-        data-confirm="The changes to &quot;{{ $role->name }}&quot; apply to its {{ $role->employees_count }} employee(s) from their next page."
+        data-confirm="The changes to &quot;{{ $role->name }}&quot; apply to its {{ $role->employees_count }} user(s) from their next page."
         data-confirm-title="Save the changes?"
         data-confirm-button="Save"
         data-confirm-variant="success">

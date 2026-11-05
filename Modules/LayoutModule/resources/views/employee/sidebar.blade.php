@@ -61,6 +61,16 @@
             'url' => route('employee.shift.index'),
             'active' => request()->routeIs('employee.shift.*'),
         ],
+        // HrModule (docs/hr-plan.md H1): an HR role only (hr.view); the badge = expired + expiring documents (documents.view)
+        [
+            'title' => 'Staff',
+            'can' => 'hr.view',
+            'icon' => 'contact',
+            'url' => route('employee.hr.staff.index'),
+            'active' => request()->routeIs('employee.hr.staff.*'),
+            'badge' => Gate::allows('documents.view')
+                ? (app(\Modules\HrModule\app\Services\StaffService::class)->alertCount(Auth::user()->userable->ownerAccountId()) ?: null) : null,
+        ],
     ];
     $items = array_values(array_filter($items, fn ($item) => empty($item['can']) || Gate::allows($item['can'])));
     // nothing left under "Daily": no divider either

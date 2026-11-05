@@ -5,7 +5,6 @@ namespace Modules\EmployeeModule\app\Services;
 use App\Helpers\UploaderHelper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Modules\EmployeeModule\app\Models\Employee;
 use Modules\EmployeeModule\app\Repositories\EmployeeRepository;
@@ -13,8 +12,9 @@ use Modules\UserModule\app\Services\UserService;
 
 /**
  * Every method takes the owner account id, so an account can only reach its own employees.
- * The login (email / password) is in the users table, the image in public/uploads/employees/{id}/,
- * the attachments on the private disk (storage/app/private/employees/{id}/, downloaded through the account).
+ * An employee may have NO login (docs/hr-plan.md, 2026-11-05: the employees row is the HR file): the login (email / password)
+ * is a users row, made only when an email + password are given, changed only when it exists. The HR file itself (number,
+ * status, documents, the System Access section) = HrModule StaffService. Image: public/uploads/employees/{id}/.
  */
 class EmployeeService
 {
@@ -38,19 +38,21 @@ class EmployeeService
     // 404 when the employee belongs to another account
     public function findOne($accountId, $id)
     {
-        return $this->employeeRepository->forAccount($accountId)->with('attachments')->findOrFail($id);
+        return $this->employeeRepository->forAccount($accountId)->findOrFail($id);
     }
 
     public function create($accountId, array $data)
     {
         $employee = DB::transaction(function () use ($accountId, $data) {
             $employee = $this->employeeRepository->create($this->employeeData($data) + ['account_id' => $accountId]);
-            $this->userService->createFor($employee, $data);
+            // a login only with an email + password (else an HR file without one)
+            if (filled($data['email'] ?? null) && filled($data['password'] ?? null)) {
+                $this->userService->createFor($employee, $data);
+            }
             return $employee;
         });
 
         $this->storeImage($employee, $data['image'] ?? null);
-        $this->storeAttachments($employee, $data['attachments'] ?? []);
         return $employee;
     }
 
@@ -60,12 +62,13 @@ class EmployeeService
 
         DB::transaction(function () use ($employee, $data) {
             $employee->update($this->employeeData($data));
-            $this->userService->update($employee->user->id, $data);
+            // no login = nothing to change there (the login is made from the HR file's System Access, StaffService)
+            if ($employee->user) {
+                $this->userService->update($employee->user->id, $data);
+            }
         });
 
         $this->storeImage($employee, $data['image'] ?? null);
-        $this->deleteAttachments($employee, $data['delete_attachments'] ?? []);
-        $this->storeAttachments($employee, $data['attachments'] ?? []);
         return $employee;
     }
 
@@ -87,12 +90,6 @@ class EmployeeService
             $employee->user()->delete();
             return $employee->delete();
         });
-    }
-
-    // one attachment of one of the account's employees (download)
-    public function findAttachment($accountId, $id, $attachmentId)
-    {
-        return $this->findOne($accountId, $id)->attachments()->findOrFail($attachmentId);
     }
 
     private function employeeData(array $data): array
@@ -127,32 +124,5 @@ class EmployeeService
         }
 
         $employee->update(['image' => $this->uploadImage($file, $folder, 'employee', 400, 400)]);
-    }
-
-    // $attachments: [['label' => ..., 'file' => UploadedFile], ...]
-    private function storeAttachments(Employee $employee, array $attachments)
-    {
-        foreach ($attachments as $attachment) {
-            $file = $attachment['file'] ?? null;
-            if (!$file) {
-                continue;
-            }
-            $name = Str::random(32) . '.' . strtolower($file->getClientOriginalExtension());
-            $file->storeAs('employees/' . $employee->id, $name, 'local');
-
-            $employee->attachments()->create([
-                'attach_name' => $name,
-                'attach_label' => trim((string) ($attachment['label'] ?? '')) ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
-            ]);
-        }
-    }
-
-    // $ids: attachments of this employee to remove
-    private function deleteAttachments(Employee $employee, array $ids)
-    {
-        foreach ($employee->attachments()->whereIn('id', $ids)->get() as $attachment) {
-            Storage::disk('local')->delete($attachment->path);
-            $attachment->delete();
-        }
     }
 }

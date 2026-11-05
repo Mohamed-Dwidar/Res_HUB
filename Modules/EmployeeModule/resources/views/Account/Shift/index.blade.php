@@ -26,7 +26,7 @@
                 <tr>
                     <th data-data="name_html" data-name="name">Name</th>
                     <th data-data="time_range" data-name="start_time" data-class="whitespace-nowrap">Time</th>
-                    <th data-data="employees_count" data-name="employees_count">Employees</th>
+                    <th data-data="employees_count" data-name="employees_count">Users</th>
                     <th data-data="status" data-name="is_active">Status</th>
                     <th data-data="actions"></th>
                 </tr>

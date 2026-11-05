@@ -4,7 +4,6 @@ namespace Modules\EmployeeModule\app\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\AccountModule\app\Models\Account;
@@ -12,7 +11,11 @@ use Modules\EmployeeModule\app\Services\RoleService;
 use Modules\UserModule\app\Contracts\Userable;
 use Modules\UserModule\app\Models\User;
 
-// an employee of an account; he logs in with the users table (morph "userable"), the account manages his profile
+/**
+ * A person of an account (docs/hr-plan.md, user 2026-11-05): the employees row IS the HR file (HrModule's Staff model = the
+ * same row + its HR fields). NOT every employee can log in: a login = a users row (morph "userable") — cleaners, the owner's
+ * own file … have none. Any code that lists / counts LOGINS must use Employee::withLogin(). The account manages the profile.
+ */
 class Employee extends Model implements Userable
 {
     use SoftDeletes;
@@ -69,11 +72,6 @@ class Employee extends Model implements Userable
         return $this->permissionList ??= app(RoleService::class)->permissionsOf($this);
     }
 
-    public function attachments(): HasMany
-    {
-        return $this->hasMany(EmployeeAttachment::class);
-    }
-
     public function getImageUrlAttribute(): ?string
     {
         return $this->image ? asset('uploads/employees/' . $this->id . '/' . $this->image) : null;
@@ -88,6 +86,17 @@ class Employee extends Model implements Userable
     public function hasLeft(): bool
     {
         return $this->leave_date !== null && $this->leave_date->lte(today());
+    }
+
+    // only the people who have a login (a users row); employees without one are HR files only
+    public function scopeWithLogin($query)
+    {
+        return $query->whereHas('user');
+    }
+
+    public function hasLogin(): bool
+    {
+        return $this->relationLoaded('user') ? $this->user !== null : $this->user()->exists();
     }
 
     public function scopeFilter($query, array $filters = [])

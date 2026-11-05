@@ -11,7 +11,7 @@
 
 @section('content')
     <form method="POST" action="{{ route('account.settings.general.update') }}" data-ajax
-        data-confirm="The settings apply to you and all your employees. No payment or certificate is changed."
+        data-confirm="The settings apply to you and all your users. No payment or certificate is changed."
         data-confirm-title="Save the settings?"
         data-confirm-button="Save"
         data-confirm-variant="success">
@@ -70,7 +70,7 @@
                 'hint' => 'A cash in / refund / cash out recorded this long after the end of its business date is marked "Late entry".'])
             @include('layoutmodule::partials.field', ['name' => 'expense_review_amount', 'label' => 'Review Cash Out From', 'type' => 'number', 'required' => true,
                 'value' => $account->expenseReviewAmount(), 'attrs' => 'min=0 step=0.01',
-                'hint' => 'Employees\' cash outs from this amount are listed in Payment Exceptions › Expenses.'])
+                'hint' => 'Users\' cash outs from this amount are listed in Payment Exceptions › Expenses.'])
         </div>
 
         @include('layoutmodule::partials.form-actions', ['cancel' => route('account.dashboard')])

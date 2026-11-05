@@ -15,7 +15,7 @@
 
 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
     @include('layoutmodule::partials.field', ['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $fill?->name,
-        'attrs' => 'maxlength="100" dir="auto"', 'hint' => 'What you and the employees see, e.g. "Private office rental".'])
+        'attrs' => 'maxlength="100" dir="auto"', 'hint' => 'What you and the users see, e.g. "Private office rental".'])
     @include('layoutmodule::partials.field', ['name' => 'default_term_months', 'label' => 'Contract Term', 'type' => 'select',
         'options' => ['' => 'The reservation\'s period'] + $terms, 'value' => $fill?->default_term_months,
         'hint' => 'How long a contract runs; monthly renewals inside it need no new contract. 12 months for monthly units.'])

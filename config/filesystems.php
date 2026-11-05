@@ -33,7 +33,9 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // 2026-11-04 (HR ID documents): no built-in /storage/{path} route for the private files; every private file is
+            // served by its own controller (permission + account checked)
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

@@ -220,7 +220,7 @@
             </div>
         @endunless
         @if ($backdated)
-            <div class="{{ config('layoutmodule.form.hint') }}">Made before taxes were set up (back-dated start date): tick it only if the customer asks for an invoice. Employees don't see it here.</div>
+            <div class="{{ config('layoutmodule.form.hint') }}">Made before taxes were set up (back-dated start date): tick it only if the customer asks for an invoice. Only you (the owner) see it.</div>
         @endif
         <div class="tax-breakdown" data-tax-breakdown></div>
         <div class="tax-warning" data-tax-warning hidden></div>

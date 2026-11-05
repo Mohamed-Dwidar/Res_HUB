@@ -11,6 +11,9 @@ return [
         'timeout' => 'Idle timeout',
         'export' => 'Export',
         'action' => 'Sensitive action',
+        // HR (docs/hr-plan.md): an employee opening a staff page; any download of an HR file (the owner's too)
+        'view' => 'Viewed',
+        'download' => 'Download',
     ],
 
     /*
@@ -75,6 +78,18 @@ return [
             'contracts.delete_own_draft' => 'Delete own drafts',
             'contracts.pdf' => 'Contract PDF',
         ],
+        // HR (docs/hr-plan.md, H1 2026-11-04): never in Front desk; views / downloads are written in the Access Log
+        'HR' => [
+            'hr.view' => 'See staff files (list + profile, without ID / bank / emergency data)',
+            'hr.sensitive' => 'See and edit ID, birth date, address, bank / wallet and emergency contact',
+            'hr.manage' => 'Add / edit staff files, change their status, link a login',
+            'documents.view' => 'See and download staff documents',
+            'documents.manage' => 'Add / edit / delete staff documents',
+        ],
+        // 2026-11-04 (user): logins are made / changed / switched off ONLY from the staff form's System Access section
+        'System Access' => [
+            'users.manage' => 'Turn system access on / off, set the login email / password / role (staff form)',
+        ],
     ],
 
     // a ticked key brings these with it (the role save adds them)
@@ -109,6 +124,11 @@ return [
         'contracts.upload_signed' => ['contracts.view'],
         'contracts.delete_own_draft' => ['contracts.view'],
         'contracts.pdf' => ['contracts.view'],
+        'hr.sensitive' => ['hr.view'],
+        'hr.manage' => ['hr.view'],
+        'documents.view' => ['hr.view'],
+        'documents.manage' => ['documents.view'],
+        'users.manage' => ['hr.manage'],
     ],
 
     // Settings › Roles "Start from" (R2 adds the Accountant presets); front_desk = the default role's list (also the fallback
@@ -145,5 +165,6 @@ return [
         'members.view' => 'employee.members.index',
         'contracts.view' => 'employee.contracts.index',
         'shift.has' => 'employee.shift.index',
+        'hr.view' => 'employee.hr.staff.index',
     ],
 ];
