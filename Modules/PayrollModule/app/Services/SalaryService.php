@@ -79,12 +79,30 @@ class SalaryService
         });
     }
 
-    // fix a salary row (H5: refused once a locked payroll used it)
+    // the locked payroll months that used this salary row ("October 2026, November 2026"), '' when none
+    public function lockedUse(EmployeeSalary $salary): string
+    {
+        return \Modules\PayrollModule\app\Models\PayrollLineItem::where('source', 'salary')->where('source_id', $salary->id)
+            ->join('payroll_lines', 'payroll_lines.id', '=', 'payroll_line_items.line_id')
+            ->join('payroll_runs', 'payroll_runs.id', '=', 'payroll_lines.run_id')->where('payroll_runs.status', 'locked')
+            ->orderBy('payroll_runs.period')->pluck('payroll_runs.period')->unique()
+            ->map(fn ($period) => Carbon::parse($period)->format('F Y'))->implode(', ');
+    }
+
+    private function assertNotLocked(EmployeeSalary $salary, string $field): void
+    {
+        if ($used = $this->lockedUse($salary)) {
+            throw ValidationException::withMessages([$field => 'A locked payroll used this salary (' . $used . '): add a new salary instead.']);
+        }
+    }
+
+    // fix a salary row (refused once a locked payroll used it)
     public function update(Staff $staff, $salaryId, array $data, Model $user): EmployeeSalary
     {
         return DB::transaction(function () use ($staff, $salaryId, $data, $user) {
             $this->lock($staff);
             $salary = $this->find($staff, $salaryId);
+            $this->assertNotLocked($salary, 'effective_from');
             $before = $this->snapshot($salary);
             $items = $this->checked($staff, $data, $salary);
             $salary->fill($this->fields($data))->save();
@@ -103,6 +121,7 @@ class SalaryService
     {
         DB::transaction(function () use ($staff, $salaryId, $user) {
             $salary = $this->find($staff, $salaryId);
+            $this->assertNotLocked($salary, 'salary');
             $this->event($staff, 'salary_deleted', $this->diff($this->snapshot($salary), []), null, $user);
             $salary->delete();
         });

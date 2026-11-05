@@ -1,5 +1,5 @@
--- GO-LIVE STEP (docs/hr-plan.md §6 "Go-live checklist"): run on the server RIGHT BEFORE paying the November 2026 payroll
--- (early December), after the H2 – H5 deploy — not as part of the deploy. Until then salaries are paid by hand with "Salaries".
+-- GO-LIVE STEP (docs/hr-plan.md §6 "Go-live checklist"): run on the server RIGHT AFTER the H2 – H5 migrations, as part of that
+-- deploy (user 2026-11-06): manual salary Cash Outs stop on the deploy day; November 2026 is the first month paid from Payroll.
 -- Marks the existing Cash Out category #28 "Salaries" (account 1; 244 manual Cash Outs up to 31-10-2026) as the SYSTEM category
 -- of payroll (expense_categories.generated_key = 'salaries'): from then on it is no longer offered in the Cash Out form and
 -- salaries are paid only from HR › Payroll (Pay = a company Cash Out "Salaries", outside shifts). The old rows are not changed.

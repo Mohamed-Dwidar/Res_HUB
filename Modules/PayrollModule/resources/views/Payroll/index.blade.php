@@ -12,6 +12,7 @@
 @section('content')
     @php($money = fn ($value) => number_format((float) $value, 2))
     @php($locked = $run?->isLocked())
+    @php($blocked = (bool) $monthError)
     <div class="payroll-head">
         <span class="leave-year">
             <a href="{{ route($area . '.payroll.runs.index', ['month' => $month->copy()->subMonth()->format('Y-m')]) }}" class="btn btn-secondary btn-sm"><i data-lucide="chevron-left"></i></a>
@@ -27,7 +28,14 @@
             @endif
         </span>
         <span class="payroll-head__actions">
-            @if (!$locked)
+            @if ($blocked)
+                {{-- before the first payroll month: nothing to do here (Reopen stays for a month locked before the setting) --}}
+                @if ($locked)
+                    @can('payroll.approve')
+                        <a href="{{ route($area . '.payroll.runs.reopen.form', $run->id) }}" data-modal class="btn btn-secondary btn-sm"><i data-lucide="unlock"></i> Reopen</a>
+                    @endcan
+                @endif
+            @elseif (!$locked)
                 <form method="POST" action="{{ route($area . '.payroll.runs.calculate') }}" data-ajax>
                     @csrf
                     <input type="hidden" name="month" value="{{ $month->format('Y-m') }}">
@@ -49,6 +57,11 @@
         </span>
     </div>
 
+    @if ($blocked)
+        <div class="notice notice--warning mb-4">{{ $monthError }} Payroll starts with {{ $firstMonth->format('F Y') }}.</div>
+    @elseif (!$firstMonth)
+        <div class="notice notice--warning mb-4">The first payroll month is not set (HR › Payroll Settings): set it so the months paid by hand can't be paid again.</div>
+    @endif
     @unless ($canPay)
         <div class="notice notice--info mb-4">Paying from payroll is not switched on yet: the "Salaries" Cash Out category becomes the system category right before paying the first month (go-live step).</div>
     @endunless
@@ -57,6 +70,10 @@
         <div class="text-slate-500">{{ $people }} {{ $people == 1 ? 'person' : 'people' }} on payroll in {{ $month->format('F Y') }}. Press Calculate to see the salaries (nothing is changed).</div>
     @else
         @php($warned = $lines->filter(fn ($line) => $line->warnings)->count())
+        @php($negative = $lines->filter(fn ($line) => $line->net < 0))
+        @if ($negative->isNotEmpty())
+            <div class="notice notice--warning mb-4">Negative net: {{ $negative->map(fn ($line) => $line->name . ' (' . number_format($line->net, 2) . ')')->implode(', ') }} — Lock is refused until it is fixed.</div>
+        @endif
         @if ($warned)
             <div class="notice notice--warning mb-4">{{ $warned }} {{ $warned == 1 ? 'line has' : 'lines have' }} warnings (<i data-lucide="alert-triangle" class="inline h-4 w-4"></i>): open the line to see them.</div>
         @endif
@@ -80,7 +97,7 @@
                 </thead>
                 <tbody>
                     @foreach ($lines as $line)
-                        <tr>
+                        <tr @class(['row-muted' => !empty($line->snapshot['no_salary'])])>
                             <td>
                                 <a href="{{ route($area . '.payroll.runs.line', [$run->id, $line->id]) }}" data-modal class="font-medium">{{ $line->name }}</a>
                                 @if ($line->warnings) <i data-lucide="alert-triangle" class="inline h-4 w-4 text-warning" title="{{ implode(' · ', $line->warnings) }}"></i> @endif
@@ -94,7 +111,7 @@
                             <td class="text-right text-danger">{{ $line->advance_installment ? '−' . $money($line->advance_installment) : '-' }}</td>
                             <td class="text-right text-danger">{{ $line->insurance_employee ? '−' . $money($line->insurance_employee) : '-' }}</td>
                             <td class="text-right text-danger">{{ $line->income_tax ? '−' . $money($line->income_tax) : '-' }}</td>
-                            <td class="text-right font-bold">{{ $money($line->net) }}</td>
+                            <td @class(['text-right font-bold', 'text-danger' => $line->net < 0])>{{ !empty($line->snapshot['no_salary']) ? 'No salary' : $money($line->net) }}</td>
                             <td class="text-right">{{ $line->paid_amount ? $money($line->paid_amount) : '-' }}</td>
                             <td>
                                 @include('layoutmodule::partials.row-menu', ['links' => array_merge(
@@ -112,7 +129,7 @@
                 </tbody>
                 <tfoot>
                     <tr class="row-total">
-                        <td>{{ $run->totals['count'] ?? 0 }} people</td>
+                        <td>{{ $run->totals['count'] ?? 0 }} people{{ $lines->count() > ($run->totals['count'] ?? 0) ? ' (+' . ($lines->count() - ($run->totals['count'] ?? 0)) . ' without a salary)' : '' }}</td>
                         <td></td>
                         <td class="text-right">{{ $money($run->totals['gross'] ?? 0) }}</td>
                         <td class="text-right">{{ $money($run->totals['bonuses'] ?? 0) }}</td>

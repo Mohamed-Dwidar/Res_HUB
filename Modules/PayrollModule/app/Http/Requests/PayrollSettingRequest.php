@@ -14,6 +14,7 @@ class PayrollSettingRequest extends FormRequest
             'insurance_company_percent' => 'nullable|numeric|min:0|max:100',
             'month_days' => 'required|integer|min:1|max:31',
             'advance_warn_percent' => 'required|numeric|min:1|max:100',
+            'first_payroll_month' => 'nullable|date_format:Y-m-d',
         ];
     }
 }

@@ -32,6 +32,9 @@ use Modules\PayrollModule\app\Models\PayrollSetting;
  * - pay() / payAll() / undoPayment(): company Cash Out "Salaries" (outside shifts) — refused until "Salaries" is the system
  *   category (the go-live fix file).
  * Every money value is rounded to the cent; net = gross + bonuses − deductions − unpaid leave − advance − insurance − tax.
+ * Fixes before go-live (user 2026-11-06): months before payroll_settings.first_payroll_month are refused (paid by hand); the
+ * insurance employee share only while insured in the month and never above the gross; a line with no salary for the month =
+ * snapshot no_salary (warned, out of the totals); Lock refused while a line's net is negative (the names listed).
  */
 class PayrollService
 {
@@ -63,8 +66,9 @@ class PayrollService
         $end = $month->copy()->endOfMonth();
         return Staff::with('position')->where('account_id', $accountId)->where('is_external', false)
             ->where(fn ($query) => $query->whereNull('join_date')->orWhere('join_date', '<=', $end->toDateString()))
+            // left before the month = out (an ended status without a date = left long ago)
             ->where(fn ($query) => $query->whereNotIn('status', config('hrmodule.ended_statuses'))
-                ->orWhereNull('status_date')->orWhere('status_date', '>=', $start->toDateString()))
+                ->orWhere(fn ($query) => $query->whereNotNull('status_date')->where('status_date', '>=', $start->toDateString())))
             ->orderBy('employee_no')->get();
     }
 
@@ -74,11 +78,39 @@ class PayrollService
         return ExpenseCategory::where('account_id', $accountId)->where('generated_key', 'salaries')->exists();
     }
 
+    // the first month paid through Payroll (null = not set)
+    public function firstMonth($accountId): ?Carbon
+    {
+        return PayrollSetting::of($accountId)->first_payroll_month?->copy()->startOfMonth();
+    }
+
+    // why this month can't go through Payroll (before the first payroll month: paid by hand), null = allowed
+    public function monthError($accountId, Carbon $month): ?string
+    {
+        $first = $this->firstMonth($accountId);
+        return $first && $month->copy()->startOfMonth()->lt($first)
+            ? $month->format('F Y') . ' is before the first payroll month (' . $first->format('F Y') . '): it was paid by hand.' : null;
+    }
+
+    private function assertMonth($accountId, Carbon $month, string $field = 'run'): void
+    {
+        if ($error = $this->monthError($accountId, $month)) {
+            throw ValidationException::withMessages([$field => $error]);
+        }
+    }
+
+    // the lines whose net is below 0 (Lock is refused while there is one)
+    public function negativeLines(PayrollRun $run): Collection
+    {
+        return $run->lines()->where('net', '<', 0)->get();
+    }
+
     // ------------------------------------------------------------------ calculate
 
     public function calculate($accountId, Carbon $month, Model $user): PayrollRun
     {
         $month = $month->copy()->startOfMonth();
+        $this->assertMonth($accountId, $month);
         return DB::transaction(function () use ($accountId, $month, $user) {
             $run = PayrollRun::where('account_id', $accountId)->whereDate('period', $month)->lockForUpdate()->first();
             if ($run && $run->isLocked()) {
@@ -164,8 +196,9 @@ class PayrollService
         }
         $basic = $money($basic);
         $current = $this->salaryService->current($history->sortByDesc('effective_from')->values(), $to);
-        if (!$current) {
-            $warnings[] = 'No salary in force this month.';
+        $noSalary = $basic == 0 && !$allowanceByType;
+        if ($noSalary) {
+            $warnings[] = 'No salary for this month: not paid and not in the totals (add a salary on the staff page, then recalculate).';
         }
         $items[] = ['kind' => 'earning', 'source' => 'salary', 'source_id' => $current?->id ?? 0, 'label' => 'Basic salary', 'quantity' => $full ? null : $days, 'amount' => $basic];
         $allowances = 0.0;
@@ -216,12 +249,17 @@ class PayrollService
             }
             if (!$settings->insuranceSet()) {
                 $warnings[] = 'Insurance % not set (HR › Payroll Settings): no insurance deducted.';
-            } elseif ($insurance->insured_wage) {
+            } elseif ($insurance->insured_wage && $gross > 0) {
                 $insuranceEmployee = $money($insurance->insured_wage * $settings->insurance_employee_percent / 100);
                 $insuranceCompany = $money($insurance->insured_wage * $settings->insurance_company_percent / 100);
+                // never above the gross of the month
+                if ($insuranceEmployee > $gross) {
+                    $warnings[] = 'Insurance share ' . number_format($insuranceEmployee, 2) . ' limited to the gross ' . number_format($gross, 2) . '.';
+                    $insuranceEmployee = $gross;
+                }
                 $items[] = ['kind' => 'deduction', 'source' => 'insurance', 'source_id' => $insurance->id, 'label' => 'Social insurance (' . rtrim(rtrim(number_format($settings->insurance_employee_percent, 2), '0'), '.') . '% of ' . number_format($insurance->insured_wage, 2) . ')', 'quantity' => null, 'amount' => $insuranceEmployee];
                 $items[] = ['kind' => 'info', 'source' => 'insurance', 'source_id' => $insurance->id, 'label' => 'Company insurance share (' . rtrim(rtrim(number_format($settings->insurance_company_percent, 2), '0'), '.') . '%)', 'quantity' => null, 'amount' => $insuranceCompany];
-            } else {
+            } elseif (!$insurance->insured_wage) {
                 $warnings[] = 'Insured without an insured wage: no insurance deducted.';
             }
         }
@@ -252,11 +290,14 @@ class PayrollService
         }
         $installments = $money($installments);
         $net = $money($available - $installments);
+        if ($net < 0) {
+            $warnings[] = 'Net is negative (' . number_format($net, 2) . '): lower the deductions / tax before locking.';
+        }
 
         $values = [
             'snapshot' => [
                 'name' => $staff->name, 'name_ar' => $staff->name_ar, 'employee_no' => $staff->employee_no,
-                'position' => $staff->position?->name, 'insurance_no' => $insurance?->insurance_no,
+                'position' => $staff->position?->name, 'insurance_no' => $insurance?->insurance_no, 'no_salary' => $noSalary,
             ],
             'days_in_service' => $days, 'month_days' => $monthDays, 'basic' => $basic, 'allowances' => $allowances, 'gross' => $gross,
             'bonuses' => $money($bonuses), 'deductions' => $money($deductions), 'unpaid_leave_days' => $unpaidDays, 'unpaid_leave' => $money($unpaid),
@@ -270,6 +311,7 @@ class PayrollService
     public function updateLine(PayrollRun $run, $lineId, array $data, Model $user): PayrollLine
     {
         $this->assertDraft($run);
+        $this->assertMonth($run->account_id, $run->period);
         $line = $this->findLine($run, $lineId);
         return DB::transaction(function () use ($run, $line, $data) {
             $staff = Staff::withTrashed()->find($line->employee_id);
@@ -290,10 +332,16 @@ class PayrollService
     public function lock(PayrollRun $run, Model $user): PayrollRun
     {
         $this->assertDraft($run);
+        $this->assertMonth($run->account_id, $run->period);
         return DB::transaction(function () use ($run, $user) {
             $run = PayrollRun::whereKey($run->id)->lockForUpdate()->first();
             $this->assertDraft($run);
             $this->rebuild($run, $user, 'recalculated');
+            $negative = $this->negativeLines($run);
+            if ($negative->isNotEmpty()) {
+                // the whole lock is rolled back (the recalculation too)
+                throw ValidationException::withMessages(['run' => 'Lock refused: negative net for ' . $negative->map(fn ($line) => $line->name . ' (' . number_format($line->net, 2) . ')')->implode(', ') . '.']);
+            }
             foreach ($run->lines()->with('items')->get() as $line) {
                 foreach ($line->items as $item) {
                     if ($item->source === 'adjustment') {
@@ -439,7 +487,8 @@ class PayrollService
 
     private function refreshTotals(PayrollRun $run): void
     {
-        $lines = $run->lines()->get();
+        // lines with no salary for the month are out of the totals (warned)
+        $lines = $run->lines()->get()->reject(fn ($line) => !empty($line->snapshot['no_salary']));
         $totals = ['count' => $lines->count()];
         foreach (PayrollLine::MONEY as $field) {
             $totals[$field] = round((float) $lines->sum($field), 2);
@@ -469,6 +518,7 @@ class PayrollService
 
     private function assertPayable(PayrollRun $run): void
     {
+        $this->assertMonth($run->account_id, $run->period, 'amount');
         if (!$run->isLocked()) {
             throw ValidationException::withMessages(['amount' => 'Lock the payroll first.']);
         }

@@ -344,15 +344,23 @@ ONE page HR › Payroll, a month at a time.
 4. **Reopen** (`payroll.approve`): the LAST locked month, no payment left, reason: deduct moves cancelled, stamps removed → draft.
 Warnings (yellow, never block): no salary, insured without a number, insurance % not set, installment lowered, prorated.
 
-**Go-live = the November 2026 payroll, paid early December (user 2026-11-06; no parallel run — was Nov – Dec drafts, live in January).**
+**Go-live = the November 2026 payroll, paid early December (user 2026-11-06; no parallel run). Manual salary Cash Outs stop on the
+deploy day (user 2026-11-06, later the same day): the Salaries fix file runs right after the H2 – H5 migrations.**
 
-**Go-live checklist (on the server, right before paying November):**
-1. The H2 – H5 deploy is done (migrations 100039 – 100053) and the staff data is entered (salaries, insurance + Payroll Settings %,
-   advances, bonuses / deductions, leaves of November).
-2. Back up the DB (+ APP_KEY, + `storage/app/hr`).
+**Go-live checklist (part of the H2 – H5 deploy):**
+1. Back up the DB (+ APP_KEY, + `storage/app/hr/`).
+2. `php artisan migrate` (100039 – 100054), `optimize:clear`.
 3. Run `database/fixes/2026-11-06-payroll-salaries-system-category.sql` (marks "Salaries" #28 as the system category
-   `generated_key = 'salaries'`: from then on salaries are paid only from Payroll; the old manual rows stay as they are).
-4. November: Calculate → check against the accounting office (tax per line) → Lock (writes the advance deductions) → Pay.
+   `generated_key = 'salaries'`: from then on no manual salary Cash Out; salaries are paid only from Payroll; old rows unchanged).
+4. HR › Payroll Settings: First Payroll Month = November 2026 (October and earlier were paid by hand: refused by Calculate / Lock /
+   Pay, never paid twice), insurance employee / company %.
+5. Before paying November: enter the data (salaries, insurance, advances, bonuses / deductions, leaves), then Calculate → the
+   accounting office checks (tax per line) → Lock (writes the advance deductions; refused while a net is negative) → Pay.
+
+Payroll rules added before go-live (user 2026-11-06): the insurance employee share only while insured in the month and never above
+the gross; a line with no salary for the month = warned and out of the totals; people who left before the month are not listed
+(an ended status without a date counts as left); a salary row used by a locked payroll can't be edited / deleted, and deleting
+the oldest row warns about the months left without a salary.
 
 ## 6b. Account-level Cash Out vs shifts / expenses / Daily Summary (checked in the code 2026-11-04)
 

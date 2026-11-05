@@ -30,6 +30,15 @@
                 'hint' => 'Daily rate = monthly salary ÷ this number (deductions in days, unpaid leave).'])
         </div>
 
+        <div class="form-section mt-8">Payroll</div>
+        <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+            @php($first = $settings->first_payroll_month?->toDateString())
+            @php($months = collect(range(-12, 12))->mapWithKeys(fn ($i) => [today()->startOfMonth()->addMonths($i)->toDateString() => today()->startOfMonth()->addMonths($i)->format('F Y')])->all())
+            @include('layoutmodule::partials.field', ['name' => 'first_payroll_month', 'label' => 'First Payroll Month', 'type' => 'select',
+                'options' => ['' => '- Not set -'] + ($first && !isset($months[$first]) ? [$first => $settings->first_payroll_month->format('F Y')] : []) + $months, 'value' => $first,
+                'hint' => 'The first month paid through Payroll. Earlier months were paid by hand: they can\'t be calculated, locked or paid (never paid twice).'])
+        </div>
+
         <div class="form-section mt-8">Advances</div>
         <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
             @include('layoutmodule::partials.field', ['name' => 'advance_warn_percent', 'label' => 'Warn Above % of Salary', 'type' => 'number', 'required' => true,

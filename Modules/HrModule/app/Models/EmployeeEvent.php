@@ -31,6 +31,7 @@ class EmployeeEvent extends Model
         'salary_added' => 'Salary added',
         'salary_edited' => 'Salary edited',
         'salary_deleted' => 'Salary deleted',
+        'salary_restored' => 'Salary restored',
         'insurance_changed' => 'Insurance changed',
         // PayrollModule (H4)
         'advance_given' => 'Advance given',
@@ -51,7 +52,7 @@ class EmployeeEvent extends Model
     ];
 
     // their changes / reason only with hr.salary (the History of the Profile tab)
-    const PRIVATE_TYPES = ['salary_added', 'salary_edited', 'salary_deleted', 'insurance_changed', 'advance_given', 'advance_cancelled',
+    const PRIVATE_TYPES = ['salary_added', 'salary_edited', 'salary_deleted', 'salary_restored', 'insurance_changed', 'advance_given', 'advance_cancelled',
         'advance_repaid', 'advance_extra', 'advance_changed', 'advance_move_cancelled', 'adjustment_added', 'adjustment_cancelled',
         'salary_paid', 'salary_payment_undone'];
 

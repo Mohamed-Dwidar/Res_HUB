@@ -55,6 +55,8 @@ trait PayrollActions
             'lines' => $run ? $this->payrollService->lines($run) : collect(),
             'people' => $run ? null : $this->payrollService->staffFor($this->accountId(), $month)->count(),
             'canPay' => $this->payrollService->canPay($this->accountId()),
+            'monthError' => $this->payrollService->monthError($this->accountId(), $month),
+            'firstMonth' => $this->payrollService->firstMonth($this->accountId()),
         ]);
     }
 
@@ -87,7 +89,9 @@ trait PayrollActions
 
     public function lockForm($runId)
     {
-        return view('payrollmodule::Payroll.lock', ['run' => $this->runOf($runId), 'area' => $this->area()]);
+        $run = $this->runOf($runId);
+        return view('payrollmodule::Payroll.lock', ['run' => $run, 'area' => $this->area(),
+            'negative' => $this->payrollService->negativeLines($run), 'monthError' => $this->payrollService->monthError($this->accountId(), $run->period)]);
     }
 
     public function lock($runId)

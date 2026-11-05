@@ -106,6 +106,7 @@ class PayrollSettingService
             'insurance_company_percent' => $this->percent($data['insurance_company_percent'] ?? null),
             'month_days' => (int) $data['month_days'],
             'advance_warn_percent' => round((float) $data['advance_warn_percent'], 2),
+            'first_payroll_month' => !empty($data['first_payroll_month']) ? \Carbon\Carbon::parse($data['first_payroll_month'])->startOfMonth()->toDateString() : null,
         ])->save();
         return $settings;
     }

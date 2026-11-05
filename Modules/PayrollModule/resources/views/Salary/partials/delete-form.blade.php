@@ -1,5 +1,5 @@
 <form method="POST" action="{{ route($area . '.payroll.salaries.destroy', [$staff->id, $salary->id]) }}" data-ajax
-    data-confirm="The salary from {{ $salary->effective_from->format('d-m-Y') }} ({{ number_format($salary->total, 2) }}) will be deleted. Use it only for a row typed by mistake — a raise is a new salary."
+    data-confirm="The salary from {{ $salary->effective_from->format('d-m-Y') }} ({{ number_format($salary->total, 2) }}) will be deleted. Use it only for a row typed by mistake — a raise is a new salary.{{ $gap ? ' WARNING: ' . $gap : '' }}"
     data-confirm-title="Delete this salary?"
     data-confirm-button="Delete"
     data-confirm-variant="danger">

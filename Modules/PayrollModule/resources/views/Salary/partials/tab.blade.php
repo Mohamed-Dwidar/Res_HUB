@@ -68,7 +68,10 @@
                                     <td class="text-right whitespace-nowrap font-medium">{{ $money($salary->total) }}</td>
                                     <td>{{ $salary->reason ?: ($loop->last ? 'Opening salary' : '-') }}</td>
                                     <td class="whitespace-nowrap text-slate-500">{{ $salary->creatable?->userable?->displayName() ?? '-' }}</td>
-                                    <td>@include('payrollmodule::Salary.partials.row-actions')</td>
+                                    @php($older = $salaries->get($loop->index + 1))
+                                    {{-- deleting the OLDEST row leaves the months before the next one without a salary (payroll pays 0) --}}
+                                    @php($gap = $older ? null : ($loop->index > 0 ? 'From ' . $salary->effective_from->format('d-m-Y') . ' to ' . $salaries->get($loop->index - 1)->effective_from->copy()->subDay()->format('d-m-Y') . ' there will be NO salary (payroll pays 0 for those months).' : 'This person will have NO salary at all.'))
+                                    <td>@include('payrollmodule::Salary.partials.row-actions', ['gap' => $gap])</td>
                                 </tr>
                             @endforeach
                         </tbody>
