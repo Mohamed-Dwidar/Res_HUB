@@ -44,7 +44,7 @@
                     @foreach ($templates as $template)
                         @php($bySpace = $template->units->groupBy(fn ($unit) => $unit->space?->name ?? '-'))
                         <tr>
-                            <td class="font-medium">{{ $template->name }}</td>
+                            <td><a href="{{ route('account.settings.messages.templates.edit', $template->id) }}" data-modal class="font-medium">{{ $template->name }}</a></td>
                             <td @class(['text-slate-400' => !$template->suggest_when])>{{ $template->suggest_label }}</td>
                             <td>
                                 @if ($template->units->isEmpty())
