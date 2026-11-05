@@ -73,8 +73,13 @@ trait StaffActions
             $query->orderBy('employees.employee_no');
         }
         $alerts = Gate::allows('documents.view') ? $this->staffService->alerts($accountId) : null;
+        // other modules' columns (StaffColumns: PayrollModule's Basic …)
+        $extra = \Modules\HrModule\app\Services\StaffColumns::available();
+        foreach ($extra as $column) {
+            ($column['with'])($query);
+        }
 
-        return DataTables::eloquent($query)
+        $table = DataTables::eloquent($query)
             ->filter(function ($query) use ($filters, $accountId, $alerts, $id) {
                 $query->filter($id ? ['status' => 'all'] : Arr::only($filters, ['search', 'type', 'department_id', 'position_id', 'status']));
                 if ($alerts !== null && in_array($filters['documents'] ?? null, ['expired', 'expiring', 'missing'], true)) {
@@ -91,9 +96,12 @@ trait StaffActions
             ->addColumn('status_html', fn ($staff) => view('hrmodule::Staff.partials.status-badge', compact('staff'))->render())
             ->addColumn('actions', fn ($staff) => view('hrmodule::Staff.partials.row-actions', ['staff' => $staff, 'area' => $this->area()])->render())
             ->orderColumn('name_html', fn ($query, $order) => $query->orderBy('employees.name', $order))
-            ->orderColumn('hire', fn ($query, $order) => $query->orderBy('employees.join_date', $order))
-            ->rawColumns(['name_html', 'work_html', 'phone_html', 'documents_html', 'status_html', 'actions'])
-            ->only(['DT_RowId', 'DT_RowClass', 'name_html', 'work_html', 'phone_html', 'hire', 'documents_html', 'status_html', 'actions']);
+            ->orderColumn('hire', fn ($query, $order) => $query->orderBy('employees.join_date', $order));
+        foreach ($extra as $key => $column) {
+            $table->addColumn($key, fn ($staff) => ($column['value'])($staff));
+        }
+        return $table->rawColumns(array_merge(['name_html', 'work_html', 'phone_html', 'documents_html', 'status_html', 'actions'], array_keys($extra)))
+            ->only(array_merge(['DT_RowId', 'DT_RowClass', 'name_html', 'work_html', 'phone_html', 'hire', 'documents_html', 'status_html', 'actions'], array_keys($extra)));
     }
 
     public function create()
@@ -112,18 +120,24 @@ trait StaffActions
     }
 
     /**
-     * The staff page (a full page, docs/hr-plan.md §B): ?tab=profile | documents (a tab the user can't open falls back to
-     * Profile). An employee's visit is written in the Access Log (the owner's views are not, user 2026-11-04).
+     * The staff page (a full page, docs/hr-plan.md §B): ?tab=profile | documents | a tab of another module (StaffTabs, e.g.
+     * salary); a tab the user can't open falls back to Profile. An employee's visit is written in the Access Log (the owner's views are not, user 2026-11-04).
      */
     public function show(Request $request, $id)
     {
         $staff = $this->staffService->findOne($this->accountId(), $id);
-        $tabs = ['profile' => 'Profile'] + (Gate::allows('documents.view') ? ['documents' => 'Documents'] : []);
+        $extra = \Modules\HrModule\app\Services\StaffTabs::available($staff);
+        $tabs = ['profile' => 'Profile'] + (Gate::allows('documents.view') ? ['documents' => 'Documents'] : [])
+            + array_map(fn ($item) => $item['label'], $extra);
         $tab = array_key_exists($request->query('tab'), $tabs) ? $request->query('tab') : 'profile';
         app(AccessLogService::class)->record('view', Auth::user(), ['page' => 'Staff › ' . $tabs[$tab], 'subject' => $staff]);
 
-        $data = compact('staff', 'tabs', 'tab') + ['area' => $this->area()];
-        if ($tab === 'documents') {
+        $data = compact('staff', 'tabs', 'tab') + ['area' => $this->area(), 'tabView' => 'hrmodule::Staff.partials.tab-' . $tab];
+        if (isset($extra[$tab])) {
+            // a tab of another module (StaffTabs: PayrollModule's Salary …)
+            $data = ($extra[$tab]['data'])($staff) + $data;
+            $data['tabView'] = $extra[$tab]['view'];
+        } elseif ($tab === 'documents') {
             $data['documents'] = $this->staffService->documents($staff);
             $data['alert'] = $staff->hasEnded() ? null : ($this->staffService->alerts($this->accountId())['staff'][$staff->id] ?? null);
         } else {

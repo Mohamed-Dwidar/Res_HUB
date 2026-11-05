@@ -1,9 +1,8 @@
 # HR & Payroll (HrModule + PayrollModule) — plan
 
 > APPROVED by the user 2026-11-04 (with the answers + rules of §A / §B). Read before any HR / payroll work.
-> Order: H1 → H1b → H2 → H3 → H4 → H5 → (H6 attendance, only if needed) → H7 recruitment.
-> Status: H1 (staff files & documents) built 2026-11-04; 2026-11-05 rewritten on the `employees` table (§A 10), migrations
-> waiting for the user's review (§10).
+> Order: H1 → H1b → H2 → H4 → H3 (user 2026-11-05) → H5 → (H6 attendance, only if needed) → H7 recruitment.
+> Status: H1 committed (`49708fd`); H2 / H3 / H4 plan approved 2026-11-05 (§3.3 – §3.5b); H2 in progress.
 > Every number of the law (rates, brackets, leave days, overtime %) is a SETTING with an effective date, reviewed by the accounting
 > office (§9). Nothing legal is written in the code.
 
@@ -212,54 +211,61 @@ names, body_ar / en, values JSON, status draft | issued | signed | ended, issued
 ended_on, end_reason). Placeholders from the staff file + the compensation in force + the account (employer) data. Fixed-term
 contracts ending within N days appear in the same "Expiring" list.
 
+> **H2 / H3 / H4 as approved by the user 2026-11-05** (replaces the earlier pay_items / rule sets / leave requests / violation
+> tiers design of these three phases; H5 brings the rule sets + income tax). Build order **H2 → H4 → H3**, each tested by the
+> user before the next. Permissions: ONE key `hr.salary` (salary, insurance, advances, bonuses / deductions — giving the advance
+> money too until `payroll.pay` in H5) and leaves under `hr.manage`; the owner has all; none in Front desk. Setup lists = owner
+> only (HR sidebar). External staff: no Salary / Advances & Adjustments / Leaves tab, the services refuse them. Every change →
+> `employee_events` (amounts shown only with `hr.salary`). All tables: `account_id`, `employee_id`, soft deletes unless noted.
+
 ### 3.3 Salary & insurance (PayrollModule, H2)
 
-- `pay_items` — account_id, code, name_ar / en, `kind` earning | deduction, `category` basic | allowance | bonus | overtime |
-  commission | absence | unpaid_leave | penalty | advance | insurance | tax | statutory | other, flags `is_insurable`,
-  `is_taxable` (earning) / `before_tax` (deduction reduces the taxable amount), `is_system` (basic, insurance, tax, advance,
-  unpaid leave, absence: can't be deleted), is_active, sort. Accounting decides the flags; the calculator only reads them.
-- `staff_compensations` — staff_id, `effective_from` (date), basic_salary, `items` JSON [{pay_item_id, amount}] (fixed
-  allowances: transport, meals, housing, phone, night …), insurable_wage, reason, creatable. Never edited once a locked payroll
-  used it (a raise = a new row). History list in the file (needs `payroll.view`).
-- `staff_insurance` — staff_id (unique), is_insured, insurance_number, registered_on, form1 / form6 = documents (types), left_on,
-  notes. The insurable wage comes from `staff_compensations` (dated), clamped to the rule set's min / max.
+- `allowance_types` — name_ar / en, `is_insurable` (0), is_active. HR › Allowance Types (owner).
+- `employee_salaries` — employee_id, `effective_from` (date, one per person per date), basic, reason, creatable. A raise = a new
+  row, the old one kept; a row is editable until a payroll uses it (H5).
+- `employee_salary_items` (user 2026-11-05: a child table, not JSON — reports + insurable totals) — salary_id, allowance_type_id,
+  amount. Total = basic + Σ items; insurable = basic + Σ items of insurable types.
+- `employee_insurance` (one row per person, no soft delete; history in employee_events) — is_insured, insurance_no, start_date,
+  insured_wage, end_date, notes.
+- `payroll_settings` (one row per account) — insurance_employee_percent, insurance_company_percent (NULL until the owner sets them
+  = a warning, never hard-coded), `month_days` (30: the daily rate = total ÷ month_days, used by "days of salary" and unpaid
+  leave). HR › Payroll Settings (owner).
+- Old `employees.salary` (3 rows: #7, #14, #16): copied by the migration into a first salary row (effective from the join date,
+  reason "Opening salary"); the column is dropped later by its own migration after the user checks the copy.
+- Staff page tab **Salary** (`hr.salary`): current salary box (basic, allowances, total, insurable), history, insurance block
+  (employee / company shares from the settings), warnings (insured without a number, insured wage ≠ insurable salary, % not set).
 
 ### 3.4 Leaves (HrModule, H3)
 
-- `leave_types` — account_id, name_ar / en, `pay_percent` (100 paid, 0 unpaid, e.g. 75 partly paid sick), `uses_balance`,
-  `yearly_days`, `entitlement_rule` JSON (e.g. after N months of service, more days after N years / from age N — values from the
-  office, §9), `carry_over_max`, `needs_document` (sick → medical certificate), `counts` calendar | working (excluding the
-  person's rest days + public holidays), is_active. Presets (annual, casual, sick, unpaid, maternity, Hajj, exam …) filled with
-  the values the office confirms.
-- `public_holidays` — account_id, date, name_ar / en (moving Islamic dates → entered each year; also used by overtime + attendance).
-- `leave_balances` — staff_id, leave_type_id, year, entitled, carried, adjusted, adjust_reason. Used = Σ approved requests (computed).
-- `leave_requests` — staff_id, leave_type_id, from_date, to_date, days (computed, half days allowed), reason, document_id, status
-  pending | approved | rejected | cancelled, requested_by (creatable: HR or the person's own login), decided_by / at,
-  decision_note. An approved leave inside a LOCKED payroll month can't change → a correction adjustment in the next open month.
-- Payroll link: approved leave days in the period with `pay_percent` < 100 → automatic deduction item (days × daily rate ×
-  (100 − pay_percent) %), split per month when a leave crosses months.
+- `leave_types` — name_ar / en, `is_paid`, `yearly_days`, `needs_attachment`, is_active; presets Annual, Casual, Sick, Unpaid.
+- `employee_leave_balances` — employee_id, leave_type_id, year, days (overrides the type's default for that person + year).
+- `employee_leaves` — employee_id, leave_type_id, from_date, to_date, days (calendar days by default, editable, half days),
+  notes, attachment on the private disk `hr/{account}/{employee}/` (served by the controller like documents), creatable. No
+  request / approval steps: HR records it.
+- Balance of a year = the person's days (or the type's) − Σ days taken that year (Leaves tab). Over the balance = a warning.
+- "Set status On leave" = an optional checkbox on the form (unticked; it switches the login off like any status but Active).
 
-### 3.5 Adjustments & advances (PayrollModule, H4)
+### 3.5 Advances, deductions, bonuses (PayrollModule, H4)
 
-- `violation_types` — account_id, name_ar / en, `tiers` JSON [{repeat: 1, action: warning}, {repeat: 2, days: 0.5}, {repeat: 3,
-  days: 1}, … or fixed amount], `repeat_window_months` (setting), is_active.
-- `payroll_adjustments` — account_id, staff_id, `period` (first day of the month, a date), pay_item_id, quantity (days / hours) +
-  rate (from the rule set: daily / hourly × multiplier) → amount, or a typed amount; reason (required), violation_type_id +
-  repeat_no, source manual | leave | attendance | correction, source_id, creatable, `payroll_line_id` (0 until locked; then
-  frozen). Bonus, incentive, overtime, night work, commission, penalty (جزاء), absence, lateness, damage / cash shortage, one-off
-  allowance, corrections.
-- `staff_advances` — account_id, staff_id, advance_no, amount, given_on, installment_amount (or count), first_period, reason,
-  status open | settled | cancelled, `expense_id` (the Cash Out that paid it), approved_by, creatable.
-- `staff_advance_moves` — advance_id, type deduct | repay | skip | change, amount, period, payroll_line_id / payment_id, reason,
-  creatable. Remaining = amount − Σ deduct − Σ repay. Payroll proposes the installment (never more than the remaining; reduced
-  when the net would go below the rule set's minimum net); the reviewer may skip a month from the Payroll row (reason). A cash
-  repayment = Cash In, other income category "Advance repayment" (not counted as income, like "VAT (manual)").
-- Giving an advance (`payroll.pay`) = an account-level Cash Out, category **"Advances"** (generated only), `expense_id` on the advance.
-- **Opening balances at go-live (H4, proposal):** today advances are typed into "Salaries" (e.g. "سلفة - اينور" 2,000 on 24-10).
-  Old rows are NOT changed. For each person still owing, the owner adds the advance with "Opening balance" ticked
-  (`staff_advances.is_opening` = 1): amount = what is still owed on the go-live date, given_on = the original date, installment,
-  first period = the first payroll month, an optional note / old Cash Out no. (e.g. "#100123"); NO Cash Out is generated (the
-  money left with the old row). A short list to fill once: name, owed, installment (the office / owner gives it).
+- **First, its own commit + test: the account-level Cash Out (§6b)** — `expenses.is_company`, `expense_categories.generated_only`,
+  `Expense::scopeInShifts()` in every shift / Daily Summary query, a "Company" line in Daily Summary, the Payments list badge,
+  "Advances" not pickable for a manual Cash Out.
+- `adjustment_types` — name_ar / en, `kind` bonus | deduction, is_active. HR › Adjustment Types (owner).
+- `employee_adjustments` — employee_id, adjustment_type_id, `period` (first day of the month), amount OR days (× the daily
+  rate, turned into money by payroll), reason (required), creatable, `payroll_line_id` (0 until H5 locks it).
+- `employee_advances` — employee_id, advance_no, amount, given_on, installments, installment_amount, first_period,
+  payment_method_id + `expense_id` (the account-level Cash Out "Advances"), reason, status open | settled | cancelled, creatable.
+  No opening balances (user 2026-11-05: none owed today).
+- `employee_advance_moves` — advance_id, type deduct | repay | change, amount, period, payment_id (a cash repayment = Cash In,
+  other income "Advance repayment", not income), reason, creatable. Remaining = amount − Σ deduct − Σ repay; early / extra
+  repayment = an extra deduction in a chosen month or cash.
+- Staff page tab **Advances & Adjustments** (`hr.salary`).
+
+### 3.5b What H5 payroll reads for month M
+
+Salary in force (a change inside M prorated by days) + insured wage × the settings' %; adjustments of M with
+`payroll_line_id` 0 (days × daily rate); each open advance's installment for M (+ planned extras, never above the remaining);
+unpaid leave days inside M (a leave crossing months split). Locking stamps `payroll_line_id` → those rows freeze.
 
 ### 3.6 Payroll (PayrollModule, H5)
 
@@ -286,10 +292,8 @@ contracts ending within N days appear in the same "Expiring" list.
 | HR files | `hr.view` (staff list + file without salary / bank / national ID), `hr.sensitive` (national ID, bank / wallet, emergency contact, photo), `hr.manage` (add / edit, status, link login; requires view) |
 | Documents | `documents.view` (list + download, logged), `documents.manage` (upload / replace / delete) |
 | Employment contracts | `hr.contracts` (view / draft / issue / upload signed); templates = owner |
-| Leaves | `leaves.view`, `leaves.manage` (enter for anyone, balances), `leaves.approve`; later: `leaves.request_own` |
-| Insurance | `insurance.view` (registration + monthly report), `insurance.manage` |
-| Adjustments | `adjustments.view`, `adjustments.manage` (bonuses / penalties / overtime …) |
-| Advances | `advances.view`, `advances.manage` (enter / edit installments); giving the money = `payroll.pay` |
+| Leaves | H3: `hr.manage` (user 2026-11-05); later: `leaves.request_own` |
+| Salary, insurance, advances, bonuses / deductions | `hr.salary` (H2–H4, user 2026-11-05; requires hr.view) — replaces insurance.* / adjustments.* / advances.*; giving advance money = `hr.salary` until `payroll.pay` (H5) |
 | Payroll | `payroll.view` (salaries, compensation, runs, payslips), `payroll.run` (create / recalculate / send to review), `payroll.approve` (lock; NO preset = the owner only for now), `payroll.pay` (pay salaries + give advances = account-level Cash Out; NO preset; does NOT need `shift.has`), `payroll.export` (Excel / PDF, logged); later: `payroll.own_payslips` |
 | System Access | `users.manage` (turn a person's login on / off, login email / password / role, from the staff form; no preset; never on one's own file) |
 | Settings | owner only (rule sets, pay items, leave / document / violation types, holidays, departments, contract templates) — a key later if asked |
@@ -409,9 +413,9 @@ categories ("Salaries" = the existing #28, "Advances" new).
 |---|---|---|---|
 | **H1** Staff files & documents | HrModule; departments, HR fields on `employees` (§A 10), employee_events, document_types (+ 9 defaults), employee_documents + files; Staff list + staff page (Profile, Documents tabs); System Access in the staff form; private files; expiry notice / filter / badge; keys hr.* / documents.* / users.manage; access log `view` / `download`; sidebar group **HR** › Staff + the 4 setup lists; every existing login is already a file (same row, backfilled); the owner adds the people without a login (Am Emad, Am Mohamed, himself) | `2026_11_04_100031` (run) + `100033`, `100034`, `100035` | the user lists, adds, gives access, uploads, sees the log |
 | **H1b** Employment contracts | staff_contract_templates, staff_contracts; reuse sanitize / editors / PDF; `hr.contracts` | 1 | a contract issued + signed scan |
-| **H2** Salary & insurance setup | PayrollModule; pay_items, staff_compensations, staff_insurance, payroll_rule_sets + calculators + unit tests; per-person **salary preview** (gross → insurance → tax → net) for the office to check against their own figures | 1–2 | the office confirms the previews (§9 1–4) |
-| **H3** Leaves | leave_types, public_holidays, leave_balances, leave_requests; approval; own requests for linked logins (`leaves.request_own`, employee sidebar "My Leaves") | 1 | a year's balances + requests |
-| **H4** Advances & adjustments | violation_types, payroll_adjustments, staff_advances (+ moves, opening balances); account-level Cash Out (`expenses.is_company`, §6b) "Advances"; Cash In "Advance repayment" | 2 | the opening balances entered |
+| **H2** Salary & insurance | PayrollModule; allowance_types, employee_salaries + employee_salary_items, employee_insurance, payroll_settings (§3.3); Salary tab | 1 | the 3 old salaries copied |
+| **H3** Leaves (after H4) | leave_types, employee_leave_balances, employee_leaves (§3.4); Leaves tab | 1 | a year's balances |
+| **H4** Advances & adjustments (after H2) | first the account-level Cash Out (§6b, own commit + test); adjustment_types, employee_adjustments, employee_advances + moves (§3.5); Cash In "Advance repayment" | 2 | — |
 | **H5** Payroll | runs, lines, items, payments, events; the one Payroll page, lock, reopen, pay → account-level Cash Out "Salaries" (generated only from go-live); payslips, insurance / tax exports | 1 | **parallel run** Nov + Dec 2026 next to today's manual Cash Out (same totals or explained), live from January 2027 with the 2027 rule set |
 | H6 Attendance | only if needed (§7) | 1 | — |
 | H7 Recruitment | §8 | 1 | — |

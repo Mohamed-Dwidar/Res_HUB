@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/payrollmodule",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\PayrollModule\\": "app/",
+            "Modules\\PayrollModule\\Database\\Factories\\": "database/factories/",
+            "Modules\\PayrollModule\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\PayrollModule\\Tests\\": "tests/"
+        }
+    }
+}

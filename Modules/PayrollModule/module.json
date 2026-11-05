@@ -1,0 +1,11 @@
+{
+    "name": "PayrollModule",
+    "alias": "payrollmodule",
+    "description": "Payroll: salaries, social insurance (docs/hr-plan.md H2; advances / adjustments H4, payroll H5)",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\PayrollModule\\Providers\\PayrollModuleServiceProvider"
+    ],
+    "files": []
+}

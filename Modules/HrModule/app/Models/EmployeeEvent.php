@@ -27,7 +27,20 @@ class EmployeeEvent extends Model
         'document_added' => 'Document added',
         'document_updated' => 'Document edited',
         'document_deleted' => 'Document deleted',
+        // PayrollModule (H2): the details are shown only with hr.salary (PRIVATE_TYPES)
+        'salary_added' => 'Salary added',
+        'salary_edited' => 'Salary edited',
+        'salary_deleted' => 'Salary deleted',
+        'insurance_changed' => 'Insurance changed',
     ];
+
+    // their changes / reason only with hr.salary (the History of the Profile tab)
+    const PRIVATE_TYPES = ['salary_added', 'salary_edited', 'salary_deleted', 'insurance_changed'];
+
+    public function isPrivate(): bool
+    {
+        return in_array($this->type, self::PRIVATE_TYPES, true);
+    }
 
     protected $fillable = ['account_id', 'employee_id', 'type', 'changes', 'reason', 'creatable_type', 'creatable_id'];
 

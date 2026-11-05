@@ -860,6 +860,13 @@ table.dataTable.data-table td.dt-type-date {
     text-align: left;
 }
 
+/* a column with data-class="text-center" (e.g. the Staff list Basic Salary): header + cells centred — beats DataTables'
+   "thead th { left }" and the number / date rule above */
+table.dataTable.data-table th.text-center,
+table.dataTable.data-table td.text-center {
+    text-align: center;
+}
+
 table.dataTable.data-table th.dt-type-numeric div.dt-column-header,
 table.dataTable.data-table th.dt-type-date div.dt-column-header {
     flex-direction: row;
@@ -1072,6 +1079,19 @@ div.dt-container div.dt-processing > div:last-child {
     border: 1px solid rgb(var(--color-pending) / 0.25);
     border-radius: 0.6rem;
     background-color: rgb(var(--color-pending) / 0.08);
+}
+
+/* a warning box (yellow; HR: staff alerts, missing documents, status, salary warnings) */
+.notice--warning {
+    border-color: rgb(var(--color-warning) / 0.35);
+    background-color: rgb(var(--color-warning) / 0.1);
+}
+
+/* a neutral information box (not a warning), e.g. the New Salary popup's "from <date>: <total>" line */
+.notice--info {
+    border-color: rgb(226 232 240);
+    background-color: rgb(248 250 252);
+    color: rgb(71 85 105);
 }
 
 /* ===== Header menu ===== */
@@ -3337,7 +3357,7 @@ td.renewal-row__action > .wa-btn {
 .staff-alerts svg {
     width: 1.1rem;
     height: 1.1rem;
-    color: rgb(var(--color-pending));
+    color: rgb(var(--color-warning));
 }
 
 .staff-alerts__link {
@@ -3443,4 +3463,147 @@ td.renewal-row__action > .wa-btn {
 
 @media (max-width: 767px) {
     .staff-doc-row__files { grid-column: auto; }
+}
+
+/* ---------------------------------------------------------------- HR Salary tab (PayrollModule) */
+
+/* two columns on large screens (2/3 + 1/3), stacked below */
+.salary-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+}
+
+@media (min-width: 1024px) {
+    .salary-layout {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    }
+}
+
+.salary-layout__main {
+    display: grid;
+    gap: 1.25rem;
+    min-width: 0;
+}
+
+/* a bordered panel inside the page box (HR tabs) */
+.hr-card {
+    padding: 1rem 1.25rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.6rem;
+}
+
+.hr-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.9rem;
+    font-weight: 600;
+}
+
+.hr-card__sub {
+    margin-left: 0.25rem;
+    font-weight: 400;
+    color: rgb(100 116 139);
+}
+
+/* compact stat boxes: label above the value, left aligned, as wide as their content */
+.stat-boxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.stat-box {
+    display: flex;
+    flex-direction: column;
+    min-width: 7.5rem;
+    padding: 0.5rem 0.9rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    background-color: rgb(248 250 252);
+    line-height: 1.25;
+}
+
+.stat-box span {
+    font-size: 0.75rem;
+    color: rgb(100 116 139);
+}
+
+.stat-box b {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.stat-box--main {
+    border-color: rgb(var(--color-primary) / 0.35);
+    background-color: rgb(var(--color-primary) / 0.06);
+}
+
+.stat-box--main b {
+    color: rgb(var(--color-primary));
+}
+
+/* the current salary's allowances, one line */
+.salary-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.25rem;
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    color: rgb(71 85 105);
+}
+
+/* Salary History: compact cells */
+.salary-history th,
+.salary-history td {
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+}
+
+/* label left, value right, one row each (Social Insurance) */
+.info-rows > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgb(241 245 249);
+}
+
+.info-rows > div:last-child {
+    border-bottom: 0;
+}
+
+.info-rows dt {
+    color: rgb(100 116 139);
+}
+
+.info-rows dd {
+    font-weight: 500;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+/* the staff page header: name + #number, Arabic name */
+.staff-head__name {
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.staff-head__no {
+    font-weight: 400;
+    color: rgb(100 116 139);
+}
+
+.staff-head__ar {
+    margin-left: 0.5rem;
+    font-weight: 400;
+    color: rgb(100 116 139);
+}
+
+/* the staff page tabs */
+.staff-tabs a {
+    cursor: pointer;
 }

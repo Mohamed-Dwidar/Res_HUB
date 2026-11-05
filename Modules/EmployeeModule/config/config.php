@@ -85,6 +85,8 @@ return [
             'hr.manage' => 'Add / edit staff files, change their status, link a login',
             'documents.view' => 'See and download staff documents',
             'documents.manage' => 'Add / edit / delete staff documents',
+            // H2 (2026-11-05): salaries + social insurance (H4: advances, bonuses / deductions)
+            'hr.salary' => 'See and edit salaries and social insurance',
         ],
         // 2026-11-04 (user): logins are made / changed / switched off ONLY from the staff form's System Access section
         'System Access' => [
@@ -128,6 +130,7 @@ return [
         'hr.manage' => ['hr.view'],
         'documents.view' => ['hr.view'],
         'documents.manage' => ['documents.view'],
+        'hr.salary' => ['hr.view'],
         'users.manage' => ['hr.manage'],
     ],
 

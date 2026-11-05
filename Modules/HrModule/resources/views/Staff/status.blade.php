@@ -19,7 +19,7 @@
                 'hint' => 'Required for Resigned / Terminated.'])
         </div>
         @if ($staff->user && !$staff->hasLeft())
-            <div class="notice mt-5" data-show-if="status={{ $notActive }}">
+            <div class="notice notice--warning mt-5" data-show-if="status={{ $notActive }}">
                 The system access ({{ $staff->user->email }}) will be switched off: logged out at the next click. Setting the status back to
                 Active doesn't switch it on again — tick "Can log in" in Edit.
             </div>

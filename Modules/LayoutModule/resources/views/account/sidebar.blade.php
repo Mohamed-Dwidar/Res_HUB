@@ -119,6 +119,19 @@
                 'url' => route('account.hr.document-types.index'),
                 'active' => request()->routeIs('account.hr.document-types.*'),
             ],
+            // PayrollModule setup (H2, 2026-11-05)
+            [
+                'title' => 'Allowance Types',
+                'icon' => 'banknote',
+                'url' => route('account.hr.allowance-types.index'),
+                'active' => request()->routeIs('account.hr.allowance-types.*'),
+            ],
+            [
+                'title' => 'Payroll Settings',
+                'icon' => 'sliders-horizontal',
+                'url' => route('account.hr.payroll-settings.edit'),
+                'active' => request()->routeIs('account.hr.payroll-settings.*'),
+            ],
         ] : []),
 
         ['divider' => 'Settings'],

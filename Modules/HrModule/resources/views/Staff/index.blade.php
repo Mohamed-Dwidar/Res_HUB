@@ -15,7 +15,7 @@
 
 @section('content')
     @if ($alerts && ($alerts['expired'] || $alerts['expiring'] || $alerts['missing']))
-        <div class="notice mb-4 staff-alerts" data-staff-alerts>
+        <div class="notice notice--warning mb-4 staff-alerts" data-staff-alerts>
             <i data-lucide="alert-triangle"></i>
             <span>Documents:</span>
             @foreach (['expired' => 'expired', 'expiring' => 'expire soon', 'missing' => 'missing'] as $kind => $text)
@@ -71,6 +71,9 @@
                     <th data-data="work_html" data-orderable="false">Work</th>
                     <th data-data="phone_html" data-orderable="false" data-class="whitespace-nowrap">Phone</th>
                     <th data-data="hire" data-name="hire" data-class="whitespace-nowrap">Hire Date</th>
+                    @foreach (\Modules\HrModule\app\Services\StaffColumns::available() as $key => $column)
+                        <th data-data="{{ $key }}" data-orderable="false" data-class="{{ $column['class'] ?? '' }}">{{ $column['title'] }}</th>
+                    @endforeach
                     @if ($alerts !== null)
                         <th data-data="documents_html" data-orderable="false">Documents</th>
                     @endif

@@ -79,7 +79,7 @@ class HrSettingAccountModuleController extends Controller
     {
         $request->validate(['is_active' => 'required|boolean']);
         $department = $this->settingService->setDepartmentActive($this->accountId(), $id, $request->boolean('is_active'));
-        return $this->saved($department->is_active ? 'The department has been activated.' : 'The department has been deactivated.');
+        return $this->saved('account.hr.departments.index', $department->is_active ? 'The department has been activated.' : 'The department has been deactivated.');
     }
 
     public function departmentDestroy($id)
@@ -140,7 +140,7 @@ class HrSettingAccountModuleController extends Controller
     {
         $request->validate(['is_active' => 'required|boolean']);
         $type = $this->settingService->setTypeActive($this->accountId(), $id, $request->boolean('is_active'));
-        return $this->saved($type->is_active ? 'The document type has been activated.' : 'The document type has been deactivated.');
+        return $this->saved('account.hr.document-types.index', $type->is_active ? 'The document type has been activated.' : 'The document type has been deactivated.');
     }
 
     public function typeDestroy($id)

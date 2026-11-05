@@ -2,7 +2,7 @@
      $documents (StaffService::documents()), $alert (StaffService::alerts() of this file, null when none / ended) --}}
 @php($canManage = Gate::allows('documents.manage'))
 @if ($alert && $alert['missing'])
-    <div class="notice mb-4">
+    <div class="notice notice--warning mb-4">
         <b>Missing:</b>
         @foreach ($alert['missing'] as $type)
             @if ($canManage)
