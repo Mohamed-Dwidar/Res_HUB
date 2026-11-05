@@ -5,6 +5,7 @@ namespace Modules\PayrollModule\app\Http\Controllers\Account;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
+use Modules\PayrollModule\app\Http\Requests\AdjustmentTypeRequest;
 use Modules\PayrollModule\app\Http\Requests\AllowanceTypeRequest;
 use Modules\PayrollModule\app\Http\Requests\PayrollSettingRequest;
 use Modules\PayrollModule\app\Services\PayrollSettingService;
@@ -84,6 +85,67 @@ class PayrollSettingAccountModuleController extends Controller
             return response()->json(['message' => 'Salaries use this allowance type: switch it off instead.'], 422);
         }
         return $this->saved('account.hr.allowance-types.index', 'The allowance type has been deleted.');
+    }
+
+    // ------------------------------------------------------------------ adjustment types (H4)
+
+    public function adjustmentTypes()
+    {
+        return view('payrollmodule::Setting.adjustment-types');
+    }
+
+    public function adjustmentTypesData()
+    {
+        return DataTables::eloquent($this->settingService->adjustmentTypesQuery($this->accountId()))
+            ->setRowId(fn ($type) => 'row-adjustment-' . $type->id)
+            ->addColumn('name_html', fn ($type) => '<a href="' . route('account.hr.adjustment-types.edit', $type->id) . '" data-modal class="font-medium">' . e($type->name) . '</a>'
+                . ($type->name_ar && $type->name_en ? '<div class="text-xs text-slate-500" dir="rtl">' . e($type->name_ar) . '</div>' : ''))
+            ->addColumn('kind_html', fn ($type) => '<span class="badge ' . ($type->kind === 'bonus' ? 'badge-status-success' : 'badge-status-danger') . '">' . e($type->kind_label) . '</span>')
+            ->addColumn('status', fn ($type) => view('layoutmodule::partials.row-toggle', [
+                'url' => route('account.hr.adjustment-types.active', $type->id), 'row' => 'adjustment-' . $type->id, 'name' => 'is_active', 'checked' => $type->is_active,
+            ])->render())
+            ->addColumn('actions', fn ($type) => view('payrollmodule::Setting.partials.adjustment-actions', ['adjustmentType' => $type])->render())
+            ->orderColumn('name_html', fn ($query, $order) => $query->orderByLocalized('name', $order))
+            ->rawColumns(['name_html', 'kind_html', 'status', 'actions'])
+            ->only(['DT_RowId', 'name_html', 'kind_html', 'adjustments_count', 'status', 'actions'])
+            ->toJson();
+    }
+
+    public function adjustmentTypeCreate()
+    {
+        return view('payrollmodule::Setting.adjustment-type-form', ['adjustmentType' => null]);
+    }
+
+    public function adjustmentTypeStore(AdjustmentTypeRequest $request)
+    {
+        $this->settingService->saveAdjustmentType($this->accountId(), $request->validated());
+        return $this->saved('account.hr.adjustment-types.index', 'The type has been added.');
+    }
+
+    public function adjustmentTypeEdit($id)
+    {
+        return view('payrollmodule::Setting.adjustment-type-form', ['adjustmentType' => $this->settingService->findAdjustmentType($this->accountId(), $id)]);
+    }
+
+    public function adjustmentTypeUpdate(AdjustmentTypeRequest $request, $id)
+    {
+        $this->settingService->saveAdjustmentType($this->accountId(), $request->validated(), $id);
+        return $this->saved('account.hr.adjustment-types.index', 'The type has been saved.');
+    }
+
+    public function adjustmentTypeActive(Request $request, $id)
+    {
+        $request->validate(['is_active' => 'required|boolean']);
+        $type = $this->settingService->setAdjustmentTypeActive($this->accountId(), $id, $request->boolean('is_active'));
+        return response()->json(['message' => $type->is_active ? 'The type has been activated.' : 'The type has been deactivated.']);
+    }
+
+    public function adjustmentTypeDestroy($id)
+    {
+        if (!$this->settingService->deleteAdjustmentType($this->accountId(), $id)) {
+            return response()->json(['message' => 'Bonuses / deductions use this type: switch it off instead.'], 422);
+        }
+        return $this->saved('account.hr.adjustment-types.index', 'The type has been deleted.');
     }
 
     // ------------------------------------------------------------------ payroll settings

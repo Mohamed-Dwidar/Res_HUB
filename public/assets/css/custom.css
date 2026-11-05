@@ -3603,6 +3603,142 @@ td.renewal-row__action > .wa-btn {
     color: rgb(100 116 139);
 }
 
+/* the Advances & Adjustments tab's top line: the next payroll month (installments · bonuses · deductions) */
+.advance-summary {
+    margin-bottom: 1rem;
+    padding: 0.6rem 1rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.6rem;
+    background-color: rgb(248 250 252);
+}
+
+/* Advances & Adjustments tab (H4): one compact row per advance + its "Details" toggle; closed advances collapsed; bonus rows */
+.advance-row {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgb(241 245 249);
+}
+
+.advance-row:last-of-type {
+    border-bottom: 0;
+}
+
+.advance-row--closed {
+    opacity: 0.7;
+}
+
+.advance-row__main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.5rem;
+}
+
+.advance-row__title {
+    display: flex;
+    flex-direction: column;
+    min-width: 7rem;
+    line-height: 1.25;
+}
+
+.advance-row__cell {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+}
+
+.advance-row__cell span {
+    font-size: 0.75rem;
+    color: rgb(100 116 139);
+}
+
+.advance-row__cell b {
+    font-weight: 600;
+}
+
+.advance-row__status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.advance-details,
+.closed-advances {
+    margin-top: 0.5rem;
+}
+
+.advance-details > summary,
+.closed-advances > summary {
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: rgb(var(--color-primary));
+}
+
+.closed-advances {
+    padding-top: 0.75rem;
+    border-top: 1px solid rgb(241 245 249);
+}
+
+.closed-advances > summary {
+    font-weight: 600;
+}
+
+.advance-details[open] {
+    padding: 0.5rem 0.75rem 0.75rem;
+    border-radius: 0.5rem;
+    background-color: rgb(248 250 252);
+}
+
+.advance-details__label {
+    margin: 0.9rem 0 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgb(100 116 139);
+}
+
+.adjustment-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid rgb(241 245 249);
+    cursor: default;
+}
+
+.adjustment-row:last-child {
+    border-bottom: 0;
+}
+
+.adjustment-row--muted {
+    opacity: 0.55;
+}
+
+.adjustment-row__type {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.adjustment-row__amount {
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.adjustment-row__menu {
+    display: flex;
+    justify-content: flex-end;
+    min-width: 2rem;
+}
+
+/* the Advances & Adjustments tab: 7 / 5 columns on large screens (the Salary tab keeps 2 / 1) */
+@media (min-width: 1024px) {
+    .salary-layout--7-5 {
+        grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    }
+}
+
 /* the staff page tabs */
 .staff-tabs a {
     cursor: pointer;

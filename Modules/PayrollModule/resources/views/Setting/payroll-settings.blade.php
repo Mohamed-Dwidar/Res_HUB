@@ -30,6 +30,13 @@
                 'hint' => 'Daily rate = monthly salary ÷ this number (deductions in days, unpaid leave).'])
         </div>
 
+        <div class="form-section mt-8">Advances</div>
+        <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+            @include('layoutmodule::partials.field', ['name' => 'advance_warn_percent', 'label' => 'Warn Above % of Salary', 'type' => 'number', 'required' => true,
+                'value' => $settings->advance_warn_percent ?? 50, 'attrs' => 'min=1 max=100 step=0.01',
+                'hint' => 'A yellow warning (never a block) when a month\'s advance installments go above this % of the person\'s salary.'])
+        </div>
+
         @include('layoutmodule::partials.form-actions', ['cancel' => route('account.hr.staff.index')])
     </form>
 @endsection

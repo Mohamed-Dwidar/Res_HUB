@@ -178,12 +178,15 @@ class PaymentService
         return $class::where('account_id', $accountId)->findOrFail($id);
     }
 
+    // why a Cash In made by HR can't be changed here
+    const SYSTEM_LOCKED = 'This Cash In was recorded by HR (advance repayment): change or cancel it from the advance.';
+
     /**
      * A payment (type payment / withholding; refunds: refund()).
      * $data: payable (reservation | package | empty = other income), payable_id, income_category_id, member_id (other income),
      *        type, amount, payment_method_id, paid_at, reference, notes
      */
-    public function create($accountId, array $data, Model $creator): Payment
+    public function create($accountId, array $data, Model $creator, bool $system = false): Payment
     {
         $type = $data['type'] ?? 'payment';
         if (!in_array($type, ['payment', 'withholding'], true)) {
@@ -198,7 +201,7 @@ class PaymentService
             throw ValidationException::withMessages(['payable_id' => 'This reservation is inside a package, add the cash in to the package.']);
         }
         if (!$payable) {
-            $this->assertCategory($accountId, $data['income_category_id'] ?? 0);
+            $this->assertCategory($accountId, $data['income_category_id'] ?? 0, $system);
         }
         if (!$payable && !empty($data['member_id']) && !Member::where('account_id', $accountId)->whereKey((int) $data['member_id'])->exists()) {
             throw ValidationException::withMessages(['member_id' => 'This member is not one of yours.']);
@@ -258,6 +261,10 @@ class PaymentService
 
     public function editError(Payment $payment, Model $user): ?string
     {
+        // a Cash In made by HR (an advance repayment, H4): changed / cancelled from the advance only
+        if ($this->isSystem($payment)) {
+            return self::SYSTEM_LOCKED;
+        }
         if ($this->isOwner($user)) {
             return null;
         }
@@ -304,7 +311,7 @@ class PaymentService
             $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
         }
         if (!$target) {
-            $this->assertCategory($accountId, $data['income_category_id'] ?? 0);
+            $this->assertCategory($accountId, $data['income_category_id'] ?? 0, false, (int) $payment->income_category_id);
         }
         $paidAt = Carbon::parse($data['paid_at'] ?? $payment->paid_at)->startOfDay();
         // Reference no.: a refund's is checked when the method or the reference changes (old rows without one stay as they are);
@@ -357,10 +364,15 @@ class PaymentService
 
     // the owner's delete: soft delete with the reason and who deleted it (kept for the audit report); in a closed shift:
     // its totals recalculated without it + logged
-    public function delete($accountId, $id, string $reason, Model $user): Payment
+    public function delete($accountId, $id, string $reason, Model $user, bool $system = false): Payment
     {
-        $this->assertOwner($user);
+        if (!$system) {
+            $this->assertOwner($user);
+        }
         $payment = $this->findOne($accountId, $id);
+        if (!$system && $this->isSystem($payment)) {
+            throw ValidationException::withMessages(['delete_reason' => self::SYSTEM_LOCKED]);
+        }
         $reason = $this->assertReason($reason, 'delete_reason', 'Write why this payment is deleted.');
         $closing = $this->closedShiftOf($payment);
 
@@ -388,6 +400,9 @@ class PaymentService
         $payment = $this->findOne($accountId, $id);
         if ($payment->type !== 'payment') {
             throw ValidationException::withMessages(['amount' => 'Only a payment can be refunded (not a refund or a withholding).']);
+        }
+        if ($this->isSystem($payment)) {
+            throw ValidationException::withMessages(['amount' => self::SYSTEM_LOCKED]);
         }
 
         $amount = $this->assertAmount($data['amount'] ?? 0);
@@ -604,14 +619,26 @@ class PaymentService
         }
     }
 
-    private function assertCategory($accountId, $categoryId): void
+    // the account's category; a system one (generated_key: Advance repayment) only for the system ($system) or kept by an edit
+    private function assertCategory($accountId, $categoryId, bool $system = false, int $currentId = 0): void
     {
         if (empty($categoryId)) {
             throw ValidationException::withMessages(['income_category_id' => 'Choose the income category of this payment.']);
         }
-        if (!IncomeCategory::where('account_id', $accountId)->whereKey((int) $categoryId)->exists()) {
+        $category = IncomeCategory::where('account_id', $accountId)->find((int) $categoryId);
+        if (!$category) {
             throw ValidationException::withMessages(['income_category_id' => 'This income category is not one of yours.']);
         }
+        if ($category->isGenerated() && !$system && $category->id !== $currentId) {
+            throw ValidationException::withMessages(['income_category_id' => '"' . $category->name . '" is recorded by HR only, choose another category.']);
+        }
+    }
+
+    // a Cash In made by the system (its other-income category has a generated_key: an advance repayment)
+    public function isSystem(Payment $payment): bool
+    {
+        // the list rows load incomeCategory (no extra query); else one
+        return !$payment->payable_id && $payment->income_category_id && $payment->incomeCategory?->generated_key !== null;
     }
 
     private function assertRefundable(Payment $payment, float $amount, ?Payment $except = null): void

@@ -21,6 +21,12 @@ class IncomeCategory extends Model
 
     protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'is_revenue'];
 
+    // generated_key (not fillable): NULL = a normal category; 'advance_repayment' = the system's (HR)
+    public function isGenerated(): bool
+    {
+        return $this->generated_key !== null;
+    }
+
     protected $casts = [
         'is_active' => 'boolean',
         // false = not income (VAT collected ...): the income reports leave it out

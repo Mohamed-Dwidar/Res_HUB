@@ -127,6 +127,12 @@
                 'active' => request()->routeIs('account.hr.allowance-types.*'),
             ],
             [
+                'title' => 'Adjustment Types',
+                'icon' => 'badge-percent',
+                'url' => route('account.hr.adjustment-types.index'),
+                'active' => request()->routeIs('account.hr.adjustment-types.*'),
+            ],
+            [
                 'title' => 'Payroll Settings',
                 'icon' => 'sliders-horizontal',
                 'url' => route('account.hr.payroll-settings.edit'),

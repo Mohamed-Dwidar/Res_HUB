@@ -7,6 +7,8 @@ use Modules\HrModule\app\Services\StaffColumns;
 use Modules\HrModule\app\Services\StaffTabs;
 use Modules\PayrollModule\app\Models\EmployeeInsurance;
 use Modules\PayrollModule\app\Models\EmployeeSalary;
+use Modules\PayrollModule\app\Services\AdjustmentService;
+use Modules\PayrollModule\app\Services\AdvanceService;
 use Modules\PayrollModule\app\Services\SalaryService;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 
@@ -54,6 +56,24 @@ class PayrollModuleServiceProvider extends ModuleServiceProvider
             'payroll' => true,
             'view' => 'payrollmodule::Salary.partials.tab',
             'data' => fn ($staff) => app(SalaryService::class)->tabData($staff),
+        ]);
+
+        // the staff page's Advances & Adjustments tab (H4, hr.salary; not for External staff)
+        StaffTabs::add('advances', [
+            'label' => 'Advances & Adjustments',
+            'can' => 'hr.salary',
+            'payroll' => true,
+            'view' => 'payrollmodule::Advance.partials.tab',
+            'data' => function ($staff) {
+                $advances = app(AdvanceService::class)->list($staff);
+                $adjustments = app(AdjustmentService::class)->list($staff);
+                return [
+                    'advances' => $advances,
+                    'adjustments' => $adjustments,
+                    'advanceService' => app(AdvanceService::class),
+                    'summary' => app(AdvanceService::class)->summary($staff, $advances, $adjustments),
+                ];
+            },
         ]);
 
         // the Staff list's Basic Salary column (hr.salary): the basic salary in force today; External / none = "-"

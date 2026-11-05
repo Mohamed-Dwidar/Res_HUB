@@ -28,7 +28,24 @@ class IncomeCategoryService
     {
         return $this->categoryRepository->forAccount($accountId)
             ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $currentId))
-            ->ordered()->get()->pluck('name', 'id')->all();
+            ->whereNull('generated_key')->ordered()->get()->pluck('name', 'id')->all();
+    }
+
+    /**
+     * The system's income category (config paymentmodule.generated_income_categories): $key = 'advance_repayment' — made on first
+     * use (active, NOT income), one per account.
+     */
+    public function generated($accountId, string $key): IncomeCategory
+    {
+        $names = config('paymentmodule.generated_income_categories.' . $key);
+        abort_unless($names, 500, 'Unknown system income category: ' . $key);
+        $category = IncomeCategory::where('account_id', $accountId)->where('generated_key', $key)->first();
+        if (!$category) {
+            $category = new IncomeCategory(['account_id' => $accountId, 'name_en' => $names['en'], 'name_ar' => $names['ar'], 'is_active' => true, 'is_revenue' => false]);
+            $category->generated_key = $key;
+            $category->save();
+        }
+        return $category;
     }
 
     // the list filters: [id => ['name', 'active']], the active ones first (the account sees the inactive ones too, marked;

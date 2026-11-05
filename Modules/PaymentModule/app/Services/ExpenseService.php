@@ -185,6 +185,17 @@ class ExpenseService
         });
     }
 
+    /**
+     * Void a company Cash Out (§6b) when its source is cancelled (an advance; H5 a salary payment): soft delete with the reason
+     * and who (deleted_at = when). Only the system calls it, in the source's own transaction; the Cash Out screens never can.
+     */
+    public function voidCompany(Expense $expense, string $reason, Model $by): void
+    {
+        abort_unless($expense->is_company, 500, 'Only a company Cash Out can be voided.');
+        $expense->update(['delete_reason' => $reason, 'deleted_by' => $by->getKey()]);
+        $expense->delete();
+    }
+
     // the CLOSED shift an expense is in (null = an open shift)
     public function closedShiftOf(Expense $expense): ?ShiftClosing
     {

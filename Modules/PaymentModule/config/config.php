@@ -12,6 +12,12 @@ return [
         'salaries' => ['en' => 'Salaries', 'ar' => 'مرتبات'],
     ],
 
+    // the system's income categories (income_categories.generated_key, made on first use by IncomeCategoryService::generated()):
+    // a cash advance repayment (HR H4, not income); not offered in the Add Cash In form; its Cash In is locked (changed from HR)
+    'generated_income_categories' => [
+        'advance_repayment' => ['en' => 'Advance repayment', 'ar' => 'سداد سلفة'],
+    ],
+
     'number_start' => (int) env('PAYMENT_NUMBER_START', 100001),
 
     // employees' shift reminders (docs/payments-plan.md §2b): the oldest payment of an open shift older than this → the

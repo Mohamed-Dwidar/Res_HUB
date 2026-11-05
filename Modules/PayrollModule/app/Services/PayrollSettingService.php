@@ -2,6 +2,7 @@
 
 namespace Modules\PayrollModule\app\Services;
 
+use Modules\PayrollModule\app\Models\AdjustmentType;
 use Modules\PayrollModule\app\Models\AllowanceType;
 use Modules\PayrollModule\app\Models\PayrollSetting;
 use Modules\PayrollModule\app\Repositories\AllowanceTypeRepository;
@@ -52,6 +53,46 @@ class PayrollSettingService
         return $type->items_count > 0 ? false : (bool) $type->delete();
     }
 
+    // ------------------------------------------------------------------ adjustment types (H4)
+
+    public function adjustmentTypesQuery($accountId)
+    {
+        return AdjustmentType::withCount('adjustments')->where('account_id', $accountId);
+    }
+
+    public function findAdjustmentType($accountId, $id): AdjustmentType
+    {
+        return $this->adjustmentTypesQuery($accountId)->findOrFail($id);
+    }
+
+    public function saveAdjustmentType($accountId, array $data, $id = null): AdjustmentType
+    {
+        $type = $id ? $this->findAdjustmentType($accountId, $id) : new AdjustmentType(['account_id' => $accountId]);
+        $type->fill([
+            'name_en' => $data['name_en'] ?? null,
+            'name_ar' => $data['name_ar'] ?? null,
+            'kind' => $data['kind'],
+            'is_active' => !empty($data['is_active']),
+        ])->save();
+        return $type;
+    }
+
+    public function setAdjustmentTypeActive($accountId, $id, bool $active): AdjustmentType
+    {
+        $type = $this->findAdjustmentType($accountId, $id);
+        $type->update(['is_active' => $active]);
+        return $type;
+    }
+
+    // soft delete; false while bonuses / deductions use it (cancelled ones count too: switch it off instead)
+    public function deleteAdjustmentType($accountId, $id): bool
+    {
+        $type = $this->findAdjustmentType($accountId, $id);
+        return \Modules\PayrollModule\app\Models\EmployeeAdjustment::withTrashed()->where('adjustment_type_id', $type->id)->exists() ? false : (bool) $type->delete();
+    }
+
+    // ------------------------------------------------------------------ settings
+
     public function settings($accountId): PayrollSetting
     {
         return PayrollSetting::of($accountId);
@@ -64,6 +105,7 @@ class PayrollSettingService
             'insurance_employee_percent' => $this->percent($data['insurance_employee_percent'] ?? null),
             'insurance_company_percent' => $this->percent($data['insurance_company_percent'] ?? null),
             'month_days' => (int) $data['month_days'],
+            'advance_warn_percent' => round((float) $data['advance_warn_percent'], 2),
         ])->save();
         return $settings;
     }

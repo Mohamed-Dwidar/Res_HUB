@@ -261,8 +261,9 @@ contracts ending within N days appear in the same "Expiring" list.
   payment_method_id + `expense_id` (the account-level Cash Out "Advances"), reason, status open | settled | cancelled, creatable.
   No opening balances (user 2026-11-05: none owed today).
 - `employee_advance_moves` — advance_id, type deduct | repay | change, amount, period, payment_id (a cash repayment = Cash In,
-  other income "Advance repayment", not income), reason, creatable. Remaining = amount − Σ deduct − Σ repay; early / extra
-  repayment = an extra deduction in a chosen month or cash.
+  other income "Advance repayment", not income, in the recorder's shift), reason, creatable. Remaining = amount − Σ deduct − Σ repay;
+  early repayment = cash. ("Extra deduction" in a chosen month was built, then REMOVED 2026-11-05 by the user: type 'extra' stays
+  in the table, unused.)
 - Staff page tab **Advances & Adjustments** (`hr.salary`).
 
 ### 3.5b What H5 payroll reads for month M

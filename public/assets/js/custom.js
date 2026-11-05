@@ -1624,6 +1624,7 @@ function initForms(root) {
             messagePreview(form);
             messageUnits(form);
         }
+        if (form.matches("[data-advance-form]")) advanceWarn(form);
         if (form.matches("[data-contract-template-form]")) {
             // a contract template: the rich-text editors, the units by space
             contractEditors(form);
@@ -2508,4 +2509,70 @@ document.addEventListener("click", function (e) {
     if (!select) return;
     select.value = link.dataset.staffAlert;
     select.dispatchEvent(new Event("change", { bubbles: true }));
+});
+
+// ------------------------------------------------------------------
+// Give Advance popup (HR H4): a yellow warning (never a block) while this advance's installments + the person's open advances
+// go above the Payroll Settings % of the salary in a month — the same rule as AdvanceService::overLimit() (installment = amount ÷
+// months rounded UP to the cent, the last month takes the rest). form[data-advance-form]: data-salary, data-warn-percent,
+// data-month-totals ({"Y-m-01": installments}); [data-advance-warning] = the box.
+function advanceWarn(form) {
+    var box = form.querySelector("[data-advance-warning]");
+    if (!box) return;
+    var amount = parseFloat((form.querySelector('[name="amount"]') || {}).value) || 0;
+    var count = parseInt((form.querySelector('[name="installments"]') || {}).value, 10) || 0;
+    var first = (form.querySelector('[name="first_period"]') || {}).value || "";
+    var salary = parseFloat(form.dataset.salary) || 0;
+    var percent = parseFloat(form.dataset.warnPercent) || 50;
+    var totals = {};
+    try { totals = JSON.parse(form.dataset.monthTotals || "{}") || {}; } catch (err) { totals = {}; }
+    var lines = [];
+    if (amount > 0 && count > 0 && /^\d{4}-\d{2}-01$/.test(first)) {
+        var installment = Math.ceil(Math.round(amount * 100) / count) / 100;
+        var left = amount, year = +first.slice(0, 4), month = +first.slice(5, 7) - 1;
+        var plan = {};
+        for (var i = 0; left > 0.004 && i < 60; i++) {
+            var planned = Math.min(installment, left);
+            left = Math.round((left - planned) * 100) / 100;
+            var d = new Date(Date.UTC(year, month + i, 1));
+            plan[d.toISOString().slice(0, 10)] = planned;
+        }
+        Object.keys(totals).forEach(function (key) { if (!(key in plan)) plan[key] = 0; });
+        var money = function (n) { return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+        var label = function (key) { return new Date(key + "T00:00:00Z").toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }); };
+        if (!salary) {
+            lines.push("No salary to compare the installments with.");
+        } else {
+            Object.keys(plan).sort().forEach(function (key) {
+                var total = Math.round(((totals[key] || 0) + plan[key]) * 100) / 100;
+                var share = total / salary * 100;
+                if (plan[key] > 0 && share > percent + 0.001) {
+                    var shown = Math.round(share) > percent ? String(Math.round(share)) : share.toFixed(1);
+                    lines.push(label(key) + ": installments " + money(total) + " = " + shown + "% of the salary " + money(salary) + " (warn above " + percent + "%).");
+                }
+            });
+        }
+    }
+    box.innerHTML = "";
+    lines.slice(0, 6).forEach(function (line) {
+        var div = document.createElement("div");
+        div.textContent = line;
+        box.appendChild(div);
+    });
+    if (lines.length > 6) {
+        var more = document.createElement("div");
+        more.textContent = "… and " + (lines.length - 6) + " more month(s).";
+        box.appendChild(more);
+    }
+    box.hidden = !lines.length;
+}
+
+document.addEventListener("input", function (e) {
+    var form = e.target.form;
+    if (form && form.matches("[data-advance-form]")) advanceWarn(form);
+});
+
+document.addEventListener("change", function (e) {
+    var form = e.target.form;
+    if (form && form.matches("[data-advance-form]")) advanceWarn(form);
 });
