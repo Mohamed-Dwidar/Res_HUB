@@ -3739,6 +3739,30 @@ td.renewal-row__action > .wa-btn {
     }
 }
 
+/* Leaves tab (H3): the year switch, a balance card per type */
+.leave-year {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.leave-card b small {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: rgb(100 116 139);
+}
+
+.leave-card__edit {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: rgb(var(--color-primary));
+}
+
+.leave-card--over {
+    border-color: rgb(var(--color-warning) / 0.5);
+    background-color: rgb(var(--color-warning) / 0.1);
+}
+
 /* the staff page tabs */
 .staff-tabs a {
     cursor: pointer;

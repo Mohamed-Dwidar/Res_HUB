@@ -1625,6 +1625,7 @@ function initForms(root) {
             messageUnits(form);
         }
         if (form.matches("[data-advance-form]")) advanceWarn(form);
+        if (form.matches("[data-leave-form]")) leaveDates(form, null);
         if (form.matches("[data-contract-template-form]")) {
             // a contract template: the rich-text editors, the units by space
             contractEditors(form);
@@ -2575,4 +2576,37 @@ document.addEventListener("input", function (e) {
 document.addEventListener("change", function (e) {
     var form = e.target.form;
     if (form && form.matches("[data-advance-form]")) advanceWarn(form);
+});
+
+// ------------------------------------------------------------------
+// Add Leave popup (HR H3): From / To / Days follow each other — From changed → To = From + the days (kept); To changed → Days =
+// the calendar days From → To (To before From → From = To); Days changed → To = From + the days (1.5 = 2 calendar days).
+// The server checks the same rule (LeaveService::create(): days ≤ the calendar days, half-day steps).
+function leaveDates(form, changed) {
+    var from = form.querySelector('[name="from_date"]'), to = form.querySelector('[name="to_date"]'), days = form.querySelector('[name="days"]');
+    if (!from || !to || !days || !/^\d{4}-\d{2}-\d{2}$/.test(from.value)) return;
+    var parse = function (value) { return new Date(value + "T00:00:00Z"); };
+    var iso = function (date) { return date.toISOString().slice(0, 10); };
+    var addDays = function (value, n) { var d = parse(value); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
+    var span = function () { return Math.round((parse(to.value) - parse(from.value)) / 86400000) + 1; };
+    var count = parseFloat(days.value);
+    if (changed === "to_date" && /^\d{4}-\d{2}-\d{2}$/.test(to.value)) {
+        if (to.value < from.value) from.value = to.value;
+        days.value = span();
+    } else if ((changed === "from_date" || changed === "days") && count > 0) {
+        to.value = addDays(from.value, Math.ceil(count) - 1);
+    } else if (!to.value || to.value < from.value) {
+        to.value = from.value;
+        days.value = span();
+    }
+}
+
+document.addEventListener("change", function (e) {
+    var form = e.target.form;
+    if (form && form.matches("[data-leave-form]") && ["from_date", "to_date", "days"].indexOf(e.target.name) >= 0) leaveDates(form, e.target.name);
+});
+
+document.addEventListener("input", function (e) {
+    var form = e.target.form;
+    if (form && form.matches("[data-leave-form]") && e.target.name === "days") leaveDates(form, "days");
 });

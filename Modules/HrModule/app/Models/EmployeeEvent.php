@@ -41,6 +41,10 @@ class EmployeeEvent extends Model
         'advance_move_cancelled' => 'Advance move cancelled',
         'adjustment_added' => 'Bonus / deduction added',
         'adjustment_cancelled' => 'Bonus / deduction cancelled',
+        // leaves (H3)
+        'leave_added' => 'Leave added',
+        'leave_cancelled' => 'Leave cancelled',
+        'leave_balance_changed' => 'Leave balance changed',
     ];
 
     // their changes / reason only with hr.salary (the History of the Profile tab)

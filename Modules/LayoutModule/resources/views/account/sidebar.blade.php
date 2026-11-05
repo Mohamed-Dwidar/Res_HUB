@@ -114,6 +114,12 @@
                 'active' => request()->routeIs('account.employee-shifts.*'),
             ],
             [
+                'title' => 'Leave Types',
+                'icon' => 'calendar-days',
+                'url' => route('account.hr.leave-types.index'),
+                'active' => request()->routeIs('account.hr.leave-types.*'),
+            ],
+            [
                 'title' => 'Document Types',
                 'icon' => 'files',
                 'url' => route('account.hr.document-types.index'),

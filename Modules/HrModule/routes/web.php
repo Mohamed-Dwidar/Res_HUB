@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 use Modules\AccountModule\app\Models\Account;
 use Modules\EmployeeModule\app\Models\Employee;
 use Modules\HrModule\app\Http\Controllers\Account\HrSettingAccountModuleController;
+use Modules\HrModule\app\Http\Controllers\Account\LeaveAccountModuleController;
+use Modules\HrModule\app\Http\Controllers\Employee\LeaveEmployeeModuleController;
 use Modules\HrModule\app\Http\Controllers\Account\StaffAccountModuleController;
 use Modules\HrModule\app\Http\Controllers\Employee\StaffEmployeeModuleController;
 
@@ -28,6 +30,25 @@ $staffRoutes = function ($controller) {
     Route::delete('{id}/documents/{document}', [$controller, 'documentDestroy'])->name('documents.destroy')->can('documents.manage');
     Route::get('{id}/documents/{document}/files/{file}', [$controller, 'documentFile'])->name('documents.file')->can('documents.view');
 };
+
+/**
+ *  The Leaves tab popups (docs/hr-plan.md H3, hr.manage; Concerns\LeaveActions), names {area}.hr.leaves.*.
+ */
+$leaveRoutes = function ($controller) {
+    Route::get('{id}/leaves/create', [$controller, 'leaveCreate'])->name('create')->can('hr.manage');
+    Route::post('{id}/leaves', [$controller, 'leaveStore'])->name('store')->can('hr.manage');
+    Route::get('{id}/leaves/{leave}/cancel', [$controller, 'leaveCancelForm'])->name('cancel.form')->can('hr.manage');
+    Route::post('{id}/leaves/{leave}/cancel', [$controller, 'leaveCancel'])->name('cancel')->can('hr.manage');
+    Route::get('{id}/leaves/{leave}/file', [$controller, 'leaveFile'])->name('file')->can('hr.manage');
+    Route::get('{id}/leave-balances/{type}', [$controller, 'balanceForm'])->name('balance')->can('hr.manage');
+    Route::put('{id}/leave-balances/{type}', [$controller, 'balanceUpdate'])->name('balance.update')->can('hr.manage');
+};
+
+Route::prefix('account/hr/staff')->name('account.hr.leaves.')->middleware(['auth', 'user.active:' . Account::class])
+    ->group(fn () => $leaveRoutes(LeaveAccountModuleController::class));
+
+Route::prefix('employee/hr/staff')->name('employee.hr.leaves.')->middleware(['auth', 'user.active:' . Employee::class])
+    ->group(fn () => $leaveRoutes(LeaveEmployeeModuleController::class));
 
 Route::prefix('account/hr/staff')->name('account.hr.staff.')->middleware(['auth', 'user.active:' . Account::class])->group(function () use ($staffRoutes) {
     $staffRoutes(StaffAccountModuleController::class);
@@ -54,6 +75,17 @@ Route::prefix('account')->middleware(['auth', 'user.active:' . Account::class])-
         Route::put('{id}', [HrSettingAccountModuleController::class, 'departmentUpdate'])->name('update');
         Route::patch('{id}/active', [HrSettingAccountModuleController::class, 'departmentActive'])->name('active');
         Route::delete('{id}', [HrSettingAccountModuleController::class, 'departmentDestroy'])->name('destroy');
+    });
+
+    Route::prefix('hr/leave-types')->name('account.hr.leave-types.')->group(function () {
+        Route::get('/', [HrSettingAccountModuleController::class, 'leaveTypes'])->name('index');
+        Route::get('data', [HrSettingAccountModuleController::class, 'leaveTypesData'])->name('data');
+        Route::get('create', [HrSettingAccountModuleController::class, 'leaveTypeCreate'])->name('create');
+        Route::post('/', [HrSettingAccountModuleController::class, 'leaveTypeStore'])->name('store');
+        Route::get('{id}/edit', [HrSettingAccountModuleController::class, 'leaveTypeEdit'])->name('edit');
+        Route::put('{id}', [HrSettingAccountModuleController::class, 'leaveTypeUpdate'])->name('update');
+        Route::patch('{id}/active', [HrSettingAccountModuleController::class, 'leaveTypeActive'])->name('active');
+        Route::delete('{id}', [HrSettingAccountModuleController::class, 'leaveTypeDestroy'])->name('destroy');
     });
 
     Route::prefix('hr/document-types')->name('account.hr.document-types.')->group(function () {

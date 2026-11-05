@@ -2,7 +2,7 @@
 
 > APPROVED by the user 2026-11-04 (with the answers + rules of §A / §B). Read before any HR / payroll work.
 > Order: H1 → H1b → H2 → H4 → H3 (user 2026-11-05) → H5 → (H6 attendance, only if needed) → H7 recruitment.
-> Status: H1 committed (`49708fd`); H2 / H3 / H4 plan approved 2026-11-05 (§3.3 – §3.5b); H2 in progress.
+> Status: H1 `49708fd`; H2 `1bdf163`; H4 part 1 `0af039e`; H4 part 2 `8a81b0f`; H3 built 2026-11-05 (§3.3 – §3.5b). Next: H5 payroll.
 > Every number of the law (rates, brackets, leave days, overtime %) is a SETTING with an effective date, reviewed by the accounting
 > office (§9). Nothing legal is written in the code.
 

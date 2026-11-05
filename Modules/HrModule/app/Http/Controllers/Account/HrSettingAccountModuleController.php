@@ -7,6 +7,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Modules\HrModule\app\Http\Requests\DepartmentRequest;
 use Modules\HrModule\app\Http\Requests\DocumentTypeRequest;
+use Modules\HrModule\app\Http\Requests\LeaveTypeRequest;
 use Modules\HrModule\app\Services\HrSettingService;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -88,6 +89,73 @@ class HrSettingAccountModuleController extends Controller
             return response()->json(['message' => 'Job titles use this department: change them first (HR › Employee Positions), or switch it off.'], 422);
         }
         return $this->saved('account.hr.departments.index', 'The department has been deleted.');
+    }
+
+    // ------------------------------------------------------------------ leave types (H3)
+
+    public function leaveTypes()
+    {
+        return view('hrmodule::Setting.leave-types');
+    }
+
+    public function leaveTypesData()
+    {
+        $query = $this->settingService->leaveTypesQuery($this->accountId());
+        if (!request()->filled('order')) {
+            $query->ordered();
+        }
+        return DataTables::eloquent($query)
+            ->setRowId(fn ($type) => 'row-leave-type-' . $type->id)
+            ->addColumn('name_html', fn ($type) => '<a href="' . route('account.hr.leave-types.edit', $type->id) . '" data-modal class="font-medium">' . e($type->name) . '</a>'
+                . ($type->name_ar && $type->name_en ? '<div class="text-xs text-slate-500" dir="rtl">' . e($type->name_ar) . '</div>' : ''))
+            ->addColumn('paid', fn ($type) => $type->is_paid ? '<span class="badge badge-status-success">Paid</span>' : '<span class="badge badge-status-danger">Unpaid</span>')
+            ->addColumn('days', fn ($type) => $type->yearly_days === null ? '<span class="text-slate-400">No balance</span>' : rtrim(rtrim(number_format($type->yearly_days, 1), '0'), '.') . ' / year')
+            ->addColumn('attachment', fn ($type) => $type->needs_attachment ? 'Yes' : '<span class="text-slate-400">No</span>')
+            ->addColumn('status', fn ($type) => view('layoutmodule::partials.row-toggle', [
+                'url' => route('account.hr.leave-types.active', $type->id), 'row' => 'leave-type-' . $type->id, 'name' => 'is_active', 'checked' => $type->is_active,
+            ])->render())
+            ->addColumn('actions', fn ($type) => view('hrmodule::Setting.partials.leave-type-actions', ['leaveType' => $type])->render())
+            ->orderColumn('name_html', fn ($query, $order) => $query->orderByLocalized('name', $order))
+            ->rawColumns(['name_html', 'paid', 'days', 'attachment', 'status', 'actions'])
+            ->only(['DT_RowId', 'name_html', 'paid', 'days', 'attachment', 'leaves_count', 'status', 'actions'])
+            ->toJson();
+    }
+
+    public function leaveTypeCreate()
+    {
+        return view('hrmodule::Setting.leave-type-form', ['leaveType' => null]);
+    }
+
+    public function leaveTypeStore(LeaveTypeRequest $request)
+    {
+        $this->settingService->saveLeaveType($this->accountId(), $request->validated());
+        return $this->saved('account.hr.leave-types.index', 'The leave type has been added.');
+    }
+
+    public function leaveTypeEdit($id)
+    {
+        return view('hrmodule::Setting.leave-type-form', ['leaveType' => $this->settingService->findLeaveType($this->accountId(), $id)]);
+    }
+
+    public function leaveTypeUpdate(LeaveTypeRequest $request, $id)
+    {
+        $this->settingService->saveLeaveType($this->accountId(), $request->validated(), $id);
+        return $this->saved('account.hr.leave-types.index', 'The leave type has been saved.');
+    }
+
+    public function leaveTypeActive(Request $request, $id)
+    {
+        $request->validate(['is_active' => 'required|boolean']);
+        $type = $this->settingService->setLeaveTypeActive($this->accountId(), $id, $request->boolean('is_active'));
+        return $this->saved('account.hr.leave-types.index', $type->is_active ? 'The leave type has been activated.' : 'The leave type has been deactivated.');
+    }
+
+    public function leaveTypeDestroy($id)
+    {
+        if (!$this->settingService->deleteLeaveType($this->accountId(), $id)) {
+            return response()->json(['message' => 'Leaves use this type: switch it off instead.'], 422);
+        }
+        return $this->saved('account.hr.leave-types.index', 'The leave type has been deleted.');
     }
 
     // ------------------------------------------------------------------ document types
