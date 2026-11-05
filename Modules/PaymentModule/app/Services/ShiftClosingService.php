@@ -88,7 +88,7 @@ class ShiftClosingService
     // the collector's open shift: the expenses they recorded, not in a closing yet
     public function openExpenses($accountId, $userId): Builder
     {
-        return Expense::where('account_id', $accountId)->where('shift_closing_id', 0)
+        return Expense::where('account_id', $accountId)->where('shift_closing_id', 0)->inShifts()
             ->where('creatable_type', (new User)->getMorphClass())->where('creatable_id', $userId);
     }
 
@@ -362,7 +362,7 @@ class ShiftClosingService
                 SUM(CASE type WHEN 'payment' THEN amount WHEN 'refund' THEN -amount ELSE 0 END) cash,
                 SUM(IF(type = 'refund', amount, 0)) refunds, SUM(IF(type = 'withholding', amount, 0)) wh, SUM(paid_at = ?) dated", [$day])
             ->get()->keyBy('creatable_id');
-        $expenses = Expense::where('account_id', $accountId)->where('shift_closing_id', 0)
+        $expenses = Expense::where('account_id', $accountId)->where('shift_closing_id', 0)->inShifts()
             ->where('creatable_type', (new User)->getMorphClass())->whereIn('creatable_id', $this->collectorUserIds($accountId))
             ->groupBy('creatable_id')
             ->selectRaw('creatable_id, MIN(created_at) since, COUNT(*) n, SUM(amount) total, SUM(spent_at = ?) dated', [$day])

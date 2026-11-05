@@ -30,6 +30,9 @@ class ExpenseService
     private ExpenseRepository $expenseRepository;
     private ShiftClosingService $shiftService;
 
+    // why a company Cash Out can't be changed here (§6b)
+    const COMPANY_LOCKED = 'This is a company Cash Out made by HR (advance / salary): it can\'t be changed here — undo it from where it was made.';
+
     public function __construct(ExpenseRepository $expenseRepository, ShiftClosingService $shiftService)
     {
         $this->expenseRepository = $expenseRepository;
@@ -65,6 +68,10 @@ class ExpenseService
 
     public function editError(Expense $expense, Model $user): ?string
     {
+        // a company Cash Out (§6b) is made by the system: undone from where it was made (the advance / the payroll), never here
+        if ($expense->is_company) {
+            return self::COMPANY_LOCKED;
+        }
         if ($this->isOwner($user)) {
             return null;
         }
@@ -141,6 +148,9 @@ class ExpenseService
     {
         $this->assertOwner($user);
         $expense = $this->findOne($accountId, $id);
+        if ($expense->is_company) {
+            throw ValidationException::withMessages(['delete_reason' => self::COMPANY_LOCKED]);
+        }
         $reason = $this->assertReason($reason, 'delete_reason', 'Write why this expense is deleted.');
         $closing = $this->closedShiftOf($expense);
 
@@ -151,6 +161,26 @@ class ExpenseService
             $closing ? $this->shiftService->paymentChanged($closing, 'expense_delete', $expense, $user, $reason, $changes)
                 : $this->shiftService->logOpenChange('expense_delete', $expense, $user, $reason, $changes);
 
+            return $expense;
+        });
+    }
+
+    /**
+     * A company Cash Out (docs/hr-plan.md §6b): paid by the company (owner / company cash, bank, wallet), in NO shift — never
+     * in a hand-over, My Shift, a closing or Daily Summary's collectors (Expense::scopeInShifts()). $key = the system category
+     * ('advances' | 'salaries', made on first use). $data = item, amount, payment_method_id, spent_at (any date, default today),
+     * reference, notes. Only the system calls it (H4 advances, H5 salaries); the forms can't edit / delete the row.
+     */
+    public function createCompany($accountId, string $key, array $data, Model $by): Expense
+    {
+        $category = app(ExpenseCategoryService::class)->generated($accountId, $key);
+        $values = $this->values($accountId, ['expense_category_id' => $category->id] + $data, null, true);
+
+        return DB::transaction(function () use ($accountId, $values, $by) {
+            $expense = new Expense($values + ['account_id' => $accountId, 'expense_no' => $this->nextNumber($accountId)]);
+            $expense->is_company = true;
+            $expense->creatable()->associate($by);
+            $expense->save();
             return $expense;
         });
     }
@@ -175,13 +205,17 @@ class ExpenseService
         return max($last + 1, (int) config('paymentmodule.number_start', 1));
     }
 
-    // the checked values of the form (category / method of the account, amount > 0); the current ones stay valid when inactive
-    private function values($accountId, array $data, ?Expense $expense = null): array
+    // the checked values of the form (category / method of the account, amount > 0); the current ones stay valid when inactive;
+    // a system category (generated_key: Advances, Salaries) only for createCompany() ($company)
+    private function values($accountId, array $data, ?Expense $expense = null, bool $company = false): array
     {
         $categoryId = (int) ($data['expense_category_id'] ?? 0);
         $category = ExpenseCategory::where('account_id', $accountId)->find($categoryId);
-        if (!$category || (!$category->is_active && $categoryId !== (int) $expense?->expense_category_id)) {
+        if (!$category || (!$company && !$category->is_active && $categoryId !== (int) $expense?->expense_category_id)) {
             throw ValidationException::withMessages(['expense_category_id' => 'Choose one of your expense categories.']);
+        }
+        if ($category->isGenerated() && !$company) {
+            throw ValidationException::withMessages(['expense_category_id' => '"' . $category->name . '" is recorded by the system only (HR), choose another category.']);
         }
         $methodId = (int) ($data['payment_method_id'] ?? 0);
         $method = PaymentMethod::where('account_id', $accountId)->find($methodId);

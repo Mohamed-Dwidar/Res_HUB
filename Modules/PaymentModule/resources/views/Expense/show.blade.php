@@ -15,7 +15,7 @@
     @if (app(\Modules\PaymentModule\app\Services\ExpenseService::class)->canEdit($expense, Auth::user()))
         <a href="{{ route($area . '.expenses.edit', $expense->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     @endif
-    @if ($area === 'account')
+    @if ($area === 'account' && !$expense->is_company)
         <a href="{{ route('account.expenses.delete', $expense->id) }}" data-modal class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</a>
     @endif
 @endsection
@@ -28,7 +28,9 @@
         <div><dt>Paid By</dt><dd>{{ $expense->method_name }}</dd></div>
         <div><dt>Date</dt><dd>{{ $expense->spent_at?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</dd></div>
         <div><dt>Shift</dt><dd>
-            @if (!$expense->shift_closing_id)
+            @if ($expense->is_company)
+                <span class="badge badge-status-slate">Company — not in any shift</span>
+            @elseif (!$expense->shift_closing_id)
                 <span class="badge badge-status-warning">Open shift</span>
             @elseif ($area === 'account')
                 <a href="{{ route('account.shifts.show', $expense->shift_closing_id) }}" data-modal><span class="badge badge-status-success"><i data-lucide="lock" class="inline h-3 w-3"></i> Closed</span></a>

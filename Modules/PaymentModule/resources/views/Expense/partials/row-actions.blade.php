@@ -7,7 +7,7 @@
         $expense->attachment ? [['label' => 'Receipt', 'icon' => 'paperclip', 'url' => route($area . '.expenses.attachment', $expense->id)]] : [],
         app(\Modules\PaymentModule\app\Services\ExpenseService::class)->canEdit($expense, Auth::user())
             ? [['label' => 'Edit', 'icon' => 'pencil', 'url' => route($area . '.expenses.edit', $expense->id), 'modal' => true]] : [],
-        $area !== 'account' ? [] : [
+        $area !== 'account' || $expense->is_company ? [] : [
             ['label' => 'Delete', 'icon' => 'trash-2', 'url' => route('account.expenses.delete', $expense->id), 'modal' => true],
         ],
     ),

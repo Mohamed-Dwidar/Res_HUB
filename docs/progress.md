@@ -6,6 +6,7 @@
 ---
 
 ## Current status
+- **HR H4 part 1 — company Cash Out (§6b, 2026-11-05), COMMITTED (tested OK by the user with a 1.00 test row, #100046, deleted after), migration `PaymentModule 2026_11_05_100043_add_company_cash_out_to_expenses` RUN on `dwidar_res_hub` by the user (batch 28; backup after it `storage/app/backups/dwidar_res_hub-before-company-cashout-test-20261105.sql`); not on the server yet: `expenses.is_company`, `expense_categories.generated_key` (+ unique per account); tested on a disposable copy (dropped): up / down / up + scratch test 90 assertions (shift / open shift / Daily Summary numbers identical before / after two company rows, closings leave them out, recalculated closings' amounts unchanged); not in a browser.** `Expense::scopeInShifts()` in `ShiftClosingService::openExpenses()` / `openPeriods()`, My Shift list, `DailySummaryService::summary()`; `ExpenseService::createCompany()` (H4 advances / H5 salaries), company rows locked (edit 403 / delete 422, owner too), system categories not in the Cash Out form (`ExpenseCategoryService::generated()`, config `paymentmodule.generated_categories`); Daily Summary "Company Cash Out" section; Payments Cash Out filter "Company Cash Out" + Company badge; category list "System" badge. Found: `shifts:recalculate` rewrites the saved totals JSON of 37 old closings (same amounts, different JSON) — existing behaviour.
 - **HR H2 salary & insurance (2026-11-05), COMMITTED (tested OK by the user), migrations `PayrollModule 2026_11_05_100039–100042` RUN on `dwidar_res_hub` (backup `storage/app/backups/dwidar_res_hub-before-h2-payroll-20261105.sql`; 3 opening salaries #7 / #14 / #16); not on the server yet (deploy: back up, `php artisan migrate`, `optimize:clear`).** Also in it: Staff list Basic Salary column (`StaffColumns`), Salary tab two-column layout, yellow HR warnings (`.notice--warning`), staff header name + #no, Document Types page table restored (was committed empty in `49708fd`), the HR setup active switch fix, DataTables `text-center` columns (header too). Next: H4 part 1 = §6b company Cash Out (own commit), then H4, then H3.
 - **HR H1 committed (`49708fd`, 2026-11-05, tested OK by the user); not on the server yet.** Deploy: back up the DB + APP_KEY, `php artisan migrate` (HrModule 100031, 100033–100035, 100038; EmployeeModule 100036, 100037), `optimize:clear`. Uncommitted: the WhatsApp list name → Edit (`MessagingModule Setting/messages`). Next: H1b (`docs/hr-plan.md`).
 - **WhatsApp message form + list (2026-11-05, user), UNCOMMITTED, no migration, not in a browser:** the message form order = Name | Suggest When | Message Template (was "Start From", add only); the Arabic "Booking confirmation" ready text (config `messagingmodule.starts.booking_confirmation.ar`) = the user's new text (date / time from–to / amount / address / Google Maps / 25% within 2 hours / InstaPay + bank details); the English one unchanged (waiting for the user's text); saved messages unchanged (the owner pastes the text into the saved New booking message); Settings › WhatsApp Messages list: the name opens Edit.
@@ -427,6 +428,12 @@
 
 ## Session log
 
+### 2026-11-05 — HR H4 part 1: company Cash Out (outside shifts); committed
+- **Changed:** PaymentModule migration 100043 (`expenses.is_company`, `expense_categories.generated_key`), `Expense::scopeInShifts()` in the shift / My Shift / Daily Summary queries, `ExpenseService::createCompany()` + lock, `ExpenseCategoryService::generated()`, Daily Summary "Company Cash Out", Cash Out "Company Cash Out" filter + badges, `docs/hr-plan.md` §3.5 (generated_key, void on cancel)
+- **Why:** user (H4 part 1, its own commit before advances)
+- **Affects:** shift closing, My Shift, Daily Summary, Payments Cash Out list, expense categories
+- **Commit:** the H4 part 1 commit
+
 ### 2026-11-05 — HR H2: PayrollModule (salaries, insurance, settings) + HR polish; committed
 - **Changed:** new PayrollModule (4 migrations run), HrModule `StaffTabs` / `StaffColumns`, Salary tab, Staff list Basic Salary, HR setup Allowance Types / Payroll Settings, `hr.salary`, Document Types table restored, setup active switch fix, custom.css (HR cards, warnings, centred DataTables columns), `docs/hr-plan.md` §3.3 – §3.5b
 - **Why:** user (H2 of the approved H2 / H4 / H3 plan)
@@ -480,9 +487,3 @@
 - **Why:** user
 - **Affects:** Add / Edit Cash Out (both areas)
 - **Commit:** none yet
-
-### 2026-11-03 — Roles & permissions R0
-- **Changed:** EmployeeModule (Role model / repository / service / controller / request / views, 2 migrations NOT run, config catalog, Employee role methods, provider Gate, employee form / view / list Role, idle message flash, `EmployeeRoutesTest` +4 tests); `->can()` on the shared routes of Reservation, Package, Member, Payment, Messaging, Contract modules + `can:shift.has` / `can:extras.create` groups; `ReservationActions` Renew check; `PaymentActions` tabs by `expenses.view`; views (row-menu filter, employee sidebar / main, list Add buttons, Payments header, reservation view header + status menu, payable-payments, member-select); `MessagingService` (`messages.send`), `ShiftReminder` (`shift.has`); account sidebar Settings › Roles; custom.js (401 reload, no "+ Add" member without permission); custom.css; docs
-- **Why:** user (R0 of the approved roles plan)
-- **Affects:** every employee route / page (Front desk = as before), the account sidebar, the Employees pages
-- **Commit:** none yet (the user reviews the migrations, then tests)

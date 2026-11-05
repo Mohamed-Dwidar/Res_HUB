@@ -29,6 +29,7 @@
             <a href="{{ $showUrl }}" data-modal class="font-medium">{{ $item->member?->name ?? '-' }}</a>
         @else
             <a href="{{ $showUrl }}" data-modal class="font-medium">{{ $item->expenseCategory?->name ?? '-' }}</a>
+            @if ($item->is_company) <span class="badge badge-status-slate" title="Paid by the company, not in any shift">Company</span> @endif
         @endif
         @break
 

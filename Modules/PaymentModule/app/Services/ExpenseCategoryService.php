@@ -2,6 +2,7 @@
 
 namespace Modules\PaymentModule\app\Services;
 
+use Modules\PaymentModule\app\Models\ExpenseCategory;
 use Modules\PaymentModule\app\Repositories\ExpenseCategoryRepository;
 
 /**
@@ -27,7 +28,24 @@ class ExpenseCategoryService
     {
         return $this->categoryRepository->forAccount($accountId)
             ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $currentId))
-            ->ordered()->get()->pluck('name', 'id')->all();
+            ->manual()->ordered()->get()->pluck('name', 'id')->all();
+    }
+
+    /**
+     * The system's category of a company Cash Out (docs/hr-plan.md §6b): $key = 'advances' | 'salaries'
+     * (config paymentmodule.generated_categories), made on first use (active, names from the config); one per account.
+     */
+    public function generated($accountId, string $key): ExpenseCategory
+    {
+        $names = config('paymentmodule.generated_categories.' . $key);
+        abort_unless($names, 500, 'Unknown system expense category: ' . $key);
+        $category = ExpenseCategory::where('account_id', $accountId)->where('generated_key', $key)->first();
+        if (!$category) {
+            $category = new ExpenseCategory(['account_id' => $accountId, 'name_en' => $names['en'], 'name_ar' => $names['ar'], 'is_active' => true]);
+            $category->generated_key = $key;
+            $category->save();
+        }
+        return $category;
     }
 
     // the list filters: [id => ['name', 'active']], the active ones first (the account sees the inactive ones too, marked;

@@ -46,8 +46,8 @@ class CashListService
         $payments = $this->paymentService->listQuery($accountId, $common + ['payment_method_id' => $method])->tab($tab)
             ->when($collectorId, fn ($query, $userId) => $query->collectedBy($userId))
             ->when($direction === 'out', fn ($query) => $query->where('type', 'refund'))
-            // an expense category chosen: no refunds
-            ->when($direction === 'out' && ctype_digit($category), fn ($query) => $query->whereRaw('0 = 1'))
+            // an expense category / "Company Cash Out" chosen: no refunds
+            ->when($direction === 'out' && (ctype_digit($category) || $category === 'company'), fn ($query) => $query->whereRaw('0 = 1'))
             ->setEagerLoads([])->toBase()
             ->selectRaw("'payment' AS kind, id, type, paid_at AS at_date, created_at, amount, payment_method_id");
 
@@ -55,6 +55,8 @@ class CashListService
             ->when($expenseCollectorId, fn ($query, $userId) => $query->collectedBy($userId))
             // "Refunds" chosen in the category filter: refunds only
             ->when($category === 'refund', fn ($query) => $query->whereRaw('0 = 1'))
+            // "Company Cash Out" (§6b: advances, salaries paid by the company)
+            ->when($category === 'company', fn ($query) => $query->where('expenses.is_company', true))
             ->setEagerLoads([])->toBase()
             ->selectRaw("'expense' AS kind, id, 'expense' AS type, spent_at AS at_date, created_at, amount, payment_method_id");
 

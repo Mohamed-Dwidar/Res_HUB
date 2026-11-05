@@ -30,7 +30,8 @@ class DailySummaryService
             ->get();
 
         $methodNames = PaymentMethod::withTrashed()->where('account_id', $accountId)->get()->pluck('name', 'id');
-        $expenseRows = Expense::where('account_id', $accountId)->where('spent_at', Carbon::parse($date)->toDateString())
+        // company Cash Out (§6b: advances, salaries) are not a collector's money: listed apart (companyExpenses())
+        $expenseRows = Expense::where('account_id', $accountId)->where('spent_at', Carbon::parse($date)->toDateString())->inShifts()
             ->groupBy('creatable_type', 'creatable_id', 'payment_method_id')
             ->selectRaw('creatable_type, creatable_id, payment_method_id, COUNT(*) n, SUM(amount) total')
             ->get();
@@ -125,6 +126,17 @@ class DailySummaryService
         }
 
         return $summary;
+    }
+
+    /**
+     * The company Cash Out dated that day (docs/hr-plan.md §6b: advances, salaries): paid by the company, in NO collector's
+     * line, Day Totals or "Net to hand over" — the page lists them apart.
+     */
+    public function companyExpenses($accountId, $date): Collection
+    {
+        return Expense::with('creatable.userable', 'expenseCategory', 'paymentMethod')
+            ->where('account_id', $accountId)->where('is_company', true)->where('spent_at', Carbon::parse($date)->toDateString())
+            ->orderBy('created_at')->orderBy('id')->get();
     }
 
     // the refunds dated that day (who, amount, the original payment, reason), as they were added

@@ -121,6 +121,32 @@
     <div class="form-section mt-8">Day Totals</div>
     @include('paymentmodule::DailySummary.partials.totals')
 
+    {{-- company Cash Out (docs/hr-plan.md §6b: advances, salaries): paid by the company, not in any shift / hand-over above --}}
+    @if ($companyExpenses->isNotEmpty())
+        <div class="form-section mt-8">Company Cash Out <span class="badge badge-status-slate">Not in any shift</span></div>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>Cash Out</th><th>Item</th><th>Category</th><th>Method</th><th>Recorded By</th><th class="text-right">Amount</th></tr></thead>
+                <tbody>
+                    @foreach ($companyExpenses as $expense)
+                        <tr>
+                            <td class="whitespace-nowrap"><a href="{{ route('account.expenses.show', $expense->id) }}" data-modal class="font-medium">#{{ $expense->expense_no }}</a> <span class="text-xs text-slate-500">{{ $expense->created_at?->format('h:i A') }}</span></td>
+                            <td>{{ $expense->item }}</td>
+                            <td>{{ $expense->expenseCategory?->name ?? '-' }}</td>
+                            <td>{{ $expense->method_name }}</td>
+                            <td>{{ $expense->creatable?->userable?->displayName() ?? '-' }}</td>
+                            <td class="text-right whitespace-nowrap font-bold text-danger">{{ number_format(-$expense->amount, 2) }}</td>
+                        </tr>
+                    @endforeach
+                    <tr class="row-total">
+                        <td colspan="5">Total company cash out</td>
+                        <td class="text-right whitespace-nowrap font-bold text-danger">{{ number_format(-$companyExpenses->sum('amount'), 2) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    @endif
+
     {{-- the day's refunds: who gave the money back, how much, for which payment, why --}}
     @if ($refunds->isNotEmpty())
         <div class="form-section mt-8">Refunds</div>

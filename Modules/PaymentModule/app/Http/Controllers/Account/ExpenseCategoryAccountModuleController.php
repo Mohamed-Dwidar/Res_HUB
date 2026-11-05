@@ -50,7 +50,8 @@ class ExpenseCategoryAccountModuleController extends Controller
             ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['is_active'])))
             ->setRowId(fn ($category) => 'row-' . $category->id)
             ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
-            ->addColumn('name_html', fn ($category) => '<a href="' . route('account.expense-categories.edit', $category->id) . '" data-modal class="font-medium">' . e($category->name) . '</a>')
+            ->addColumn('name_html', fn ($category) => '<a href="' . route('account.expense-categories.edit', $category->id) . '" data-modal class="font-medium">' . e($category->name) . '</a>'
+                . ($category->generated_key ? ' <span class="badge badge-status-slate" title="Used by HR for company Cash Out only; not offered in the Cash Out form">System</span>' : ''))
             ->addColumn('status', fn ($category) => view('layoutmodule::partials.row-toggle', [
                 'url' => route('account.expense-categories.active', $category->id), 'row' => $category->id, 'name' => 'is_active', 'checked' => $category->is_active,
             ])->render())

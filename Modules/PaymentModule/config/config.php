@@ -5,6 +5,13 @@ return [
 
     // the first id / payment_no of the payments added in the app: the numbers below are kept for the old data import
     // (old payments / incomes keep their old ids); the payments AUTO_INCREMENT is set to the same value by hand (to_run)
+    // the system's expense categories of the company Cash Out (docs/hr-plan.md §6b; expense_categories.generated_key), made on
+    // first use by ExpenseCategoryService::generated(): advances (H4), salaries (H5)
+    'generated_categories' => [
+        'advances' => ['en' => 'Advances', 'ar' => 'سلف'],
+        'salaries' => ['en' => 'Salaries', 'ar' => 'مرتبات'],
+    ],
+
     'number_start' => (int) env('PAYMENT_NUMBER_START', 100001),
 
     // employees' shift reminders (docs/payments-plan.md §2b): the oldest payment of an open shift older than this → the

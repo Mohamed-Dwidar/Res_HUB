@@ -105,7 +105,7 @@ trait ExpenseActions
         $tab = $openShift ? 'all' : $this->tab($filters);
         $query = $this->expenseService->listQuery($this->accountId())->with('creatable.userable')
             ->when($this->collectorId(), fn ($query, $userId) => $query->collectedBy($userId))
-            ->when($openShift, fn ($query) => $query->collectedBy(Auth::id())->where('shift_closing_id', 0));
+            ->when($openShift, fn ($query) => $query->collectedBy(Auth::id())->where('shift_closing_id', 0)->inShifts());
         if ($id) {
             $query->whereKey($id);
         }

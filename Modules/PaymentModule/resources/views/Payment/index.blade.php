@@ -79,6 +79,7 @@
                 <option value="">All Categories</option>
                 @include('layoutmodule::partials.filter-options', ['options' => $expenseCategories])
                 <option value="refund">Refunds</option>
+                <option value="company">Company Cash Out</option>
             </select>
         @endif
         <select name="method" class="{{ config('layoutmodule.form.select') }}" aria-label="Method">

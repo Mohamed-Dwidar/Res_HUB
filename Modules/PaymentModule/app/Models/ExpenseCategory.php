@@ -19,6 +19,7 @@ class ExpenseCategory extends Model
 
     protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active'];
 
+    // generated_key (not fillable): NULL = a normal category; 'advances' / 'salaries' = the system's (company Cash Out only)
     protected $casts = [
         'is_active' => 'boolean',
     ];
@@ -34,6 +35,17 @@ class ExpenseCategory extends Model
     }
 
     // the categories order (lists, drop menus): by name
+    // the categories a person may pick in the Cash Out form (not the system's)
+    public function scopeManual($query)
+    {
+        return $query->whereNull('expense_categories.generated_key');
+    }
+
+    public function isGenerated(): bool
+    {
+        return $this->generated_key !== null;
+    }
+
     public function scopeOrdered($query)
     {
         return $query->orderByLocalized('name')->orderBy('id');

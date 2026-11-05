@@ -37,6 +37,7 @@ class DailySummaryAccountModuleController extends Controller
             // By Collector also lists the logins with an empty closing of the day (0.00)
             'summary' => $this->summaryService->withEmptyClosings($this->summaryService->summary($accountId, $date), $shifts),
             'refunds' => $this->summaryService->refunds($accountId, $date),
+            'companyExpenses' => $this->summaryService->companyExpenses($accountId, $date),
             'shifts' => $shifts,
             'openPeriods' => $this->shiftService->openPeriods($accountId, $date),
             // the employees' open shifts older than the reminder time (+ their "still working" answers), whatever their dates

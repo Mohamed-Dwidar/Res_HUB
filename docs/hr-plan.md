@@ -247,9 +247,13 @@ contracts ending within N days appear in the same "Expiring" list.
 
 ### 3.5 Advances, deductions, bonuses (PayrollModule, H4)
 
-- **First, its own commit + test: the account-level Cash Out (§6b)** — `expenses.is_company`, `expense_categories.generated_only`,
+- **First, its own commit + test: the account-level Cash Out (§6b)** — `expenses.is_company`, `expense_categories.generated_key` (built 2026-11-05: a key 'advances' / 'salaries' instead of a generated_only flag, so the code finds its category; made on first use),
   `Expense::scopeInShifts()` in every shift / Daily Summary query, a "Company" line in Daily Summary, the Payments list badge,
   "Advances" not pickable for a manual Cash Out.
+- **Fixing mistakes (user 2026-11-05):** company rows stay locked in the Cash Out screens, but cancelling the source (an advance;
+  H5: a salary payment) must VOID its company Cash Out in the same step — soft delete with `delete_reason` + `deleted_by` + when,
+  logged on the source too (who / when / reason). One service method (`ExpenseService::voidCompany($expense, $reason, $by)`), never
+  from the Cash Out forms.
 - `adjustment_types` — name_ar / en, `kind` bonus | deduction, is_active. HR › Adjustment Types (owner).
 - `employee_adjustments` — employee_id, adjustment_type_id, `period` (first day of the month), amount OR days (× the daily
   rate, turned into money by payroll), reason (required), creatable, `payroll_line_id` (0 until H5 locks it).

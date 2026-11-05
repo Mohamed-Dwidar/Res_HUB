@@ -43,6 +43,7 @@ class Expense extends Model
         'amount' => 'float',
         'spent_at' => 'date',
         'shift_closing_id' => 'integer',
+        'is_company' => 'boolean',
     ];
 
     public function account(): BelongsTo
@@ -84,6 +85,15 @@ class Expense extends Model
     }
 
     // the expenses recorded by one login (an employee sees only theirs)
+    /**
+     * The rows that belong to shifts (docs/hr-plan.md §6b): every Cash Out except the company ones (is_company = 1: advances,
+     * salaries — paid by the company, never in a shift / hand-over). EVERY shift / open shift / Daily Summary query uses it.
+     */
+    public function scopeInShifts($query)
+    {
+        return $query->where('expenses.is_company', false);
+    }
+
     public function scopeCollectedBy($query, $userId)
     {
         return $query->where('creatable_type', (new User)->getMorphClass())->where('creatable_id', $userId);
