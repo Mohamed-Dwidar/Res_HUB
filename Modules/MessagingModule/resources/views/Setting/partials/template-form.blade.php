@@ -1,6 +1,6 @@
 {{--
-    A message ($template: null = new). "Start from" (add only; config messagingmodule.starts: fills the name when empty, "Suggest
-    when" when Never, both texts), Name, "Suggest when" (optional), On, Arabic + English texts with their live preview (custom.js
+    A message ($template: null = new). Name, "Suggest when" (optional), "Message Template" (= start from: add only; config
+    messagingmodule.starts: fills the name when empty, "Suggest when" when Never, both texts), On, Arabic + English texts with their live preview (custom.js
     messagePreview(): $sample = the account's newest subscription, MessagingService::sampleVariables()), the units grouped by space
     (a space's checkbox = all its units; custom.js marks the units that already have another message with the chosen "Suggest
     when": $taken),
@@ -13,16 +13,16 @@
     <script type="application/json" data-message-starts>@json($starts)</script>
 @endunless
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
-    @unless ($template)
-        @include('layoutmodule::partials.field', ['name' => 'start_from', 'label' => 'Start From', 'type' => 'select',
-            'options' => ['' => '- Empty: write my own -'] + $startOptions, 'attrs' => 'data-message-start',
-            'hint' => 'A ready text: fills both texts (+ the name and "Suggest when" when empty). Nothing is saved until you add it.'])
-    @endunless
     @include('layoutmodule::partials.field', ['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $template?->name,
-        'attrs' => 'maxlength="100" dir="auto"', 'hint' => 'What the employees see in the popup, e.g. "Virtual Office renewal".'])
+        'attrs' => 'maxlength="100" dir="auto"', 'hint' => 'What the users see in the popup, e.g. "Virtual Office renewal".'])
     @include('layoutmodule::partials.field', ['name' => 'suggest_when', 'label' => 'Suggest When', 'type' => 'select',
         'options' => ['' => 'Never'] + $suggestOptions, 'value' => $template?->suggest_when,
         'hint' => 'Optional: ★ first in that list, and opened by itself after a new reservation / Mark left. One per unit for each choice.'])
+    @unless ($template)
+        @include('layoutmodule::partials.field', ['name' => 'start_from', 'label' => 'Message Template', 'type' => 'select',
+            'options' => ['' => '- Empty: write my own -'] + $startOptions, 'attrs' => 'data-message-start',
+            'hint' => 'A ready text: fills both texts (+ the name and "Suggest when" when empty). Nothing is saved until you add it.'])
+    @endunless
 </div>
 <div class="mt-5">
     @include('layoutmodule::partials.checkbox', ['name' => 'is_enabled', 'label' => 'On', 'checked' => $template?->is_enabled ?? true,

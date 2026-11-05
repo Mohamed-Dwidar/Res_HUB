@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class MessageSetting extends Model
 {
-    const DRIVERS = ['click_to_chat' => 'Click to chat (WhatsApp opens, the employee presses Send)'];
+    const DRIVERS = ['click_to_chat' => 'Click to chat (WhatsApp opens, the user presses Send)'];
 
     protected $fillable = ['account_id', 'channel', 'is_enabled', 'driver', 'default_language'];
 

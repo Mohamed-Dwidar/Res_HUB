@@ -10,7 +10,7 @@
 
 @section('content')
     <form method="POST" action="{{ route('account.settings.messages.update') }}" data-ajax
-        data-confirm="The settings apply to you and all your employees."
+        data-confirm="The settings apply to you and all your users."
         data-confirm-title="Save the settings?"
         data-confirm-button="Save"
         data-confirm-variant="success">
