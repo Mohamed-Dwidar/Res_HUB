@@ -7,7 +7,7 @@ use Modules\ReportModule\app\Http\Controllers\Account\ReportAccountModuleControl
 use Modules\ReportModule\app\Http\Controllers\Employee\ReportEmployeeModuleController;
 
 /**
- *  Reports (docs/reports-plan.md): {area}/reports/{report}, names {area}.reports.{report}[.data | .excel | .member];
+ *  Reports (docs/reports-plan.md): {area}/reports/{report}, names {area}.reports.{report}[.data | .excel | .pdf | .member | .members];
  *  one permission key per report (the owner passes all). A new report = its routes here + its sidebar items + its key.
  */
 $reportRoutes = function ($controller) {
@@ -15,6 +15,12 @@ $reportRoutes = function ($controller) {
     Route::get('outstanding/data', [$controller, 'outstandingData'])->name('outstanding.data')->can('reports.outstanding');
     Route::get('outstanding/excel', [$controller, 'outstandingExcel'])->name('outstanding.excel')->can('reports.outstanding');
     Route::get('outstanding/member/{member}', [$controller, 'outstandingMember'])->name('outstanding.member')->whereNumber('member')->can('reports.outstanding');
+    // 2. Member statement (the member search is the report's own: a reports role may not have members.pick)
+    Route::get('member-statement', [$controller, 'memberStatement'])->name('member-statement')->can('reports.member_statement');
+    Route::get('member-statement/data', [$controller, 'memberStatementData'])->name('member-statement.data')->can('reports.member_statement');
+    Route::get('member-statement/members', [$controller, 'memberStatementMembers'])->name('member-statement.members')->can('reports.member_statement');
+    Route::get('member-statement/pdf', [$controller, 'memberStatementPdf'])->name('member-statement.pdf')->can('reports.member_statement');
+    Route::get('member-statement/excel', [$controller, 'memberStatementExcel'])->name('member-statement.excel')->can('reports.member_statement');
 };
 
 Route::prefix('account/reports')->name('account.reports.')->middleware(['auth', 'user.active:' . Account::class])->group(function () use ($reportRoutes) {

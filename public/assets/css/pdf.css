@@ -57,6 +57,8 @@ table { width: 100%; border-collapse: collapse; }
 .statement-row-even td { background-color: #f1f5f9; }
 .statement-row-cancelled td { background-color: #fee2e2; color: #991b1b; }
 .statement-cancelled-label { font-weight: bold; }
+/* the member statement (reportmodule::Report.member-statement-pdf): information lines (reservations inside a package, cancelled at 0) */
+.statement-row-muted td { color: #94a3b8; }
 
 /* ===== Contracts (contractmodule, 2026-10-31): the clauses of a contract / renewal annex. Also the content style of the template
    editor (TinyMCE content_css, body class contract-body / contract-body--rtl), so the editor looks like the PDF. ===== */

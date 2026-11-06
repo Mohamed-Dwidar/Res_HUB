@@ -10,6 +10,12 @@
 
 @section('modal-size', 'xl')
 
+@if ($member && Gate::allows('reports.member_statement'))
+    @section('actions')
+        <a href="{{ route($area . '.reports.member-statement', ['member_id' => $member->id]) }}" class="btn btn-secondary"><i data-lucide="scroll-text"></i> Statement</a>
+    @endsection
+@endif
+
 @section('content')
     @php($rows = $reservations->count() + $packages->count())
     @if (!$rows)

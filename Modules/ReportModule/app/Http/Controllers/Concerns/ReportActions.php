@@ -8,7 +8,11 @@ use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 use Modules\EmployeeModule\app\Services\AccessLogService;
 use Modules\MemberModule\app\Models\Member;
+use Modules\MemberModule\app\Services\MemberService;
+use Modules\ReportModule\app\Exports\MemberStatementExport;
 use Modules\ReportModule\app\Exports\OutstandingExport;
+use Modules\ReportModule\app\Services\MemberStatementReport;
+use niklasravnsborg\LaravelPdf\Facades\Pdf;
 use Modules\ReportModule\app\Services\OutstandingReport;
 use Modules\SpaceModule\app\Services\SpaceService;
 use Modules\SpaceModule\app\Services\SubscriptionTypeService;
@@ -47,10 +51,10 @@ trait ReportActions
         ];
     }
 
-    private function logExport(string $page, array $filters, int $rows): void
+    private function logExport(string $page, array $filters, int $rows, string $format = 'xlsx'): void
     {
         app(AccessLogService::class)->record('export', Auth::user(),
-            ['page' => $page, 'format' => 'xlsx', 'filters' => array_filter($filters), 'rows' => $rows], true);
+            ['page' => $page, 'format' => $format, 'filters' => array_filter($filters), 'rows' => $rows], true);
     }
 
     // ---- 1. Outstanding & credits ----
@@ -107,5 +111,64 @@ trait ReportActions
 
         return Excel::download(new OutstandingExport($report->query($this->accountId(), $filters), $totals),
             'outstanding-' . now()->format('Y-m-d') . '.xlsx');
+    }
+
+    // ---- 2. Member statement ----
+
+    // the page (?member_id= = that member chosen, e.g. from the Outstanding popup)
+    public function memberStatement(Request $request, MemberStatementReport $report)
+    {
+        $member = $report->member($this->accountId(), (int) $request->query('member_id'));
+        return view('reportmodule::Report.member-statement', ['member' => $member, 'area' => $this->area()]);
+    }
+
+    // the statement as html (json html: the page puts it under the toolbar)
+    public function memberStatementData(Request $request, MemberStatementReport $report)
+    {
+        $statement = $report->statement($this->accountId(), $report->filters($request->all()));
+        return response()->json(['html' => view('reportmodule::Report.partials.member-statement-body', compact('statement'))->render()]);
+    }
+
+    // the member search of the toolbar (the forms' search rule: name / mobile, 20)
+    public function memberStatementMembers(Request $request)
+    {
+        $q = trim((string) $request->query('q', ''));
+        return response()->json(mb_strlen($q) < 2 ? [] : app(MemberService::class)->search($this->accountId(), $q));
+    }
+
+    public function memberStatementPdf(Request $request, MemberStatementReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $statement = $report->statement($this->accountId(), $filters);
+        abort_unless($statement, 404);
+        $this->logExport('Report: Member statement', $filters + ['member' => $statement['member']->name], count($statement['lines']), 'pdf');
+
+        $config = [
+            'format' => 'A4',
+            'margin_top' => 12, 'margin_bottom' => 18, 'margin_footer' => 6,
+            'instanceConfigurator' => function ($mpdf) {
+                $mpdf->autoScriptToLang = true;
+                $mpdf->autoLangToFont = true;
+            },
+        ];
+        if (!is_file(config('pdf.font_path') . 'Cairo-Regular.ttf')) {
+            $config['default_font'] = 'dejavusans';
+        }
+        $pdf = Pdf::loadView('reportmodule::Report.member-statement-pdf', $statement + ['account' => \Modules\AccountModule\app\Models\Account::find($this->accountId())], [], $config)->output();
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="member-statement-' . $statement['member']->id . '.pdf"',
+        ]);
+    }
+
+    public function memberStatementExcel(Request $request, MemberStatementReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $statement = $report->statement($this->accountId(), $filters);
+        abort_unless($statement, 404);
+        $this->logExport('Report: Member statement', $filters + ['member' => $statement['member']->name], count($statement['lines']));
+
+        return Excel::download(new MemberStatementExport($statement), 'member-statement-' . $statement['member']->id . '-' . now()->format('Y-m-d') . '.xlsx');
     }
 }

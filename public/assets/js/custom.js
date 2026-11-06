@@ -2628,5 +2628,66 @@ document.addEventListener("click", function (e) {
         if (el.value.trim() !== "") params.append(el.name, el.value.trim());
     });
     var url = link.getAttribute("href");
-    window.location.href = url + (url.indexOf("?") >= 0 ? "&" : "?") + params.toString();
+    url += (url.indexOf("?") >= 0 ? "&" : "?") + params.toString();
+    // data-export-blank: a new tab (a PDF)
+    if (link.hasAttribute("data-export-blank")) window.open(url, "_blank", "noopener");
+    else window.location.href = url;
+});
+
+// ------------------------------------------------------------------
+// Member statement (ReportModule report 2, 2026-11-06): form[data-member-statement] — on every change the statement html comes
+// from data-url (json html) into [data-statement-body]; the PDF / Excel links show once a member is chosen; Clear empties all
+// (no DataTables here: the Clear button is enabled while something is chosen)
+// ------------------------------------------------------------------
+document.addEventListener("DOMContentLoaded", function () {
+    var form = document.querySelector("form[data-member-statement]");
+    if (!form) return;
+    var body = document.querySelector("[data-statement-body]");
+    var clear = form.querySelector("[data-clear-button]");
+    var member = form.querySelector('[name="member_id"]');
+    var token = 0;
+    function params() {
+        var values = new URLSearchParams();
+        Array.prototype.forEach.call(form.elements, function (el) {
+            if (!el.name || ["submit", "reset", "button"].indexOf(el.type) >= 0) return;
+            if (el.type === "checkbox" && !el.checked) return;
+            if (el.value.trim() !== "") values.append(el.name, el.value.trim());
+        });
+        return values;
+    }
+    function load() {
+        var values = params();
+        var chosen = !!member.value;
+        document.querySelectorAll("[data-statement-export]").forEach(function (link) { link.hidden = !chosen; });
+        if (clear) clear.disabled = values.toString() === "";
+        var mine = ++token;
+        body.classList.add("is-loading");
+        fetch(form.dataset.url + "?" + values.toString(), { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+            .then(function (response) {
+                if (!response.ok) throw response;
+                return response.json();
+            })
+            .then(function (json) {
+                if (mine !== token) return;
+                body.innerHTML = json.html;
+                createIcons({ icons: window.icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
+            })
+            .catch(function () {
+                if (mine === token) body.innerHTML = '<div class="box p-5 text-danger">Could not load the statement, please try again.</div>';
+            })
+            .finally(function () {
+                if (mine === token) body.classList.remove("is-loading");
+            });
+    }
+    form.addEventListener("change", load);
+    form.addEventListener("submit", function (e) { e.preventDefault(); load(); });
+    form.addEventListener("reset", function () {
+        setTimeout(function () {
+            form.querySelectorAll("input[type=hidden]").forEach(function (input) { input.value = ""; });
+            if (member.tomselect) member.tomselect.clear(true);
+            load();
+        });
+    });
+    if (member.value) load();
+    else if (clear) clear.disabled = true;
 });

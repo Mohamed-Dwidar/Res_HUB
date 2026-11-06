@@ -3801,6 +3801,19 @@ td.renewal-row__action > .wa-btn {
     color: rgb(71 85 105);
 }
 /* the totals row of a report table (tfoot) */
+.statement-member {
+    min-width: 20rem;
+}
+.statement-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+[data-statement-body].is-loading {
+    opacity: 0.5;
+}
 .report-total td {
     font-weight: 600;
     background: rgb(241 245 249);

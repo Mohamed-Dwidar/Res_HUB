@@ -92,6 +92,12 @@
             'url' => route('account.reports.outstanding'),
             'active' => request()->routeIs('account.reports.outstanding*'),
         ],
+        [
+            'title' => 'Member Statement',
+            'icon' => 'scroll-text',
+            'url' => route('account.reports.member-statement'),
+            'active' => request()->routeIs('account.reports.member-statement*'),
+        ],
 
         // HrModule (docs/hr-plan.md, H1 2026-11-04): ONE Staff list + the staff page; later Payroll
         ['divider' => 'HR'],
