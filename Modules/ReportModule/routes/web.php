@@ -34,6 +34,10 @@ $reportRoutes = function ($controller) {
     Route::get('subscriptions', [$controller, 'subscriptions'])->name('subscriptions')->can('reports.subscriptions');
     Route::get('subscriptions/data', [$controller, 'subscriptionsData'])->name('subscriptions.data')->can('reports.subscriptions');
     Route::get('subscriptions/excel', [$controller, 'subscriptionsExcel'])->name('subscriptions.excel')->can('reports.subscriptions');
+    // 6. Occupancy
+    Route::get('occupancy', [$controller, 'occupancy'])->name('occupancy')->can('reports.occupancy');
+    Route::get('occupancy/data', [$controller, 'occupancyData'])->name('occupancy.data')->can('reports.occupancy');
+    Route::get('occupancy/excel', [$controller, 'occupancyExcel'])->name('occupancy.excel')->can('reports.occupancy');
     Route::get('expenses/excel', [$controller, 'expensesExcel'])->name('expenses.excel')->can('reports.expenses');
 };
 

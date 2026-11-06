@@ -116,6 +116,12 @@
             'url' => route('account.reports.subscriptions'),
             'active' => request()->routeIs('account.reports.subscriptions*'),
         ],
+        [
+            'title' => 'Occupancy',
+            'icon' => 'gauge',
+            'url' => route('account.reports.occupancy'),
+            'active' => request()->routeIs('account.reports.occupancy*'),
+        ],
 
         // HrModule (docs/hr-plan.md, H1 2026-11-04): ONE Staff list + the staff page; later Payroll
         ['divider' => 'HR'],

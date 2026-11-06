@@ -2791,3 +2791,61 @@ document.addEventListener("reset", function (e) {
     var back = document.querySelector("[data-report-back]");
     if (back && e.target.matches(back.dataset.reportBack)) back.hidden = true;
 }, true);
+
+// ------------------------------------------------------------------
+// Live report (ReportModule, 2026-11-07, Occupancy): form[data-report-live] — on every change (and on page load) its data-url
+// (json html) goes into data-target; Clear empties the filters (the date field goes back to its starting range) and reloads
+// ------------------------------------------------------------------
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("form[data-report-live]").forEach(function (form) {
+        var body = document.querySelector(form.dataset.target);
+        var clear = form.querySelector("[data-clear-button]");
+        var token = 0;
+        function params() {
+            var values = new URLSearchParams();
+            Array.prototype.forEach.call(form.elements, function (el) {
+                if (!el.name || ["submit", "reset", "button"].indexOf(el.type) >= 0) return;
+                if (el.type === "checkbox" && !el.checked) return;
+                if (el.value.trim() !== "") values.append(el.name, el.value.trim());
+            });
+            return values;
+        }
+        function chosen() {
+            // a filter other than the starting dates
+            var box = form.querySelector("[data-date-range]");
+            var values = params();
+            var dates = (values.get("date_from") || "") + "," + (values.get("date_to") || "");
+            values.delete("date_from");
+            values.delete("date_to");
+            return values.toString() !== "" || (box && box.dataset.dateInitial && dates !== "," && dates !== box.dataset.dateInitial);
+        }
+        function load() {
+            if (clear) clear.disabled = !chosen();
+            var mine = ++token;
+            body.classList.add("is-loading");
+            fetch(form.dataset.url + "?" + params().toString(), { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+                .then(function (response) {
+                    if (!response.ok) throw response;
+                    return response.json();
+                })
+                .then(function (json) {
+                    if (mine !== token) return;
+                    body.innerHTML = json.html;
+                    createIcons({ icons: window.icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
+                })
+                .catch(function () {
+                    if (mine === token) body.innerHTML = '<div class="box p-5 text-danger">Could not load the report, please try again.</div>';
+                })
+                .finally(function () {
+                    if (mine === token) body.classList.remove("is-loading");
+                });
+        }
+        form.addEventListener("change", load);
+        form.addEventListener("submit", function (e) { e.preventDefault(); load(); });
+        form.addEventListener("reset", function () {
+            // after custom.js puts the starting dates back (date field reset handler, also a timeout)
+            setTimeout(function () { setTimeout(load); });
+        });
+        load();
+    });
+});

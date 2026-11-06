@@ -17,6 +17,8 @@ use Modules\ReportModule\app\Exports\ExpenseExport;
 use Modules\ReportModule\app\Exports\IncomeExport;
 use Modules\ReportModule\app\Services\ExpenseReport;
 use Modules\ReportModule\app\Services\SubscriptionReport;
+use Modules\ReportModule\app\Services\OccupancyReport;
+use Modules\ReportModule\app\Exports\OccupancyExport;
 use Modules\ReportModule\app\Exports\SubscriptionExport;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Services\RenewalView;
@@ -432,5 +434,38 @@ trait ReportActions
 
         return Excel::download(new SubscriptionExport($query, $totals, SubscriptionReport::TABS[$filters['view']], $report->rangeText($filters), SubscriptionReport::kindOf($filters['view'])),
             'subscriptions-' . $filters['view'] . '-' . now()->format('Y-m-d') . '.xlsx');
+    }
+
+    // ---- 6. Occupancy ----
+
+    public function occupancy()
+    {
+        $places = $this->placeOptions();
+        return view('reportmodule::Report.occupancy', [
+            'area' => $this->area(),
+            'initial' => ReportDates::thisMonth(),
+            // no "All": occupancy needs dates (× = this month)
+            'presets' => array_values(array_filter(ReportDates::presets(), fn ($preset) => $preset['from'] !== null)),
+            'types' => $places['types'],
+            'spaces' => $places['spaces'],
+        ]);
+    }
+
+    // the report as html (json html: the page puts it under the toolbar; custom.js "Live report")
+    public function occupancyData(Request $request, OccupancyReport $report)
+    {
+        $filters = $report->filters($request->all());
+        return response()->json(['html' => view('reportmodule::Report.partials.occupancy-body', $report->data($this->accountId(), $filters)
+            + ['range' => $report->rangeText($filters)])->render()]);
+    }
+
+    public function occupancyExcel(Request $request, OccupancyReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $data = $report->data($this->accountId(), $filters);
+        abort_if($data['error'], 422, $data['error']);
+        $this->logExport('Report: Occupancy', $filters, collect($data['spaces'])->sum(fn ($space) => count($space['units'])));
+
+        return Excel::download(new OccupancyExport($data, $report->rangeText($filters)), 'occupancy-' . now()->format('Y-m-d') . '.xlsx');
     }
 }

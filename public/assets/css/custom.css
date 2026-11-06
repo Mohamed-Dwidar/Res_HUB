@@ -3834,7 +3834,8 @@ td.renewal-row__action > .wa-btn {
     justify-content: space-between;
     gap: 1rem;
 }
-[data-statement-body].is-loading {
+[data-statement-body].is-loading,
+[data-occupancy-body].is-loading {
     opacity: 0.5;
 }
 .report-total td {
@@ -3960,4 +3961,53 @@ tr.report-click:hover td {
 .filter-bar input.report-days {
     width: 5rem;
     min-width: 0;
+}
+
+/* ===== Occupancy report (ReportModule R6) ===== */
+.occupancy-table__space td {
+    font-weight: 600;
+    color: rgb(var(--color-primary));
+    background: rgb(248 250 252);
+}
+.occupancy-table__percent {
+    width: 14rem;
+}
+.occupancy-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.occupancy-bar span {
+    min-width: 3rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.occupancy-bar progress {
+    flex: 1;
+    height: 0.5rem;
+    overflow: hidden;
+    appearance: none;
+    border: 0;
+    border-radius: 9999px;
+    background: rgb(226 232 240);
+}
+.occupancy-bar progress::-webkit-progress-bar {
+    background: rgb(226 232 240);
+    border-radius: 9999px;
+}
+.occupancy-bar progress::-webkit-progress-value {
+    background: rgb(var(--color-primary));
+    border-radius: 9999px;
+}
+.occupancy-bar progress::-moz-progress-bar {
+    background: rgb(var(--color-primary));
+    border-radius: 9999px;
+}
+.occupancy-bar progress.occupancy-bar--high::-webkit-progress-value { background: rgb(var(--color-success)); }
+.occupancy-bar progress.occupancy-bar--high::-moz-progress-bar { background: rgb(var(--color-success)); }
+.occupancy-bar progress.occupancy-bar--low::-webkit-progress-value { background: rgb(var(--color-warning)); }
+.occupancy-bar progress.occupancy-bar--low::-moz-progress-bar { background: rgb(var(--color-warning)); }
+.occupancy-unset {
+    margin: 0.4rem 0 0 1.1rem;
+    list-style: disc;
 }
