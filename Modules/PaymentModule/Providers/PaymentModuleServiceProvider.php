@@ -25,6 +25,7 @@ class PaymentModuleServiceProvider extends ModuleServiceProvider
     protected array $commands = [
         \Modules\PaymentModule\app\Console\RefreshPaymentsCommand::class,
         \Modules\PaymentModule\app\Console\RecalculateShiftsCommand::class,
+        \Modules\PaymentModule\app\Console\MoveVatPaymentsCommand::class,
     ];
 
     /**

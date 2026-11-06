@@ -714,7 +714,7 @@ class PaymentService
     }
 
     // what the shift log keeps of a payment (before / after a change)
-    private function snapshot(Payment $payment): array
+    public function snapshot(Payment $payment): array
     {
         return [
             'id' => $payment->getKey(),

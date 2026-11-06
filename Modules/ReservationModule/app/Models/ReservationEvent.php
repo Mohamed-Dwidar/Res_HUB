@@ -11,7 +11,8 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * An owner override on a reservation (2026-10-29, a log; Payment Exceptions › Unpaid Renewals / Paid Cancelled):
  * renewed_unpaid = renewed before the previous period was paid (reservation = the new period, related = the unpaid one, amount =
  * what it still owed, data: new_amount, total); cancelled_paid = a reservation with payments set to a not counted status
- * (amount = its net paid, data: from / to status names). reason = the owner's reason, creatable = who.
+ * (amount = its net paid, data: from / to status names); vat_moved = a VAT cash in moved to Other Income "VAT (manual)"
+ * (payments:move-vat, 2026-11-06; data: payment, remaining before / after). reason = the owner's reason, creatable = who.
  */
 class ReservationEvent extends Model
 {
@@ -19,7 +20,8 @@ class ReservationEvent extends Model
 
     const UPDATED_AT = null;
 
-    const TYPES = ['renewed_unpaid' => 'Renewed before paid', 'cancelled_paid' => 'Cancelled with payments'];
+    const TYPES = ['renewed_unpaid' => 'Renewed before paid', 'cancelled_paid' => 'Cancelled with payments',
+        'vat_moved' => 'VAT moved to Other Income'];
 
     protected $fillable = ['account_id', 'reservation_id', 'related_reservation_id', 'type', 'reason', 'amount', 'data', 'creatable_type', 'creatable_id'];
 
