@@ -18,21 +18,24 @@
 @section('content')
     <div class="text-slate-500">A member's reservations (by their start date), packages, extras and payments with the running balance. A positive balance = the member owes, negative = credit. Cancelled reservations show at 0.</div>
 
-    <form id="statement-filters" class="filter-bar mt-5" data-member-statement data-url="{{ route($area . '.reports.member-statement.data') }}">
-        <div class="statement-member">
-            <select name="member_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Member" data-member-select data-member-no-add
-                data-search-url="{{ route($area . '.reports.member-statement.members') }}">
-                <option value="">Search a member (name or mobile)</option>
-                @if ($member)
-                    <option value="{{ $member->id }}" selected>{{ $member->name }} {{ $member->phone }}</option>
-                @endif
-            </select>
+    <form id="statement-filters" class="mt-5" data-member-statement data-url="{{ route($area . '.reports.member-statement.data') }}">
+        {{-- one line: Member (the reservation form's field: field partial + Tom Select server search, the report's own search route,
+             no quick add) | date | Package reservations | Clear --}}
+        <div class="box p-5 filter-bar statement-filters">
+            @include('layoutmodule::partials.field', ['name' => 'member_id', 'label' => 'Member', 'type' => 'select', 'searchable' => true,
+                'width' => 'long', 'wrapperClass' => 'statement-filters__member',
+                'options' => ['' => 'Search by name or mobile'] + ($member ? [$member->id => $member->name . ' ' . $member->phone] : []),
+                'value' => $member?->id,
+                'attrs' => 'data-member-select data-member-no-add data-search-url="' . route($area . '.reports.member-statement.members') . '"'])
+            <div>
+                <label class="{{ config('layoutmodule.form.label') }}">Dates</label>
+                @include('layoutmodule::partials.date-range-filter')
+            </div>
+            <label class="filter-check">
+                <input type="checkbox" name="package_lines" value="1" class="{{ config('layoutmodule.form.checkbox') }}"> Package reservations
+            </label>
+            @include('layoutmodule::partials.datatable-clear')
         </div>
-        @include('layoutmodule::partials.date-range-filter')
-        <label class="filter-check">
-            <input type="checkbox" name="package_lines" value="1" class="{{ config('layoutmodule.form.checkbox') }}"> Package reservations
-        </label>
-        @include('layoutmodule::partials.datatable-clear')
     </form>
 
     <div class="mt-5" data-statement-body>

@@ -313,6 +313,15 @@
     min-width: 170px;
 }
 
+/* a checkbox / radio in a filter bar (reports "Include future", "Package reservations"): not stretched by the input rule above */
+.filter-bar input[type="checkbox"],
+.filter-bar input[type="radio"] {
+    width: 1rem;
+    min-width: 0;
+    height: 1rem;
+    flex: none;
+}
+
 /* ===== Buttons ===== */
 .btn {
     display: inline-flex;
@@ -3801,8 +3810,22 @@ td.renewal-row__action > .wa-btn {
     color: rgb(71 85 105);
 }
 /* the totals row of a report table (tfoot) */
-.statement-member {
-    min-width: 20rem;
+.statement-filters {
+    align-items: flex-end;
+    gap: 1rem;
+}
+.statement-filters__member {
+    flex: 0 1 26rem;
+    min-width: 16rem;
+}
+/* Tom Select's own search input: not stretched by ".filter-bar input" */
+.statement-filters .ts-wrapper input {
+    min-width: 0;
+}
+/* the checkbox / Clear on the inputs' line (38px, the template input height) */
+.statement-filters .filter-check,
+.statement-filters [data-clear-button] {
+    min-height: 2.375rem;
 }
 .statement-head {
     display: flex;
