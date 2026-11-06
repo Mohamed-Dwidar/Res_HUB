@@ -25,6 +25,8 @@ class ReservationModuleServiceProvider extends ModuleServiceProvider
     protected array $commands = [
         // to_run STEP 5b: the imported periods → renewal_of
         \Modules\ReservationModule\app\Console\LinkRenewalsCommand::class,
+        // 2026-11-06: reservations of members that no longer exist (old import)
+        \Modules\ReservationModule\app\Console\DeleteOrphanReservationsCommand::class,
     ];
 
     /**
