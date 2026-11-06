@@ -118,7 +118,7 @@ class IncomeReport
             $groupSort = "DATE_FORMAT(p.paid_at, '%Y-%m')";
         }
 
-        return $query->selectRaw("{$groupKey} as group_key, {$groupSort} as group_sort, {$groupLabel} as group_label, p.type, p.amount,
+        return $query->selectRaw("p.id as payment_id, p.paid_at, {$groupKey} as group_key, {$groupSort} as group_sort, {$groupLabel} as group_label, p.type, p.amount,
             CASE
                 WHEN r.id IS NOT NULL AND r.invoice_requested = 1 AND r.tax_total > 0 THEN (COALESCE(r.vat, 0) + COALESCE(r.table_tax, 0)) / r.tax_total
                 WHEN k.id IS NOT NULL AND k.invoice_requested = 1 AND k.tax_total > 0 THEN (COALESCE(k.vat, 0) + COALESCE(k.table_tax, 0)) / k.tax_total
@@ -143,6 +143,22 @@ class IncomeReport
             ->selectRaw('t.group_key, MAX(t.group_label) as group_label, MIN(t.group_sort) as group_sort,' . self::MONEY);
 
         return DB::query()->fromSub($grouped, 'g')->selectRaw('g.*, ROUND(g.total - g.tax, 2) as net');
+    }
+
+    const GROUP_LIMIT = 500;
+
+    // one group's payments (the row popup): [label, payments (newest first, at most GROUP_LIMIT, member / payable / method loaded),
+    // totals of the whole group, count]
+    public function groupPayments($accountId, array $filters, string $key): array
+    {
+        $rows = DB::query()->fromSub($this->rows($accountId, $filters), 't')->where('t.group_key', $key);
+        $totals = (clone $rows)->selectRaw(self::MONEY . ', MAX(t.group_label) as label')->first();
+        $ids = (clone $rows)->orderByDesc('t.paid_at')->orderByDesc('t.payment_id')->limit(self::GROUP_LIMIT)->pluck('t.payment_id');
+        $payments = \Modules\PaymentModule\app\Models\Payment::with(['member', 'payable', 'paymentMethod', 'incomeCategory'])
+            ->whereIn('id', $ids)->orderByDesc('paid_at')->orderByDesc('id')->get()
+            ->loadMorph('payable', [Reservation::class => ['space', 'unit.color', 'subscriptionType', 'plan']]);
+
+        return ['label' => $totals->label, 'totals' => $totals, 'payments' => $payments, 'count' => (int) $totals->payments];
     }
 
     public function totals($accountId, array $filters): object

@@ -3920,6 +3920,10 @@ td.renewal-row__action > .wa-btn {
 .report-segments {
     display: inline-flex;
     flex-wrap: wrap;
+    /* as wide as its buttons, also inside a flex column (.report-toolbar stretches its children) */
+    align-self: flex-start;
+    width: max-content;
+    max-width: 100%;
     border: 1px solid rgb(203 213 225);
     border-radius: 0.375rem;
     overflow: hidden;
@@ -3936,4 +3940,19 @@ td.renewal-row__action > .wa-btn {
 .report-segments button.active {
     color: #fff;
     background-color: rgb(var(--color-primary));
+}
+
+/* a report row that opens something (drill-down / popup) */
+tr.report-click {
+    cursor: pointer;
+}
+tr.report-click:hover td {
+    background-color: rgb(var(--color-primary) / 0.05);
+}
+/* the view buttons + the drill-down Back link on one line */
+.report-view-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
 }

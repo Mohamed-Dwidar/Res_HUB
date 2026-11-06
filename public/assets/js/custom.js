@@ -2722,3 +2722,72 @@ document.addEventListener("DOMContentLoaded", function () {
     if (member.value) load();
     else if (clear) clear.disabled = true;
 });
+
+// ------------------------------------------------------------------
+// Report view buttons (ReportModule, 2026-11-07, Expenses: By Category | Details): [data-report-view="x"] shows
+// [data-report-panel="x"] and hides the others (client side: every panel's table follows the same filters)
+// ------------------------------------------------------------------
+document.addEventListener("click", function (e) {
+    var button = e.target.closest && e.target.closest("[data-report-view]");
+    if (!button) return;
+    var group = button.parentElement;
+    group.querySelectorAll("[data-report-view]").forEach(function (other) { other.classList.toggle("active", other === button); });
+    document.querySelectorAll("[data-report-panel]").forEach(function (panel) {
+        panel.hidden = panel.dataset.reportPanel !== button.dataset.reportView;
+    });
+    // DataTables sizes its columns again on a resize (a table drawn while hidden)
+    window.dispatchEvent(new Event("resize"));
+});
+
+// ------------------------------------------------------------------
+// Report drill-down (ReportModule, 2026-11-07)
+//  - tr.report-click: a click anywhere on the row (not on a link / button) = its a[data-modal] (keeps the popup back history), else
+//    its data-open-url in the popup (Expenses › Details → the Cash Out, Income rows → their payments)
+//  - tr[data-drill-category] (Expenses › By Category): Details of that block + category with the same dates / filters, and a
+//    "← Back to categories" link [data-report-back] that puts the previous category / kind back
+// ------------------------------------------------------------------
+document.addEventListener("click", function (e) {
+    var row = e.target.closest && e.target.closest("tr.report-click");
+    if (!row || e.target.closest("a, button, input, select, label")) return;
+    if (row.hasAttribute("data-drill-category")) return reportDrill(row);
+    var link = row.querySelector("a[data-modal]");
+    if (link) link.click();
+    else if (row.dataset.openUrl) appModal.open(row.dataset.openUrl);
+});
+function reportShowView(name) {
+    var button = document.querySelector('[data-report-view="' + name + '"]');
+    if (button) button.click();
+}
+function reportDrill(row) {
+    var form = document.querySelector(row.closest("table").dataset.filters);
+    if (!form) return;
+    var category = form.querySelector('[name="category_id"]');
+    var kind = form.querySelector('[name="kind"]');
+    var back = document.querySelector("[data-report-back]");
+    // the first drill remembers what was chosen before (Back restores it)
+    if (back.hidden) back._previous = { category: category.value, kind: kind.value };
+    category.value = row.dataset.drillCategory;
+    kind.value = row.dataset.drillKind;
+    back.querySelector("[data-report-back-label]").textContent = row.dataset.drillLabel;
+    back.hidden = false;
+    form.dispatchEvent(new Event("change", { bubbles: true }));
+    reportShowView("details");
+}
+document.addEventListener("click", function (e) {
+    var link = e.target.closest && e.target.closest("[data-report-back] a");
+    if (!link) return;
+    e.preventDefault();
+    var back = link.closest("[data-report-back]");
+    var form = document.querySelector(back.dataset.reportBack);
+    var previous = back._previous || { category: "", kind: "" };
+    form.querySelector('[name="category_id"]').value = previous.category;
+    form.querySelector('[name="kind"]').value = previous.kind;
+    back.hidden = true;
+    form.dispatchEvent(new Event("change", { bubbles: true }));
+    reportShowView("categories");
+});
+// Clear / the By Category button: no drill-down any more
+document.addEventListener("reset", function (e) {
+    var back = document.querySelector("[data-report-back]");
+    if (back && e.target.matches(back.dataset.reportBack)) back.hidden = true;
+}, true);

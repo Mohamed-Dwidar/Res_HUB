@@ -104,6 +104,12 @@
             'url' => route('account.reports.income'),
             'active' => request()->routeIs('account.reports.income*'),
         ],
+        [
+            'title' => 'Expenses',
+            'icon' => 'trending-down',
+            'url' => route('account.reports.expenses'),
+            'active' => request()->routeIs('account.reports.expenses*'),
+        ],
 
         // HrModule (docs/hr-plan.md, H1 2026-11-04): ONE Staff list + the staff page; later Payroll
         ['divider' => 'HR'],

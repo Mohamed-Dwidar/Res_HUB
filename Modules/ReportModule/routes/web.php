@@ -24,7 +24,13 @@ $reportRoutes = function ($controller) {
     // 3. Income
     Route::get('income', [$controller, 'income'])->name('income')->can('reports.income');
     Route::get('income/data', [$controller, 'incomeData'])->name('income.data')->can('reports.income');
+    Route::get('income/group', [$controller, 'incomeGroup'])->name('income.group')->can('reports.income');
     Route::get('income/excel', [$controller, 'incomeExcel'])->name('income.excel')->can('reports.income');
+    // 4. Expenses (two views: by category | details)
+    Route::get('expenses', [$controller, 'expenses'])->name('expenses')->can('reports.expenses');
+    Route::get('expenses/categories', [$controller, 'expensesCategories'])->name('expenses.categories')->can('reports.expenses');
+    Route::get('expenses/details', [$controller, 'expensesDetails'])->name('expenses.details')->can('reports.expenses');
+    Route::get('expenses/excel', [$controller, 'expensesExcel'])->name('expenses.excel')->can('reports.expenses');
 };
 
 Route::prefix('account/reports')->name('account.reports.')->middleware(['auth', 'user.active:' . Account::class])->group(function () use ($reportRoutes) {

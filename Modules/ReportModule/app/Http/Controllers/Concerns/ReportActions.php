@@ -10,7 +10,12 @@ use Modules\EmployeeModule\app\Services\AccessLogService;
 use Modules\MemberModule\app\Models\Member;
 use Modules\MemberModule\app\Services\MemberService;
 use Modules\PaymentModule\app\Services\PaymentMethodService;
+use Illuminate\Support\Facades\Gate;
+use Modules\PaymentModule\app\Services\CashScope;
+use Modules\PaymentModule\app\Services\ExpenseCategoryService;
+use Modules\ReportModule\app\Exports\ExpenseExport;
 use Modules\ReportModule\app\Exports\IncomeExport;
+use Modules\ReportModule\app\Services\ExpenseReport;
 use Modules\ReportModule\app\Exports\MemberStatementExport;
 use Modules\ReportModule\app\Services\IncomeReport;
 use Modules\ReportModule\app\Services\ReportDates;
@@ -56,6 +61,20 @@ trait ReportActions
             'units' => app(UnitService::class)->filterOptions($accountId),
             'plans' => $plans,
         ];
+    }
+
+    // a report row may open the Cash Out / payment popup only when the login could open it there (route can: + CashScope: every
+    // row or its own; a payment of a reservation / package opens for any employee with payments.view — PaymentActions::findForViewer())
+    private function canOpenExpense($expense): bool
+    {
+        return Gate::allows('expenses.view')
+            && (app(CashScope::class)->expensesCollector() === null || (int) $expense->creatable_id === (int) Auth::id());
+    }
+
+    private function canOpenPayment($payment): bool
+    {
+        return Gate::allows('payments.view')
+            && (app(CashScope::class)->paymentsCollector() === null || $payment->payable_type || (int) $payment->creatable_id === (int) Auth::id());
     }
 
     private function logExport(string $page, array $filters, int $rows, string $format = 'xlsx'): void
@@ -205,13 +224,17 @@ trait ReportActions
         return DataTables::query($query)
             ->filter(fn () => null)
             ->setRowId(fn ($row) => 'row-' . md5($row->group_key))
+            // a click = the popup of this row's payments (the same filters + group)
+            ->setRowAttr(['data-open-url' => fn ($row) => route($this->area() . '.reports.income.group',
+                ['key' => $row->group_key] + array_filter($filters))])
+            ->setRowClass('report-click')
             ->editColumn('cash_in', $cell('cash_in', 'money-in'))
             ->editColumn('refunds', $cell('refunds', 'money-out'))
             ->editColumn('withholding', $cell('withholding', 'money-withholding'))
             ->editColumn('tax', $cell('tax'))
             ->editColumn('net', $cell('net'))
             ->editColumn('total', $cell('total', 'font-medium'))
-            ->rawColumns(['cash_in', 'refunds', 'withholding', 'tax', 'net', 'total'])
+            ->rawColumns(['cash_in', 'refunds', 'withholding', 'tax', 'net', 'total', 'DT_RowAttr.data-open-url'])
             ->only(['DT_RowId', 'group_label', 'payments', 'cash_in', 'refunds', 'withholding', 'tax', 'net', 'total'])
             ->with('html', [
                 'income-totals' => view('reportmodule::Report.partials.income-totals', ['totals' => $totals])->render(),
@@ -228,6 +251,21 @@ trait ReportActions
             ->toJson();
     }
 
+    // the popup of one row: its payments (newest first, at most IncomeReport::GROUP_LIMIT) + the row's totals
+    public function incomeGroup(Request $request, IncomeReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $data = $report->groupPayments($this->accountId(), $filters, (string) $request->query('key', ''));
+
+        return view('reportmodule::Report.income-group', $data + [
+            'area' => $this->area(),
+            'group' => IncomeReport::GROUPS[$filters['group']],
+            'range' => $report->rangeText($filters),
+            'canOpen' => fn ($payment) => $this->canOpenPayment($payment),
+            'limit' => IncomeReport::GROUP_LIMIT,
+        ]);
+    }
+
     public function incomeExcel(Request $request, IncomeReport $report)
     {
         $filters = $report->filters($request->all());
@@ -236,5 +274,90 @@ trait ReportActions
 
         return Excel::download(new IncomeExport($report->query($this->accountId(), $filters), $totals, IncomeReport::GROUPS[$filters['group']], $report->rangeText($filters)),
             'income-' . now()->format('Y-m-d') . '.xlsx');
+    }
+
+    // ---- 4. Expenses ----
+
+    public function expenses()
+    {
+        return view('reportmodule::Report.expenses', [
+            'area' => $this->area(),
+            'initial' => ReportDates::thisMonth(),
+            'categories' => app(ExpenseCategoryService::class)->filterOptions($this->accountId()),
+            'methods' => app(PaymentMethodService::class)->filterOptions($this->accountId()),
+        ]);
+    }
+
+    private function expenseFilters(Request $request, ExpenseReport $report): array
+    {
+        return $report->filters(['search' => $request->input('search.value', $request->input('search'))] + $request->except('search'));
+    }
+
+    // By category (DataTables): one row per block + category; the totals (json html) come with this table
+    public function expensesCategories(Request $request, ExpenseReport $report)
+    {
+        $filters = $this->expenseFilters($request, $report);
+        $totals = $report->totals($this->accountId(), $filters);
+        $query = $report->byCategory($this->accountId(), $filters);
+        if (!$request->input('order')) {
+            $query->orderBy('is_company')->orderBy('category');
+        }
+
+        return DataTables::query($query)
+            ->filter(fn () => null)
+            ->setRowId(fn ($row) => 'row-' . $row->is_company . '-' . $row->expense_category_id)
+            // a click = Details of this block + category (custom.js "Report drill-down")
+            ->setRowAttr(['data-drill-category' => fn ($row) => (int) $row->expense_category_id,
+                'data-drill-kind' => fn ($row) => $row->is_company ? 'company' : 'shift',
+                'data-drill-label' => fn ($row) => ($row->is_company ? 'Company' : 'Shift') . ' · ' . $row->category])
+            ->setRowClass('report-click')
+            ->editColumn('block', fn ($row) => view('reportmodule::Report.partials.expense-block', ['company' => (bool) $row->is_company])->render())
+            ->editColumn('amount', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->amount, 'class' => 'money-out'])->render())
+            ->rawColumns(['block', 'amount', 'DT_RowAttr.data-drill-label'])
+            ->only(['DT_RowId', 'block', 'category', 'count', 'amount'])
+            ->with('html', [
+                'expense-totals' => view('reportmodule::Report.partials.expense-totals', ['totals' => $totals])->render(),
+                'expense-foot-label' => e('Total (' . (int) $totals->categories . ' rows)'),
+                'expense-foot-count' => (int) $totals->count,
+                'expense-foot-amount' => number_format($totals->total, 2),
+            ])
+            ->toJson();
+    }
+
+    // Details (DataTables): every Cash Out, newest first
+    public function expensesDetails(Request $request, ExpenseReport $report)
+    {
+        $filters = $this->expenseFilters($request, $report);
+        $query = $report->details($this->accountId(), $filters);
+        if (!$request->input('order')) {
+            $query->orderByDesc('expenses.spent_at')->orderByDesc('expenses.id');
+        }
+        $dateFormat = \Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT;
+        $area = $this->area();
+
+        return DataTables::eloquent($query)
+            ->filter(fn () => null)
+            ->setRowId(fn ($expense) => 'row-' . $expense->id)
+            // a click = the Cash Out popup (when the login may open it)
+            ->setRowAttr(['data-open-url' => fn ($expense) => $this->canOpenExpense($expense) ? route($area . '.expenses.show', $expense->id) : null])
+            ->setRowClass(fn ($expense) => $this->canOpenExpense($expense) ? 'report-click' : '')
+            ->editColumn('spent_at', fn ($expense) => $expense->spent_at?->format($dateFormat))
+            ->addColumn('category', fn ($expense) => view('reportmodule::Report.partials.expense-category', ['expense' => $expense])->render())
+            ->addColumn('method', fn ($expense) => e($expense->method_name))
+            ->addColumn('by', fn ($expense) => e($expense->creatable?->userable?->name ?? '-'))
+            ->editColumn('item', fn ($expense) => e($expense->item))
+            ->editColumn('amount', fn ($expense) => view('reportmodule::Report.partials.money', ['value' => $expense->amount, 'class' => 'money-out'])->render())
+            ->rawColumns(['category', 'amount', 'DT_RowAttr.data-open-url'])
+            ->only(['DT_RowId', 'expense_no', 'spent_at', 'category', 'item', 'method', 'by', 'amount'])
+            ->toJson();
+    }
+
+    public function expensesExcel(Request $request, ExpenseReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $totals = $report->totals($this->accountId(), $filters);
+        $this->logExport('Report: Expenses', $filters, (int) $totals->count);
+
+        return Excel::download(new ExpenseExport($report, $this->accountId(), $filters, $totals), 'expenses-' . now()->format('Y-m-d') . '.xlsx');
     }
 }
