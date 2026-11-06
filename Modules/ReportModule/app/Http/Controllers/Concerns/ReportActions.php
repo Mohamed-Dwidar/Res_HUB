@@ -16,6 +16,10 @@ use Modules\PaymentModule\app\Services\ExpenseCategoryService;
 use Modules\ReportModule\app\Exports\ExpenseExport;
 use Modules\ReportModule\app\Exports\IncomeExport;
 use Modules\ReportModule\app\Services\ExpenseReport;
+use Modules\ReportModule\app\Services\SubscriptionReport;
+use Modules\ReportModule\app\Exports\SubscriptionExport;
+use Modules\ReservationModule\app\Models\Reservation;
+use Modules\ReservationModule\app\Services\RenewalView;
 use Modules\ReportModule\app\Exports\MemberStatementExport;
 use Modules\ReportModule\app\Services\IncomeReport;
 use Modules\ReportModule\app\Services\ReportDates;
@@ -359,5 +363,74 @@ trait ReportActions
         $this->logExport('Report: Expenses', $filters, (int) $totals->count);
 
         return Excel::download(new ExpenseExport($report, $this->accountId(), $filters, $totals), 'expenses-' . now()->format('Y-m-d') . '.xlsx');
+    }
+
+    // ---- 5. Subscriptions ----
+
+    public function subscriptions()
+    {
+        return view('reportmodule::Report.subscriptions', $this->placeOptions() + [
+            'area' => $this->area(),
+            'initial' => ReportDates::thisMonth(),
+            'days' => Reservation::renewalDaysOf(),
+        ]);
+    }
+
+    private function subscriptionFilters(Request $request, SubscriptionReport $report): array
+    {
+        return $report->filters(['search' => $request->input('search.value', $request->input('search'))] + $request->except('search'));
+    }
+
+    // DataTables server side: the chosen tab's rows; json counts = every tab's count, html = the totals box
+    public function subscriptionsData(Request $request, SubscriptionReport $report)
+    {
+        $filters = $this->subscriptionFilters($request, $report);
+        $accountId = $this->accountId();
+        $counts = $report->counts($accountId, $filters);
+        $totals = $report->totals($accountId, $filters);
+        $query = $report->list($accountId, $filters);
+        if (!$request->input('order')) {
+            $filters['view'] === 'new'
+                ? $query->orderBy('reservations.start_at')
+                : $query->orderByRaw(Reservation::RENEWAL_DATE_SQL)->orderBy('reservations.id');
+        }
+        [$today] = Reservation::businessToday();
+        $kind = SubscriptionReport::kindOf($filters['view']);
+        $area = $this->area();
+        $canOpen = Gate::allows('reservations.view');
+        $format = Reservation::DATE_FORMAT;
+
+        return DataTables::eloquent($query)
+            ->filter(fn () => null)
+            ->setRowId(fn ($row) => 'row-' . $row->id)
+            ->setRowAttr(['data-open-url' => fn ($row) => $canOpen ? route($area . '.reservations.show', $row->id) : null])
+            ->setRowClass($canOpen ? 'report-click' : '')
+            ->addColumn('member_html', fn ($row) => view('reportmodule::Report.partials.subscription-member', ['row' => $row])->render())
+            ->addColumn('place', fn ($row) => view('reservationmodule::Reservation.partials.row-place', ['reservation' => $row])->render())
+            ->addColumn('plan_name', fn ($row) => e($row->plan?->name ?? '-'))
+            ->addColumn('period', fn ($row) => e($row->start_at?->format($format) . ' → ' . ($row->realEnd()?->format($format) ?? '-')))
+            ->addColumn('renewal', fn ($row) => view('reportmodule::Report.partials.subscription-renewal', ['view' => RenewalView::make($row, $kind, $today),
+                'relative' => in_array($filters['view'], ['not_renewed', 'ending'], true)])->render())
+            ->addColumn('amount', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->dueAmount(), 'class' => 'font-medium'])->render())
+            ->addColumn('state', fn ($row) => view('reservationmodule::Reservation.partials.renewal-payment', ['view' => RenewalView::make($row, $kind, $today), 'area' => $area])->render())
+            ->rawColumns(['member_html', 'place', 'renewal', 'amount', 'state', 'DT_RowAttr.data-open-url'])
+            ->only(['DT_RowId', 'DT_RowAttr', 'DT_RowClass', 'member_html', 'place', 'plan_name', 'period', 'renewal', 'amount', 'state'])
+            ->with('counts', collect($counts)->mapWithKeys(fn ($n, $view) => ['subscriptions-' . $view => $n])->all())
+            ->with('html', [
+                'subscription-totals' => view('reportmodule::Report.partials.subscription-totals', ['totals' => $totals, 'counts' => $counts, 'filters' => $filters, 'range' => $report->rangeText($filters)])->render(),
+            ])
+            ->toJson();
+    }
+
+    public function subscriptionsExcel(Request $request, SubscriptionReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $totals = $report->totals($this->accountId(), $filters);
+        $this->logExport('Report: Subscriptions', $filters, (int) $totals->count);
+        $query = $report->list($this->accountId(), $filters);
+        $filters['view'] === 'new' ? $query->orderBy('reservations.start_at') : $query->orderByRaw(Reservation::RENEWAL_DATE_SQL)->orderBy('reservations.id');
+
+        return Excel::download(new SubscriptionExport($query, $totals, SubscriptionReport::TABS[$filters['view']], $report->rangeText($filters), SubscriptionReport::kindOf($filters['view'])),
+            'subscriptions-' . $filters['view'] . '-' . now()->format('Y-m-d') . '.xlsx');
     }
 }

@@ -113,6 +113,13 @@
             'url' => route('employee.reports.expenses'),
             'active' => request()->routeIs('employee.reports.expenses*'),
         ],
+        [
+            'title' => 'Subscriptions',
+            'can' => 'reports.subscriptions',
+            'icon' => 'repeat',
+            'url' => route('employee.reports.subscriptions'),
+            'active' => request()->routeIs('employee.reports.subscriptions*'),
+        ],
     ], fn ($item) => Gate::allows($item['can'])));
     if ($reports) {
         $items = array_merge($items, [['divider' => 'Reports']], $reports);

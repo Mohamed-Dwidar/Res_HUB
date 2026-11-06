@@ -3956,3 +3956,8 @@ tr.report-click:hover td {
     align-items: center;
     gap: 1rem;
 }
+/* the reports' small number field ("Ending within N days") */
+.filter-bar input.report-days {
+    width: 5rem;
+    min-width: 0;
+}
