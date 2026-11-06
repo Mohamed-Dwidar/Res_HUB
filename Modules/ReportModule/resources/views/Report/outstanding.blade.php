@@ -13,11 +13,15 @@
 @endsection
 
 @section('content')
-    <div class="text-slate-500">Who owes and who has credit today (reservations paid on their own + packages). Future periods are left out of Owed unless "Include future" is ticked; a type / space / plan filter leaves the packages out.</div>
+    @include('reportmodule::Report.partials.intro', ['text' => 'Who owes and who has credit today.',
+        'details' => 'Reservations paid on their own + packages, by today\'s stored balance. The date filter = the row\'s start. Future periods are left out of Owed unless "Include future" is ticked; a credit always shows. A type / space / plan filter leaves the packages out.'])
 
-    <form id="outstanding-filters" class="filter-bar mt-5">
+    <form id="outstanding-filters" class="report-toolbar mt-5">
+        <div class="filter-bar">
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Member name or phone" autocomplete="off">
-        @include('layoutmodule::partials.date-range-filter')
+        @include('layoutmodule::partials.date-range-filter', ['presets' => \Modules\ReportModule\app\Services\ReportDates::presets()])
+        </div>
+        <div class="filter-bar">
         <select name="subscription_type_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Type">
             <option value="">All Types</option>
             @foreach ($types as $id => $name)
@@ -46,9 +50,10 @@
             <input type="checkbox" name="include_future" value="1" class="{{ config('layoutmodule.form.checkbox') }}"> Include future
         </label>
         @include('layoutmodule::partials.datatable-clear')
+        </div>
     </form>
 
-    <div class="mt-5" data-html="outstanding-totals"></div>
+    <div class="mt-5" data-html="outstanding-totals">@include('reportmodule::Report.partials.outstanding-totals', ['totals' => null])</div>
 
     <div class="table-wrap mt-5">
         <table class="data-table" data-datatable data-url="{{ route($area . '.reports.outstanding.data') }}"

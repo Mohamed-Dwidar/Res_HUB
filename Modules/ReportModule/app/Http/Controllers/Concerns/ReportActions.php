@@ -9,12 +9,17 @@ use Maatwebsite\Excel\Facades\Excel;
 use Modules\EmployeeModule\app\Services\AccessLogService;
 use Modules\MemberModule\app\Models\Member;
 use Modules\MemberModule\app\Services\MemberService;
+use Modules\PaymentModule\app\Services\PaymentMethodService;
+use Modules\ReportModule\app\Exports\IncomeExport;
 use Modules\ReportModule\app\Exports\MemberStatementExport;
+use Modules\ReportModule\app\Services\IncomeReport;
+use Modules\ReportModule\app\Services\ReportDates;
 use Modules\ReportModule\app\Exports\OutstandingExport;
 use Modules\ReportModule\app\Services\MemberStatementReport;
 use niklasravnsborg\LaravelPdf\Facades\Pdf;
 use Modules\ReportModule\app\Services\OutstandingReport;
 use Modules\SpaceModule\app\Services\SpaceService;
+use Modules\UnitModule\app\Services\UnitService;
 use Modules\SpaceModule\app\Services\SubscriptionTypeService;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -32,7 +37,7 @@ trait ReportActions
         return Auth::user()->userable->ownerAccountId();
     }
 
-    // the toolbar's type → space → plan options (all, active first; inactive greyed); plans carry their spaces (data-match)
+    // the toolbar's type → space → unit / plan options (all, active first; inactive greyed); plans carry their spaces (data-match)
     private function placeOptions(): array
     {
         $accountId = $this->accountId();
@@ -47,6 +52,8 @@ trait ReportActions
         return [
             'types' => app(SubscriptionTypeService::class)->options($accountId),
             'spaces' => app(SpaceService::class)->filterOptions($accountId),
+            // the Unit filter (Income): shown once a space is chosen, its units only (custom.js filterChain, data-match)
+            'units' => app(UnitService::class)->filterOptions($accountId),
             'plans' => $plans,
         ];
     }
@@ -170,5 +177,64 @@ trait ReportActions
         $this->logExport('Report: Member statement', $filters + ['member' => $statement['member']->name], count($statement['lines']));
 
         return Excel::download(new MemberStatementExport($statement), 'member-statement-' . $statement['member']->id . '-' . now()->format('Y-m-d') . '.xlsx');
+    }
+
+    // ---- 3. Income ----
+
+    public function income()
+    {
+        return view('reportmodule::Report.income', $this->placeOptions() + [
+            'area' => $this->area(),
+            'initial' => ReportDates::thisMonth(),
+            'methods' => app(PaymentMethodService::class)->filterOptions($this->accountId()),
+        ]);
+    }
+
+    // DataTables server side: one row per group + the totals (json html: box, footer cells, the group column's title)
+    public function incomeData(Request $request, IncomeReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $totals = $report->totals($this->accountId(), $filters);
+        $cell = fn ($field, $class = null) => fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->$field, 'class' => $class])->render();
+        $query = $report->query($this->accountId(), $filters);
+        // no column clicked = the group's own order (spaces / units, Packages, other income; methods; months)
+        if (!$request->input('order')) {
+            $query->orderBy('group_sort');
+        }
+
+        return DataTables::query($query)
+            ->filter(fn () => null)
+            ->setRowId(fn ($row) => 'row-' . md5($row->group_key))
+            ->editColumn('cash_in', $cell('cash_in', 'money-in'))
+            ->editColumn('refunds', $cell('refunds', 'money-out'))
+            ->editColumn('withholding', $cell('withholding', 'money-withholding'))
+            ->editColumn('tax', $cell('tax'))
+            ->editColumn('net', $cell('net'))
+            ->editColumn('total', $cell('total', 'font-medium'))
+            ->rawColumns(['cash_in', 'refunds', 'withholding', 'tax', 'net', 'total'])
+            ->only(['DT_RowId', 'group_label', 'payments', 'cash_in', 'refunds', 'withholding', 'tax', 'net', 'total'])
+            ->with('html', [
+                'income-totals' => view('reportmodule::Report.partials.income-totals', ['totals' => $totals])->render(),
+                'income-group-title' => e(IncomeReport::GROUPS[$filters['group']]),
+                'income-foot-label' => e('Total (' . (int) $totals->groups_count . ' rows)'),
+                'income-foot-payments' => (int) $totals->payments,
+                'income-foot-cash_in' => number_format($totals->cash_in, 2),
+                'income-foot-refunds' => number_format($totals->refunds, 2),
+                'income-foot-withholding' => number_format($totals->withholding, 2),
+                'income-foot-tax' => number_format($totals->tax, 2),
+                'income-foot-net' => number_format($totals->net, 2),
+                'income-foot-total' => number_format($totals->total, 2),
+            ])
+            ->toJson();
+    }
+
+    public function incomeExcel(Request $request, IncomeReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $totals = $report->totals($this->accountId(), $filters);
+        $this->logExport('Report: Income', $filters, (int) $totals->groups_count);
+
+        return Excel::download(new IncomeExport($report->query($this->accountId(), $filters), $totals, IncomeReport::GROUPS[$filters['group']], $report->rangeText($filters)),
+            'income-' . now()->format('Y-m-d') . '.xlsx');
     }
 }

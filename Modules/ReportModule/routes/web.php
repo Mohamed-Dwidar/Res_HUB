@@ -21,6 +21,10 @@ $reportRoutes = function ($controller) {
     Route::get('member-statement/members', [$controller, 'memberStatementMembers'])->name('member-statement.members')->can('reports.member_statement');
     Route::get('member-statement/pdf', [$controller, 'memberStatementPdf'])->name('member-statement.pdf')->can('reports.member_statement');
     Route::get('member-statement/excel', [$controller, 'memberStatementExcel'])->name('member-statement.excel')->can('reports.member_statement');
+    // 3. Income
+    Route::get('income', [$controller, 'income'])->name('income')->can('reports.income');
+    Route::get('income/data', [$controller, 'incomeData'])->name('income.data')->can('reports.income');
+    Route::get('income/excel', [$controller, 'incomeExcel'])->name('income.excel')->can('reports.income');
 };
 
 Route::prefix('account/reports')->name('account.reports.')->middleware(['auth', 'user.active:' . Account::class])->group(function () use ($reportRoutes) {

@@ -431,9 +431,37 @@ function dateRangeShowDefault(box) {
     // × only when another day is shown
     box.querySelector("[data-date-range-clear]").hidden = true;
 }
+// a list without tabs that starts on a range (data-date-initial "from,to", the Income report): back to it (Clear / page load)
+function dateRangeShowInitial(box) {
+    var days = box.dataset.dateInitial.split(",");
+    box.querySelector('[name="date_from"]').value = days[0];
+    box.querySelector('[name="date_to"]').value = days[1] || days[0];
+    box._picker.setDate(days, false, "Y-m-d");
+    box.querySelector("[data-date-range-clear]").hidden = false;
+}
+// data-date-presets (reports): quick buttons inside the calendar — a preset's days, or All (no dates)
+function dateRangePresets(box) {
+    var presets = JSON.parse(box.dataset.datePresets);
+    var bar = document.createElement("div");
+    bar.className = "date-presets";
+    presets.forEach(function (preset) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = preset.label;
+        button.addEventListener("click", function () {
+            if (preset.from) box._picker.setDate([preset.from, preset.to], false, "Y-m-d");
+            else box._picker.clear(false);
+            box._picker.close();
+            dateRangeApply(box, box._picker.selectedDates);
+        });
+        bar.appendChild(button);
+    });
+    box._picker.calendarContainer.appendChild(bar);
+}
 // the field shows a tab (its days / its text), sends no dates
 function dateRangeShowTab(box, tab) {
     if (box.dataset.dateDefault) return dateRangeShowDefault(box);
+    if (!tab && box.dataset.dateInitial) return dateRangeShowInitial(box);
     var input = box.querySelector("[data-date-range-input]");
     box.querySelector('[name="date_from"]').value = "";
     box.querySelector('[name="date_to"]').value = "";
@@ -487,6 +515,7 @@ document.addEventListener("DOMContentLoaded", function () {
             },
         });
         var form = box.closest("form");
+        if (box.dataset.datePresets) dateRangePresets(box);
         // flatpickr's own change of the shown text: not a filter change (datatables.js reloads only on dateRangeApply())
         box.querySelector("[data-date-range-input]").addEventListener("change", function (e) { e.stopPropagation(); });
         dateRangeShowTab(box, form.querySelector('[data-filter-tab][data-name="tab"].active'));
@@ -499,6 +528,8 @@ document.addEventListener("DOMContentLoaded", function () {
         form.addEventListener("reset", function () {
             setTimeout(function () {
                 dateRangeShowTab(box, form.querySelector('[data-filter-tab][data-name="tab"][data-value=""]'));
+                // a starting range (data-date-initial): datatables.js already reloaded with the emptied dates → reload with it
+                if (box.dataset.dateInitial) box.querySelector('[name="date_from"]').dispatchEvent(new Event("change", { bubbles: true }));
                 // datatables.js: recount the Clear button
                 form.dispatchEvent(new Event("input"));
             });

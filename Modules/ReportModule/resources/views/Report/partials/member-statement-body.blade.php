@@ -18,12 +18,12 @@
             </div>
         </div>
         <div class="money-box">
+            <div class="money-box__item money-box__item--main {{ $statement['closing'] < 0 ? 'money-box__item--credit' : 'money-box__item--owed' }}">
+                <span>{{ $statement['closing'] < 0 ? 'Closing (credit)' : 'Closing (owed)' }}</span><b>{{ number_format(abs($statement['closing']), 2) }}</b>
+            </div>
             <div class="money-box__item"><span>Opening</span><b>{{ number_format($statement['opening'], 2) }}</b></div>
             <div class="money-box__item money-box__item--due"><span>Charges</span><b>{{ number_format($statement['charges'], 2) }}</b></div>
             <div class="money-box__item money-box__item--paid"><span>Payments</span><b>{{ number_format($statement['payments'], 2) }}</b></div>
-            <div class="money-box__item {{ $statement['closing'] < 0 ? 'money-box__item--credit' : 'money-box__item--owed' }}">
-                <span>{{ $statement['closing'] < 0 ? 'Closing (credit)' : 'Closing (owed)' }}</span><b>{{ number_format(abs($statement['closing']), 2) }}</b>
-            </div>
         </div>
     </div>
 

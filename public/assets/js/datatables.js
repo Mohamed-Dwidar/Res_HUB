@@ -19,6 +19,8 @@
  *   - [data-initial="value"] on a filter -> its value when the list opens (e.g. from the URL), Clear still empties it
  *   - [data-filter-tab][data-initial-tab] -> that tab chosen when the list opens (Clear goes back to the default tab)
  *   - <th data-visible-if="field"> -> the column is shown only while that filter has a value (e.g. the reservations Renewal column)
+ *   - input[type=hidden][data-filter-keep] (+ its [data-filter-tab] buttons) -> a view choice, not a filter: sent, but not counted
+ *     by Clear and not reset by it (the Income report's Group by buttons)
  *
  * Each row has id="row-{id}" (DT_RowId from the server). window.dataTables is used by the ajax forms (custom.js)
  * to update / remove one row without reloading the page.
@@ -225,8 +227,12 @@
             // the date field (layoutmodule::partials.date-range-filter) = ONE filter: date_from only (with the tab it set to All),
             // not counted while on its default day (a list without tabs)
             var dateBox = form.querySelector('[data-date-range]');
-            var dateSet = !!values.date_from && !(dateBox && values.date_from === dateBox.dataset.dateDefault && values.date_to === values.date_from);
+            var dateSet = !!values.date_from && !(dateBox && values.date_from === dateBox.dataset.dateDefault && values.date_to === values.date_from)
+                && !(dateBox && dateBox.dataset.dateInitial === values.date_from + ',' + values.date_to);
             Object.keys(values).forEach(function (name) {
+                if (form.querySelector('input[name="' + name + '"][data-filter-keep]')) {
+                    return;
+                }
                 if (name === 'date_to' || (name === 'date_from' && !dateSet) || (name === 'tab' && dateSet)) {
                     return;
                 }
@@ -280,8 +286,11 @@
         form.addEventListener('reset', function () {
             setTimeout(function () {
                 // hidden inputs are not reset by the browser
-                form.querySelectorAll('input[type=hidden]').forEach(function (input) { input.value = ''; });
-                form.querySelectorAll('[data-filter-tab]').forEach(function (tab) { tab.classList.toggle('active', tab.dataset.value === ''); });
+                form.querySelectorAll('input[type=hidden]:not([data-filter-keep])').forEach(function (input) { input.value = ''; });
+                form.querySelectorAll('[data-filter-tab]').forEach(function (tab) {
+                    if (form.querySelector('input[name="' + tab.dataset.name + '"][data-filter-keep]')) return;
+                    tab.classList.toggle('active', tab.dataset.value === '');
+                });
                 clearTimeout(timer);
                 columnsVisibility();
                 table.search('').draw();

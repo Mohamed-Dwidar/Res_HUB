@@ -16,7 +16,8 @@
 @endsection
 
 @section('content')
-    <div class="text-slate-500">A member's reservations (by their start date), packages, extras and payments with the running balance. A positive balance = the member owes, negative = credit. Cancelled reservations show at 0.</div>
+    @include('reportmodule::Report.partials.intro', ['text' => 'One member\'s charges and payments with the running balance.',
+        'details' => 'Reservations by their start date, packages, extras and payments (refunds minus). A positive balance = the member owes, negative = credit. Cancelled reservations show at 0. "Package reservations" adds the reservations inside packages as lines at 0.'])
 
     <form id="statement-filters" class="mt-5" data-member-statement data-url="{{ route($area . '.reports.member-statement.data') }}">
         {{-- one line: Member (the reservation form's field: field partial + Tom Select server search, the report's own search route,
@@ -29,7 +30,7 @@
                 'attrs' => 'data-member-select data-member-no-add data-search-url="' . route($area . '.reports.member-statement.members') . '"'])
             <div>
                 <label class="{{ config('layoutmodule.form.label') }}">Dates</label>
-                @include('layoutmodule::partials.date-range-filter')
+                @include('layoutmodule::partials.date-range-filter', ['presets' => \Modules\ReportModule\app\Services\ReportDates::presets()])
             </div>
             <label class="filter-check">
                 <input type="checkbox" name="package_lines" value="1" class="{{ config('layoutmodule.form.checkbox') }}"> Package reservations
