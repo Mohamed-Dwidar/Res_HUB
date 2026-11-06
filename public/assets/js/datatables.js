@@ -156,7 +156,8 @@
             if (form) {
                 Array.prototype.forEach.call(form.elements, function (el) {
                     if (el.name && el.name !== 'search' && el.type !== 'submit' && el.type !== 'reset' && el.type !== 'button') {
-                        values[el.name] = el.value;
+                        // a checkbox filter (2026-11-06, reports "Include future"): its value only while ticked
+                        values[el.name] = el.type === 'checkbox' ? (el.checked ? el.value : '') : el.value;
                     }
                 });
             }

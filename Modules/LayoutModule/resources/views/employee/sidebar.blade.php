@@ -83,6 +83,19 @@
     $items = array_values(array_filter($items, fn ($item) => empty($item['can']) || Gate::allows($item['can'])));
     // nothing left under "Daily": no divider either
     $items = count($items) > 1 ? $items : [];
+    // ReportModule (docs/reports-plan.md, 2026-11-06): a "Reports" section with the reports the role has
+    $reports = array_values(array_filter([
+        [
+            'title' => 'Outstanding & Credits',
+            'can' => 'reports.outstanding',
+            'icon' => 'scale',
+            'url' => route('employee.reports.outstanding'),
+            'active' => request()->routeIs('employee.reports.outstanding*'),
+        ],
+    ], fn ($item) => Gate::allows($item['can'])));
+    if ($reports) {
+        $items = array_merge($items, [['divider' => 'Reports']], $reports);
+    }
 @endphp
 
 @include('layoutmodule::partials.menu', ['items' => $items])

@@ -1,0 +1,11 @@
+{
+    "name": "ReportModule",
+    "alias": "reportmodule",
+    "description": "Reports (docs/reports-plan.md): outstanding & credits, member statement, income, expenses, subscriptions, occupancy",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\ReportModule\\Providers\\ReportModuleServiceProvider"
+    ],
+    "files": []
+}

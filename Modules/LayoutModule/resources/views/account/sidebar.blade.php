@@ -84,6 +84,15 @@
             'active' => request()->routeIs('account.withholding-certificates.*'),
         ]] : []),
 
+        // ReportModule (docs/reports-plan.md, 2026-11-06): one item per report
+        ['divider' => 'Reports'],
+        [
+            'title' => 'Outstanding & Credits',
+            'icon' => 'scale',
+            'url' => route('account.reports.outstanding'),
+            'active' => request()->routeIs('account.reports.outstanding*'),
+        ],
+
         // HrModule (docs/hr-plan.md, H1 2026-11-04): ONE Staff list + the staff page; later Payroll
         ['divider' => 'HR'],
         [

@@ -3790,3 +3790,19 @@ td.renewal-row__action > .wa-btn {
 .staff-tabs a {
     cursor: pointer;
 }
+
+/* ---- Reports (ReportModule, docs/reports-plan.md) ---- */
+/* a checkbox filter in a list toolbar ("Include future") */
+.filter-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+    color: rgb(71 85 105);
+}
+/* the totals row of a report table (tfoot) */
+.report-total td {
+    font-weight: 600;
+    background: rgb(241 245 249);
+    border-top: 2px solid rgb(203 213 225);
+}

@@ -2610,3 +2610,23 @@ document.addEventListener("input", function (e) {
     var form = e.target.form;
     if (form && form.matches("[data-leave-form]") && e.target.name === "days") leaveDates(form, "days");
 });
+
+// ------------------------------------------------------------------
+// Report exports (ReportModule, 2026-11-06): a[data-export="#filters-form"] opens its href with the form's current filters
+// (named fields; a checkbox only while ticked; the search box as "search")
+// ------------------------------------------------------------------
+document.addEventListener("click", function (e) {
+    var link = e.target.closest("a[data-export]");
+    if (!link) return;
+    var form = document.querySelector(link.dataset.export);
+    if (!form) return;
+    e.preventDefault();
+    var params = new URLSearchParams();
+    Array.prototype.forEach.call(form.elements, function (el) {
+        if (!el.name || ["submit", "reset", "button"].indexOf(el.type) >= 0) return;
+        if (el.type === "checkbox" && !el.checked) return;
+        if (el.value.trim() !== "") params.append(el.name, el.value.trim());
+    });
+    var url = link.getAttribute("href");
+    window.location.href = url + (url.indexOf("?") >= 0 ? "&" : "?") + params.toString();
+});

@@ -1,7 +1,7 @@
 # Payments, Invoices & ETA — Module Plan
 
 > Status: Phase 1 done (old data transferred 2026-10-11); §2b shift closing (two levels) built 2026-10-11; Phase 2 not started.
-> Phases: (1) payments + withholding certificates + day closing + old data import · (2) taxes on reservations / packages / extras + ETA to-do (redesigned 2026-10-28; Phase A built) · (3) reports.
+> Phases: (1) payments + withholding certificates + shift closing + old data import · (2) taxes on reservations / packages / extras + ETA to-do (redesigned 2026-10-28; Phase A built) · (3) reports.
 
 ---
 
@@ -572,28 +572,10 @@ Per month: net, table tax, VAT of the rows with invoice requested; taxable vs ex
 
 ## 4. Phase 3 — Reports
 
-### New module `ReportModule`
-```
-Modules/ReportModule/
-  app/Services/ReportService.php              one query method per report (forAccount, date range)
-  app/Exports/*Export.php                     maatwebsite/excel
-  app/Http/Controllers/Account/ReportAccountModuleController.php   (employees: daily cash only)
-  resources/views/Report/{index, daily-cash, income, outstanding, member-statement, withholding, tax, eta, audit, pdf/*}.blade.php
-```
-
-| Report | Source | Contents |
-|---|---|---|
-| Daily cash | payments, day_closings | per day: by method, by employee, refunds, withholding; closed / open |
-| Income | payments | by period × source (reservations / packages / categories) × method |
-| Outstanding & credits | reservations, packages | remaining > 0 (owed), < 0 (credit), by member |
-| Member statement | reservations, packages, payments | due / paid / balance timeline |
-| Withholding | payments, certificates | withheld amounts, certificates received / missing, differences |
-| Tax | tax snapshots (invoice requested), eta_documents | per month (ETA date or created date): net, table tax, VAT; taxable vs exempt (§3) |
-| ETA status | eta_documents | the ETA to-do: taxed rows without a document (§3) |
-| Audit | payments (trashed), day_closings | deleted payments with reason + who, reopened days |
-
-### Build order
-Daily cash → Outstanding & credits → Member statement → Income → Withholding → Tax → ETA status → Audit; then Excel / PDF exports. Sidebar "Reports" (confirm).
+> Rewritten 2026-11-06: the reports are planned in **`docs/reports-plan.md`** (ReportModule, approved by the user).
+> The old table here read `day_closings` (dropped 2026-10-13): closing = the shift (`shift_closings`, §2b), and the
+> daily cash report = the Daily Summary (already built). Withholding / Tax / ETA status / Audit reports come after the six
+> reports of that plan (Tax + ETA with Phases D / E; Audit = `shift_events` + Payment Exceptions).
 
 ---
 

@@ -16,5 +16,6 @@
     "MessagingModule": true,
     "ContractModule": true,
     "HrModule": true,
-    "PayrollModule": true
+    "PayrollModule": true,
+    "ReportModule": true
 }

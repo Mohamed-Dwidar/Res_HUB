@@ -93,6 +93,16 @@ return [
             'payroll.approve' => 'Lock / reopen a month\'s payroll (salaries frozen, advances deducted)',
             'payroll.pay' => 'Pay salaries from a locked payroll (company Cash Out)',
         ],
+        // ReportModule (docs/reports-plan.md, 2026-11-06): one key per report = the whole account's data + its Excel / PDF;
+        // no preset, never in Front desk
+        'Reports' => [
+            'reports.outstanding' => 'Report: Outstanding & credits',
+            'reports.member_statement' => 'Report: Member statement',
+            'reports.income' => 'Report: Income',
+            'reports.expenses' => 'Report: Expenses',
+            'reports.subscriptions' => 'Report: Subscriptions',
+            'reports.occupancy' => 'Report: Occupancy',
+        ],
         // 2026-11-04 (user): logins are made / changed / switched off ONLY from the staff form's System Access section
         'System Access' => [
             'users.manage' => 'Turn system access on / off, set the login email / password / role (staff form)',

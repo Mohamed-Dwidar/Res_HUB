@@ -29,7 +29,7 @@ class EmployeeRoutesTest extends TestCase
     const PERMISSION_FREE = ['employee.dashboard'];
 
     // permission groups never in Front desk: their routes are for roles made for them (HR, docs/hr-plan.md)
-    const NOT_FRONT_DESK = ['hr.', 'documents.', 'users.', 'payroll.'];
+    const NOT_FRONT_DESK = ['hr.', 'documents.', 'users.', 'payroll.', 'reports.'];
 
     private function notFrontDesk(string $ability): bool
     {
