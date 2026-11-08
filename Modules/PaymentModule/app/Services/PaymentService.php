@@ -179,6 +179,14 @@ class PaymentService
     }
 
     // why a Cash In made by HR can't be changed here
+    // the last update()'s note for the answer (an owner date change no shift covers), null = none
+    private ?string $lastNote = null;
+
+    public function lastNote(): ?string
+    {
+        return $this->lastNote;
+    }
+
     const SYSTEM_LOCKED = 'This Cash In is in a system category (advance repayment / VAT (manual)): it can\'t be changed here (an advance repayment is changed from the advance).';
 
     /**
@@ -322,14 +330,20 @@ class PaymentService
             && ($methodId !== (int) $payment->payment_method_id || ($reference !== '' && $reference !== (string) $payment->reference))) {
             $this->assertReference($accountId, $methodId, $reference, $payment->getKey());
         }
+        // the owner changes the date (2026-11-08): the row goes to the recorder's shift covering the new date (a closed one: confirm
+        // first, 409), stamped "Date changed by owner"
+        $dateChanged = $owner && !$paidAt->isSameDay($payment->paid_at);
+        $move = $dateChanged ? $this->shifts()->planDateMove($payment, $paidAt, (float) $payment->amount, $amount, $data) : null;
+        $this->lastNote = $move['note'] ?? null;
         $closing = $this->closedShiftOf($payment);
-        $reason = $closing ? $this->assertReason($data['change_reason'] ?? '', 'change_reason', 'Write why this payment of a closed shift is changed.') : null;
+        $reason = $closing || ($move['closed'] ?? false)
+            ? $this->assertReason($data['change_reason'] ?? '', 'change_reason', 'Write why this payment of a closed shift is changed.') : null;
         // a refund: still not more than its payment's amount (linked), or the money received of its reservation / package (imported)
         if ($payment->type === 'refund' && ($payment->refund_of || $payment->payable_type)) {
             $this->assertRefundable($payment->refund_of ? Payment::withTrashed()->find($payment->refund_of) ?? $payment : $payment, $amount, $payment);
         }
 
-        return DB::transaction(function () use ($payment, $data, $amount, $paidAt, $closing, $reason, $user, $target, $moved) {
+        return DB::transaction(function () use ($payment, $data, $amount, $paidAt, $closing, $reason, $user, $target, $moved, $dateChanged, $move) {
             $before = $this->snapshot($payment);
             $old = $payment->payable;
             // moved to a reservation: never more than what it still owes (its row locked, this payment not on it yet)
@@ -348,6 +362,10 @@ class PaymentService
                 'payable_id' => $target ? $target->getKey() : 0,
                 'member_id' => $target ? $target->payableMemberId() : (int) $payment->member_id,
             ] : []));
+            if ($dateChanged) {
+                $payment->forceFill(['date_changed_at' => now(), 'date_changed_by' => $user->getKey()]
+                    + (!empty($move['move']) ? ['shift_closing_id' => $move['to']] : []))->save();
+            }
             $payment->unsetRelation('payable');
             $this->refreshPayableOf($payment);
             if ($moved && $old instanceof Payable) {
@@ -355,8 +373,12 @@ class PaymentService
             }
             // the audit log: every edit (2026-10-27), a closed shift also gets its totals recalculated
             $changes = ['before' => $before, 'after' => $this->snapshot($payment->fresh())];
-            $closing ? $this->shifts()->paymentChanged($closing, 'payment_edit', $payment, $user, $reason, $changes)
-                : $this->shifts()->logOpenChange('payment_edit', $payment, $user, trim((string) ($data['change_reason'] ?? '')) ?: null, $changes);
+            if (!empty($move['move'])) {
+                $this->shifts()->applyDateMove($move, $payment, $user, $reason, $changes);
+            } else {
+                $closing ? $this->shifts()->paymentChanged($closing, 'payment_edit', $payment, $user, $reason, $changes)
+                    : $this->shifts()->logOpenChange('payment_edit', $payment, $user, trim((string) ($data['change_reason'] ?? '')) ?: null, $changes);
+            }
 
             return $payment;
         });

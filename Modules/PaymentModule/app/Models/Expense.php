@@ -42,6 +42,7 @@ class Expense extends Model
         'expense_no' => 'integer',
         'amount' => 'float',
         'spent_at' => 'date',
+        'date_changed_at' => 'datetime',
         'shift_closing_id' => 'integer',
         'is_company' => 'boolean',
     ];

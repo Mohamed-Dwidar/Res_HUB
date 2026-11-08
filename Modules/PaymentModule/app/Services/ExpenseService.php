@@ -114,6 +114,14 @@ class ExpenseService
      * recorded): the owner, or the recorder while it is in their open shift (canEdit()). In a CLOSED shift (the owner):
      * $data['change_reason'] is required; the shift's totals are recalculated. Every edit is logged (before / after).
      */
+    // the last update()'s note for the answer (an owner date change no shift covers), null = none
+    private ?string $lastNote = null;
+
+    public function lastNote(): ?string
+    {
+        return $this->lastNote;
+    }
+
     public function update($accountId, $id, array $data, Model $user): Expense
     {
         $expense = $this->findOne($accountId, $id);
@@ -124,20 +132,34 @@ class ExpenseService
             $data['spent_at'] = $expense->spent_at;
         }
         $values = $this->values($accountId, $data, $expense);
+        // the owner changes the date (2026-11-08): to the recorder's shift covering it (ShiftClosingService::planDateMove())
+        $newDate = \Illuminate\Support\Carbon::parse($values['spent_at'] ?? $expense->spent_at)->startOfDay();
+        $dateChanged = $this->isOwner($user) && !$newDate->isSameDay($expense->spent_at);
+        $move = $dateChanged ? $this->shiftService->planDateMove($expense, $newDate, (float) $expense->amount, (float) ($values['amount'] ?? $expense->amount), $data) : null;
+        $this->lastNote = $move['note'] ?? null;
         $closing = $this->closedShiftOf($expense);
-        $reason = $closing ? $this->assertReason($data['change_reason'] ?? '', 'change_reason', 'Write why this expense of a closed shift is changed.') : null;
+        $reason = $closing || ($move['closed'] ?? false)
+            ? $this->assertReason($data['change_reason'] ?? '', 'change_reason', 'Write why this expense of a closed shift is changed.') : null;
 
-        return DB::transaction(function () use ($expense, $data, $values, $closing, $reason, $user) {
+        return DB::transaction(function () use ($expense, $data, $values, $closing, $reason, $user, $dateChanged, $move) {
             $before = $this->snapshot($expense);
             $expense->update($values);
+            if ($dateChanged) {
+                $expense->forceFill(['date_changed_at' => now(), 'date_changed_by' => $user->getKey()]
+                    + (!empty($move['move']) ? ['shift_closing_id' => $move['to']] : []))->save();
+            }
             if (!empty($data['delete_attachment']) || !empty($data['attachment'])) {
                 $this->deleteAttachment($expense);
             }
             $this->storeAttachment($expense, $data['attachment'] ?? null);
             // the audit log: every edit (2026-10-27), a closed shift also gets its totals recalculated
             $changes = ['before' => $before, 'after' => $this->snapshot($expense->fresh())];
-            $closing ? $this->shiftService->paymentChanged($closing, 'expense_edit', $expense, $user, $reason, $changes)
-                : $this->shiftService->logOpenChange('expense_edit', $expense, $user, trim((string) ($data['change_reason'] ?? '')) ?: null, $changes);
+            if (!empty($move['move'])) {
+                $this->shiftService->applyDateMove($move, $expense, $user, $reason, $changes);
+            } else {
+                $closing ? $this->shiftService->paymentChanged($closing, 'expense_edit', $expense, $user, $reason, $changes)
+                    : $this->shiftService->logOpenChange('expense_edit', $expense, $user, trim((string) ($data['change_reason'] ?? '')) ?: null, $changes);
+            }
 
             return $expense;
         });

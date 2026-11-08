@@ -30,7 +30,9 @@ class ExpenseRequest extends FormRequest
             'delete_attachment' => 'boolean',
             // why an expense of a closed shift is changed (kept in the shift's log)
             // (the owner only: an employee can't change a closed shift's cash out — ExpenseService answers 403 with why)
-            'change_reason' => $expense?->shift_closing_id && !$this->routeIs('employee.*') ? 'required|string|max:255' : 'exclude',
+            // a closed shift: required; the owner's other edits may carry one (a date change moving it into a closed shift, 2026-11-08)
+            'change_reason' => $this->routeIs('employee.*') ? 'exclude' : ($expense?->shift_closing_id ? 'required|string|max:255' : 'nullable|string|max:255'),
+            'confirm_shift_move' => $this->routeIs('employee.*') ? 'exclude' : 'nullable|boolean',
         ];
     }
 

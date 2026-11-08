@@ -423,6 +423,97 @@ class ShiftClosingService
         return $this->listQuery($accountId, $userId)->findOrFail($id);
     }
 
+    /**
+     * The owner changes a row's date (2026-11-08, user): the RECORDER's shift that covers business day $date (Settings › General
+     * hours). A shift = from the login's previous closing (the first: from the start) to its own closing; the open shift = from
+     * the last closing on. Returns ['id' => closing id | 0 = the open shift | null = no shift covers it, 'closing' => ?ShiftClosing]:
+     * the row's CURRENT shift when it overlaps that day (no move), else the shift overlapping the day the most; an imported
+     * closing is never a target (null).
+     */
+    public function shiftForDate($accountId, int $userId, Carbon $date, int $currentId): array
+    {
+        [$dayStart, $dayEnd] = Account::settingsOf($accountId)->businessDay($date);
+        $closings = ShiftClosing::where('account_id', $accountId)->where('user_id', $userId)->orderBy('closed_at')->orderBy('id')->get();
+        $spans = [];
+        $from = null;
+        foreach ($closings as $closing) {
+            $spans[$closing->id] = [$from, $closing->closed_at, $closing];
+            $from = $closing->closed_at;
+        }
+        $spans[0] = [$from, null, null];
+        $overlap = function ($span) use ($dayStart, $dayEnd) {
+            $start = $span[0] && $span[0]->gt($dayStart) ? $span[0] : $dayStart;
+            $end = $span[1] && $span[1]->lt($dayEnd) ? $span[1] : $dayEnd;
+            return max(0, $end->getTimestamp() - $start->getTimestamp());
+        };
+
+        if (isset($spans[$currentId]) && $overlap($spans[$currentId]) > 0) {
+            return ['id' => $currentId, 'closing' => $spans[$currentId][2]];
+        }
+        $best = collect($spans)->map($overlap)->filter()->sortDesc()->keys()->first();
+        if ($best === null || ($spans[$best][2]?->is_imported)) {
+            return ['id' => null, 'closing' => null];
+        }
+        return ['id' => (int) $best, 'closing' => $spans[$best][2]];
+    }
+
+    /**
+     * The owner's date change of a cash in / refund / withholding / cash out (2026-11-08): where the row goes (shiftForDate()).
+     * ['move' => bool, 'to' => target closing id (0 = open), 'from' => ?ShiftClosing (closed source), 'toClosing' => ?ShiftClosing,
+     * 'note' => text for the answer (no shift covers the date), 'closed' => a closed shift changes (reason required)].
+     * A move touching a closed shift needs the owner's confirmation first: answer 409 {confirm, field: confirm_shift_move,
+     * reason: the reason field when it is still empty} (custom.js asks, then sends the form again).
+     * $amountBefore / $amountAfter: the row's amount before / after this edit (the source loses the old, the target gains the new).
+     */
+    public function planDateMove(Payment|Expense $record, Carbon $newDate, float $amountBefore, float $amountAfter, array $data): array
+    {
+        $plan = ['move' => false, 'to' => (int) $record->shift_closing_id, 'from' => null, 'toClosing' => null, 'note' => null, 'closed' => false];
+        if (($record instanceof Expense && $record->is_company) || $record->creatable_type !== (new User)->getMorphClass()) {
+            return $plan;
+        }
+        $current = (int) $record->shift_closing_id;
+        $target = $this->shiftForDate($record->account_id, (int) $record->creatable_id, $newDate, $current);
+        $recorder = User::find($record->creatable_id);
+        $who = $recorder?->userable?->displayName() ?? $recorder?->email ?? 'the recorder';
+        if ($target['id'] === null) {
+            $plan['note'] = 'No shift of ' . $who . ' covers ' . $newDate->format('d-m-Y') . ': it stays in its current shift.';
+            return $plan;
+        }
+        if ($target['id'] === $current) {
+            return $plan;
+        }
+
+        $from = $current ? ShiftClosing::find($current) : null;
+        $plan = ['move' => true, 'to' => $target['id'], 'from' => $from, 'toClosing' => $target['closing'], 'note' => null,
+            'closed' => (bool) ($from || $target['closing'])];
+        if ($plan['closed'] && empty($data['confirm_shift_move'])) {
+            $label = fn (?ShiftClosing $closing) => $closing ? 'closing #' . $closing->id . ' of ' . $closing->closed_at->format('d-m-Y') : 'the open shift';
+            $sign = fn ($amount) => ($amount >= 0 ? '+' : '−') . number_format(abs($amount), 2);
+            // the net of a shift: cash in +, refunds / cash out −; withholding is its own total
+            $effect = fn ($amount) => $record instanceof Expense || $record->type === 'refund' ? -$amount : $amount;
+            $what = $record instanceof Payment && $record->type === 'withholding' ? ' (withholding)' : '';
+            $text = 'The new date moves it to ' . $who . "'s " . $label($target['closing']) . '. ' . ucfirst($label($target['closing']))
+                . ' will change by ' . $sign($effect($amountAfter)) . $what . '; ' . $label($from) . ' by ' . $sign(-$effect($amountBefore)) . $what . '.';
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(response()->json([
+                'confirm' => $text,
+                'field' => 'confirm_shift_move',
+                'reason' => trim((string) ($data['change_reason'] ?? '')) === '' ? 'change_reason' : null,
+            ], 409));
+        }
+        return $plan;
+    }
+
+    // after the moved row was saved (inside its transaction): both shifts recalculated (closed) / logged (open), $changes + the move
+    public function applyDateMove(array $plan, Payment|Expense $record, Model $by, ?string $reason, array $changes): void
+    {
+        $action = $record instanceof Expense ? 'expense_edit' : 'payment_edit';
+        $changes['shift'] = ['from' => $plan['from']?->id ?? 0, 'to' => $plan['to']];
+        $plan['from'] ? $this->paymentChanged($plan['from'], $action, $record, $by, (string) $reason, $changes)
+            : $this->logOpenChange($action, $record, $by, $reason, $changes, 0);
+        $plan['toClosing'] ? $this->paymentChanged($plan['toClosing'], $action, $record, $by, (string) $reason, $changes)
+            : $this->logOpenChange($action, $record, $by, $reason, $changes, 0);
+    }
+
     // a closed shift's totals from its payments + expenses now (shifts:recalculate, after an import); no log, no "edited" mark
     public function recalculate(ShiftClosing $closing): ShiftClosing
     {
@@ -517,7 +608,7 @@ class ShiftClosingService
      * (a reservation's payments moved into a package). shift_closing_id 0, user_id = the recorder; no totals. Inside the change's
      * transaction.
      */
-    public function logOpenChange(string $action, Payment|Expense $record, Model $by, ?string $reason, array $changes): void
+    public function logOpenChange(string $action, Payment|Expense $record, Model $by, ?string $reason, array $changes, ?int $closingId = null): void
     {
         if (!in_array($action, ['payment_edit', 'payment_delete', 'payment_move', 'expense_edit', 'expense_delete'], true)) {
             abort(500, 'Unknown payment change.');
@@ -525,7 +616,8 @@ class ShiftClosingService
         ShiftEvent::create([
             'account_id' => $record->account_id,
             'user_id' => (int) $record->creatable_id,
-            'shift_closing_id' => (int) $record->shift_closing_id,
+            // $closingId: the open shift (0) of a row just moved out of / into it by an owner date change
+            'shift_closing_id' => $closingId ?? (int) $record->shift_closing_id,
             'payment_id' => $record instanceof Payment ? $record->getKey() : 0,
             'expense_id' => $record instanceof Expense ? $record->getKey() : 0,
             'by_user_id' => $by->getKey(),

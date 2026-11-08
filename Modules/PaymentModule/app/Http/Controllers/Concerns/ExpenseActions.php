@@ -205,7 +205,7 @@ trait ExpenseActions
         $show = $this->route('show', $id);
 
         return response()->json([
-            'message' => 'Cash Out #' . $expense->expense_no . ' has been updated successfully.',
+            'message' => trim('Cash Out #' . $expense->expense_no . ' has been updated successfully. ' . $this->expenseService->lastNote()),
             'row' => $this->row($request, $id),
             // a list without this row id (Payments All / Cash Out: row-expense-{id}) reloads
             'reload' => true,

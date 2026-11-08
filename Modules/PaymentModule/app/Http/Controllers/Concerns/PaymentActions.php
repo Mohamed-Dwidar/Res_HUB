@@ -389,7 +389,7 @@ trait PaymentActions
         $show = route($this->area() . '.payments.show', $id);
 
         return response()->json([
-            'message' => ($payment->type === 'refund' ? 'Refund #' : 'Cash In #') . $payment->payment_no . ' has been updated successfully.',
+            'message' => trim(($payment->type === 'refund' ? 'Refund #' : 'Cash In #') . $payment->payment_no . ' has been updated successfully. ' . $this->paymentService->lastNote()),
             'row' => $this->row($request, $id),
             // a list without this row id (Payments All / Cash Out: row-payment-{id}) reloads
             'reload' => true,

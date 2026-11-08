@@ -230,7 +230,9 @@
                             </td>
                             <td class="whitespace-nowrap">
                                 {{ $date?->format($dateFormat) ?? '-' }}
-                                @if ($tab !== 'late' && $row->isLateEntry())
+                                @if ($row->isDateChangedByOwner())
+                                    <div><span class="badge badge-status-info">Date changed by owner</span></div>
+                                @elseif ($tab !== 'late' && $row->isLateEntry())
                                     <div><span class="badge badge-status-warning">Late entry</span></div>
                                 @endif
                             </td>

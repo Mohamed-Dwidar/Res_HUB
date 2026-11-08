@@ -69,6 +69,7 @@ class Payment extends Model
         'payment_no' => 'integer',
         'amount' => 'float',
         'paid_at' => 'date',
+        'date_changed_at' => 'datetime',
         'shift_closing_id' => 'integer',
         'refund_of' => 'integer',
     ];

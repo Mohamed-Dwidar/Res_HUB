@@ -263,6 +263,37 @@ function showFormErrors(form, errors) {
     if (first) first.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
+function ajaxConfirmAgain(form, json) {
+    var setField = function (name, value) {
+        var input = form.querySelector('input[type="hidden"][name="' + name + '"]');
+        if (!input) {
+            input = document.createElement("input");
+            input.type = "hidden";
+            input.name = name;
+            form.appendChild(input);
+        }
+        input.value = value;
+    };
+    Swal.fire({
+        title: "Please confirm",
+        text: json.confirm,
+        icon: "warning",
+        input: json.reason ? "textarea" : undefined,
+        inputPlaceholder: json.reason ? "Reason (required)" : undefined,
+        inputValidator: json.reason ? function (value) { return value.trim() ? null : "Write the reason."; } : undefined,
+        showCancelButton: true,
+        confirmButtonText: "Yes, save",
+    }).then(function (answer) {
+        if (!answer.isConfirmed) return;
+        if (json.reason) {
+            var reason = form.querySelector('[name="' + json.reason + '"]:not([type="hidden"])');
+            reason ? (reason.value = answer.value) : setField(json.reason, answer.value);
+        }
+        setField(json.field, "1");
+        ajaxSubmit(form);
+    });
+}
+
 function ajaxSubmit(form) {
     // rich-text editors (contract templates, TinyMCE) write their HTML back into their textareas first
     if (window.tinymce) window.tinymce.triggerSave();
@@ -300,6 +331,13 @@ function ajaxSubmit(form) {
             // logged out after the role's idle minutes (EmployeeIdleTimeout): to the login page
             if (result.status === 401) {
                 window.location.reload();
+                return;
+            }
+            // the server asks to confirm first (an owner date change moving a row into / out of a closed shift, 2026-11-08):
+            // {confirm, field, reason} → confirm (+ the reason when still empty), then the same form again with field = 1
+            if (result.status === 409 && json.confirm && json.field) {
+                failed();
+                ajaxConfirmAgain(form, json);
                 return;
             }
             if (result.status >= 400) {

@@ -71,7 +71,9 @@ class PaymentUpdateRequest extends FormRequest
             'notes' => 'nullable|string|max:5000',
             // why a payment of a closed shift is changed (kept in the shift's history)
             // (the owner only: an employee can't change a closed shift's cash in — PaymentService answers 403 with why)
-            'change_reason' => $payment?->shift_closing_id && !$this->routeIs('employee.*') ? 'required|string|max:255' : 'exclude',
+            // a closed shift: required; the owner's other edits may carry one (a date change moving it into a closed shift, 2026-11-08)
+            'change_reason' => $this->routeIs('employee.*') ? 'exclude' : ($payment?->shift_closing_id ? 'required|string|max:255' : 'nullable|string|max:255'),
+            'confirm_shift_move' => $this->routeIs('employee.*') ? 'exclude' : 'nullable|boolean',
         ];
     }
 
