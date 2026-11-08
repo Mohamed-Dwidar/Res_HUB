@@ -13,6 +13,8 @@ use Modules\PaymentModule\app\Http\Requests\PaymentUpdateRequest;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Services\CashListService;
 use Modules\PaymentModule\app\Services\CashScope;
+use Modules\PaymentModule\app\Services\InvoicePdfService;
+use Modules\EmployeeModule\app\Services\AccessLogService;
 use Modules\PaymentModule\app\Services\ExpenseCategoryService;
 use Modules\PaymentModule\app\Services\IncomeCategoryService;
 use Modules\PaymentModule\app\Services\PaymentMethodService;
@@ -418,6 +420,36 @@ trait PaymentActions
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="cash-in-receipt-' . $payment->payment_no . '.pdf"',
+        ]);
+    }
+
+    /**
+     * The combined invoice PDF (2026-11-08): a reservation paid on its own (booking + extras) or a package (+ its extras), AR / EN
+     * (?lang=ar), with its payments; data InvoicePdfService::data() (a reservation inside a package / cancelled = 422); every
+     * print → Access Log (`export`, the owner too).
+     */
+    public function invoice(Request $request, string $kind, $id)
+    {
+        $data = app(InvoicePdfService::class)->data($this->accountId(), $kind, $id);
+        $data['lang'] = $request->input('lang') === 'ar' ? 'ar' : 'en';
+        app(AccessLogService::class)->record('export', Auth::user(), [
+            'page' => 'Invoice PDF · ' . ($kind === 'package' ? 'Package' : 'Reservation') . ' #' . $data['payable']->id,
+            'format' => 'pdf', 'subject' => $data['payable'],
+        ], true);
+
+        // the Cairo font of config/pdf.php when its files are there, else mpdf's DejaVu Sans (Arabic too)
+        $config = is_file(config('pdf.font_path') . 'Cairo-Regular.ttf') ? [] : ['default_font' => 'dejavusans'];
+        $config += ['format' => 'A4', 'margin_top' => 12, 'margin_bottom' => 22, 'margin_footer' => 6,
+            'instanceConfigurator' => function ($mpdf) {
+                $mpdf->autoScriptToLang = true;
+                $mpdf->autoLangToFont = true;
+            },
+        ];
+
+        $pdf = Pdf::loadView('paymentmodule::Payment.invoice-pdf', $data, [], $config)->output();
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="invoice-' . $kind . '-' . $data['payable']->id . '-' . $data['lang'] . '.pdf"',
         ]);
     }
 

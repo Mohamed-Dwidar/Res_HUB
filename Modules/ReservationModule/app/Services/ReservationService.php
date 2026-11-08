@@ -138,12 +138,18 @@ class ReservationService
                     throw ValidationException::withMessages(['renewal_of' => $error]);
                 }
             }
+            // extras are paid with the reservation (2026-11-08): it can't move into a package while it has them
+            if (!$oldPackageId && $reservation->package_id && $reservation->extras()->exists()) {
+                throw ValidationException::withMessages(['package_id' => 'This reservation has extras: the account owner deletes them first (add them on the package instead).']);
+            }
             // the stored tax type, the plan's current flags only when the plan changed
             $this->applyTax($reservation, $accountId, $data, (int) $reservation->plan_id !== $oldPlanId, null, $by);
             $reservation->save();
             if ($wasInvoice !== (bool) $reservation->invoice_requested) {
                 $this->logInvoiceChange($reservation, $wasInvoice, $by);
             }
+            // its extras' taxes follow "Invoice requested" (+ extras_total); before refresh() below
+            app(\Modules\PaymentModule\app\Services\ExtraService::class)->retax($reservation);
 
             // moved into a package (it was paid on its own): its payments go to the package (paid through it now)
             if (!$oldPackageId && $reservation->package_id && ($package = $reservation->load('package')->package)) {
@@ -183,6 +189,11 @@ class ReservationService
             && ($other = $this->renewedByOther($reservation->renewal_of, $reservation->id))) {
             throw ValidationException::withMessages(['html_status' => 'The period #' . $reservation->renewal_of . ' is already renewed by '
                 . $this->reservationLink($other) . '. Change that one first.']);
+        }
+        // extras charged on it (2026-11-08): the owner deletes them first (a cancelled reservation owes nothing, the extras would be lost)
+        if ($cancelling && $reservation->extras()->exists()) {
+            throw ValidationException::withMessages(['html_status' => 'This reservation has extras (' . number_format($reservation->extrasTotal(), 2)
+                . '). The account owner deletes them first, then it can be ' . strtolower($status->name) . '.']);
         }
         $note = $cancelling ? $this->cancelPaidNote($reservation, $status, $forceReason, $user) : null;
         // the owner's paid cancel, for Payment Exceptions › Paid Cancelled (2026-10-29): its net paid, the status before → after
@@ -367,7 +378,8 @@ class ReservationService
         }
 
         // the same package (the Renew form does not change it)
-        $renewal = $subscription->replicate(['paid_amount', 'remaining', 'repeat_id', 'notes', 'left_at', 'left_by']);
+        // extras are never copied (2026-11-08): the renewal starts with none
+        $renewal = $subscription->replicate(['paid_amount', 'remaining', 'extras_total', 'repeat_id', 'notes', 'left_at', 'left_by']);
         $renewal->forceFill([
             'start_at' => $start,
             'end_at' => $newEnd,
@@ -573,6 +585,9 @@ class ReservationService
         $reservation = $this->findOne($accountId, $id);
         if ($reservation->payments()->exists()) {
             return 'This reservation has cash in, it can not be deleted. Refund or delete its cash in first, or move it into a package (its cash in moves with it).';
+        }
+        if ($reservation->extras()->exists()) {
+            return 'This reservation has extras, it can not be deleted. The account owner deletes its extras first.';
         }
 
         DB::transaction(function () use ($reservation) {

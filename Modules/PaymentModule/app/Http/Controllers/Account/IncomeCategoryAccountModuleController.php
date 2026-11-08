@@ -50,7 +50,10 @@ class IncomeCategoryAccountModuleController extends Controller
             ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['is_active'])))
             ->setRowId(fn ($category) => 'row-' . $category->id)
             ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
-            ->addColumn('name_html', fn ($category) => '<a href="' . route('account.income-categories.edit', $category->id) . '" data-modal class="font-medium">' . e($category->name) . '</a>')
+            ->addColumn('name_html', fn ($category) => '<a href="' . route('account.income-categories.edit', $category->id) . '" data-modal class="font-medium">' . e($category->name) . '</a>'
+                // a system category (never income) / the Add Extra default price (2026-11-08)
+                . ($category->isGenerated() ? ' <span class="badge badge-status-secondary">System</span>' : '')
+                . ($category->default_price !== null ? ' <span class="text-xs text-slate-500">· ' . number_format($category->default_price, 2) . '</span>' : ''))
             ->addColumn('status', fn ($category) => view('layoutmodule::partials.row-toggle', [
                 'url' => route('account.income-categories.active', $category->id), 'row' => $category->id, 'name' => 'is_active', 'checked' => $category->is_active,
             ])->render())

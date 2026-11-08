@@ -19,9 +19,10 @@ class IncomeCategory extends Model
     // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
     protected array $localizedFields = ['name'];
 
-    protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'is_revenue'];
+    protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'is_revenue', 'default_price'];
 
-    // generated_key (not fillable): NULL = a normal category; 'advance_repayment' = the system's (HR)
+    // generated_key (not fillable): NULL = a normal category; else a system one (config paymentmodule.generated_income_categories:
+    // advance_repayment, vat_manual) — never income, not in the Cash In / Add Extra forms, its Cash In locked
     public function isGenerated(): bool
     {
         return $this->generated_key !== null;
@@ -29,8 +30,10 @@ class IncomeCategory extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
-        // false = not income (VAT collected ...): the income reports leave it out
+        // false = not income: set by the rule (2026-11-08) = a system category (generated_key); the income reports leave it out
         'is_revenue' => 'boolean',
+        // fills the Add Extra form (2026-11-08)
+        'default_price' => 'float',
     ];
 
     public function account(): BelongsTo

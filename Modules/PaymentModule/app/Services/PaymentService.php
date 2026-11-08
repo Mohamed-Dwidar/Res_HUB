@@ -179,7 +179,7 @@ class PaymentService
     }
 
     // why a Cash In made by HR can't be changed here
-    const SYSTEM_LOCKED = 'This Cash In was recorded by HR (advance repayment): change or cancel it from the advance.';
+    const SYSTEM_LOCKED = 'This Cash In is in a system category (advance repayment / VAT (manual)): it can\'t be changed here (an advance repayment is changed from the advance).';
 
     /**
      * A payment (type payment / withholding; refunds: refund()).
@@ -630,7 +630,7 @@ class PaymentService
             throw ValidationException::withMessages(['income_category_id' => 'This income category is not one of yours.']);
         }
         if ($category->isGenerated() && !$system && $category->id !== $currentId) {
-            throw ValidationException::withMessages(['income_category_id' => '"' . $category->name . '" is recorded by HR only, choose another category.']);
+            throw ValidationException::withMessages(['income_category_id' => '"' . $category->name . '" is a system category, choose another category.']);
         }
     }
 

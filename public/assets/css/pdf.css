@@ -104,3 +104,14 @@ table { width: 100%; border-collapse: collapse; }
 /* Payslip (PayrollModule, payslip-pdf): the earnings / deductions table */
 .payslip-items .payslip-section { width: auto; color: #164e63; font-weight: bold; background-color: #f1f5f9; }
 .payslip-items .payslip-amount { text-align: right; width: 30%; }
+
+/* ===== The combined invoice (paymentmodule::Payment.invoice-pdf, A4, 2026-11-08): the statement's tables + a right-hand totals
+   block; Arabic = .invoice-ar (right to left: text right, numbers left) ===== */
+.invoice-totals { margin-top: 10px; }
+.invoice-totals-space { width: 50%; }
+.invoice-totals-col { width: 50%; vertical-align: top; border: 1px solid #cbd5e1; background-color: #f8fafc; padding: 6px 8px; }
+.invoice-total-row th, .invoice-total-row td { font-weight: bold; font-size: 11pt; color: #0f172a; border-top: 1px solid #94a3b8; }
+.invoice-eta-note { font-size: 8.5pt; color: #164e63; text-align: center; padding-bottom: 4px; }
+.invoice-ar .statement-table th, .invoice-ar .statement-table td, .invoice-ar .statement-summary-table th { text-align: right; }
+.invoice-ar .statement-table th.num, .invoice-ar .statement-table td.num, .invoice-ar .statement-summary-table td { text-align: left; }
+.invoice-ar .statement-footer-right { text-align: left; }

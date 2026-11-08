@@ -871,8 +871,14 @@ function reservationTax(form, planChanged) {
         out.appendChild(document.createTextNode(rule.inclusive ? " (price includes tax)" : " (taxes added to the price)"));
     }
 
-    // a saved reservation with payments whose checkbox changed: what it changes for the customer
-    var diff = owed - Math.round((Number(box.dataset.due) || 0) * 100);
+    // a saved reservation with payments whose checkbox changed: what it changes for the customer — the booking + its extras
+    // (data-extras = their amounts before tax, ExtraService::amountsOf(); taxed with the booking's rule while invoiced, like
+    // ExtraService::applyTax(); data-due = Reservation::totalDue())
+    var extras = JSON.parse(box.dataset.extras || "[]").reduce(function (sum, amount) {
+        var line = Math.round(Number(amount) * 100);
+        return sum + (invoice && rule && !inPackage ? taxCalculate(line, 0, rule).total : line);
+    }, 0);
+    var diff = owed + extras - Math.round((Number(box.dataset.due) || 0) * 100);
     var changed = box.dataset.was !== undefined && (invoice ? "1" : "0") !== box.dataset.was;
     var show = !inPackage && changed && (Number(box.dataset.paid) || 0) > 0 && Math.abs(diff) >= 1;
     warn.hidden = !show;
@@ -1734,6 +1740,21 @@ function packageNameSuggest(form) {
 
 document.addEventListener("change", function (e) {
     if (e.target.name === "member_id" && e.target.form && e.target.form.querySelector("[data-name-suggest]")) packageNameSuggest(e.target.form);
+});
+
+/* ---------- Extras (2026-11-08): choosing an extra item fills the Unit Price with its default price (option data-price)
+   and an empty Item (or one still holding the previous item's name) with its name; both stay editable ---------- */
+document.addEventListener("change", function (e) {
+    var select = e.target;
+    if (!select.matches || !select.matches("select[data-extra-item]") || !select.form) return;
+    var form = select.form;
+    var option = select.options[select.selectedIndex];
+    var item = formField(form, "item");
+    var price = formField(form, "unit_price");
+    var name = option && option.value ? option.textContent.trim() : "";
+    if (item && name && (!item.value || item.value === select._extraName)) item.value = name;
+    select._extraName = name;
+    if (price && option && option.dataset.price) price.value = option.dataset.price;
 });
 
 document.addEventListener("input", function (e) {

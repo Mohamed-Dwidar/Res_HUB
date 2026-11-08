@@ -32,8 +32,20 @@ class IncomeCategoryService
     }
 
     /**
-     * The system's income category (config paymentmodule.generated_income_categories): $key = 'advance_repayment' — made on first
-     * use (active, NOT income), one per account.
+     * Add Extra (reservation / package, 2026-11-08): every active, non-system category (+ the extra's current one), with its
+     * default price for the form ([id => ['name', 'data' => ['price' => x]]], partials.field options).
+     */
+    public function extraOptions($accountId, $currentId = null): array
+    {
+        return $this->categoryRepository->forAccount($accountId)
+            ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $currentId))
+            ->whereNull('generated_key')->ordered()->get()
+            ->mapWithKeys(fn ($item) => [$item->id => ['name' => $item->name, 'data' => ['price' => $item->default_price !== null ? number_format((float) $item->default_price, 2, '.', '') : '']]])->all();
+    }
+
+    /**
+     * The system's income category (config paymentmodule.generated_income_categories): $key = 'advance_repayment' | 'vat_manual'
+     * — made on first use (active, NOT income), one per account.
      */
     public function generated($accountId, string $key): IncomeCategory
     {
@@ -65,13 +77,13 @@ class IncomeCategoryService
 
     public function create($accountId, array $data)
     {
-        return $this->categoryRepository->create($this->categoryData($data) + ['account_id' => $accountId]);
+        return $this->categoryRepository->create($this->categoryData($data, null) + ['account_id' => $accountId]);
     }
 
     public function update($accountId, $id, array $data)
     {
         $category = $this->findOne($accountId, $id);
-        $category->update($this->categoryData($data));
+        $category->update($this->categoryData($data, $category));
         return $category;
     }
 
@@ -94,13 +106,18 @@ class IncomeCategoryService
         return null;
     }
 
-    private function categoryData(array $data): array
+    // is_revenue by the rule (2026-11-08, no checkbox): a system category (generated_key) is never income, every other one is;
+    // no tax flags any more (extras follow their parent's taxes; the columns keep their old values, unused)
+    private function categoryData(array $data, ?IncomeCategory $category): array
     {
+        $system = $category?->isGenerated() ?? false;
         return [
             'name_ar' => $data['name_ar'],
             'name_en' => $data['name_en'] ?? null,
             'is_active' => !empty($data['is_active']),
-            'is_revenue' => !empty($data['is_revenue']),
-        ] + IncomeCategory::taxFlagsFrom($data);
+            'is_revenue' => !$system,
+            // fills Add Extra (2026-11-08; editable on each extra)
+            'default_price' => ($data['default_price'] ?? '') !== '' ? round((float) $data['default_price'], 2) : null,
+        ];
     }
 }

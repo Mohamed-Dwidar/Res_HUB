@@ -15,6 +15,7 @@ use Modules\AccountModule\app\Models\Account;
 use Modules\MemberModule\app\Models\Member;
 use Modules\PackageModule\app\Models\Package;
 use Modules\PaymentModule\app\Contracts\Payable;
+use Modules\PaymentModule\app\Models\Concerns\HasExtras;
 use Modules\PaymentModule\app\Models\Concerns\HasPayments;
 use Modules\PlanModule\app\Models\Plan;
 use Modules\SpaceModule\app\Models\Space;
@@ -30,7 +31,7 @@ use Modules\UnitModule\app\Models\Unit;
  */
 class Reservation extends Model implements Payable
 {
-    use HasPayments, SafeMorphHelper, SoftDeletes;
+    use HasExtras, HasPayments, SafeMorphHelper, SoftDeletes;
 
     // the most copies one "repeat until" can create
     const MAX_REPEATS = 365;
@@ -70,6 +71,7 @@ class Reservation extends Model implements Payable
         'vat' => 'float',
         'tax_extra_discount' => 'float',
         'tax_total' => 'float',
+        'extras_total' => 'float',
         'remaining' => 'float',
     ];
 
@@ -168,10 +170,29 @@ class Reservation extends Model implements Payable
         return $this->isTaxed() ? (float) $this->tax_total : (float) $this->net_amount;
     }
 
-    // Payable: what it costs (dueAmount()), 0 with a not counted status (cancelled ...); inside a package it is paid through the package
+    // the extras added to it (2026-11-08, PaymentModule ExtraService): the stored Σ (each with its taxes when the invoice is
+    // requested), not a sum of the rows (HasExtras' version is the packages' rule)
+    public function extrasTotal(): float
+    {
+        return round((float) $this->extras_total, 2);
+    }
+
+    // the booking (dueAmount()) + its extras = what the member owes for it
+    public function totalDue(): float
+    {
+        return round($this->dueAmount() + $this->extrasTotal(), 2);
+    }
+
+    // extras may be added: counted, paid on its own (inside a package: on the package)
+    public function canHaveExtras(): bool
+    {
+        return $this->canTakePayments() && $this->isCounted();
+    }
+
+    // Payable: what it costs (totalDue(): the booking + its extras), 0 with a not counted status (cancelled ...); inside a package it is paid through the package
     public function payableAmount(): float
     {
-        return $this->status && !$this->status->is_counted ? 0 : $this->dueAmount();
+        return $this->status && !$this->status->is_counted ? 0 : $this->totalDue();
     }
 
     public function payableMemberId(): int

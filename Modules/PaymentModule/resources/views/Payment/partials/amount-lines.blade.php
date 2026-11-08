@@ -15,35 +15,63 @@
     // with taxes (2026-11-01, user): "Net (after discount)" + a larger bold "Total (incl. taxes)" = what the customer owes
     $taxed = $kind === 'reservation' && $payable->invoice_requested && $payable->isTaxed();
 @endphp
-<dl class="detail-list amount-lines">
-    <div><dt>Amount</dt><dd>{{ number_format($price, 2) }}</dd></div>
+@if ($kind === 'reservation')
+    {{-- a reservation (2026-11-08, user, display only): [Amount before discount | Discount] only with a discount; row 1 = Amount
+         (booking net after discount) | Extras (net) | Net (before tax); row 2 (invoice requested, taxed) = VAT | Table tax (> 0)
+         | Total = booking + extras with taxes; without an invoice: row 1 + Total Due. The extras copy the reservation's tax
+         snapshot (ExtraService::applyTax()). --}}
+    @php
+        $extraRows = $extras != 0 ? $payable->extrasList() : collect();
+        $sum = fn ($column) => (float) $extraRows->sum(fn ($extra) => (float) ($extra->{$column} ?? 0));
+        $extrasNet = (float) $extraRows->sum(fn ($extra) => (float) ($extra->tax_net ?? $extra->amount));
+        $netBeforeTax = $taxed ? (float) $payable->tax_net + $extrasNet : $net + $extrasNet;
+        $tableTax = (float) $payable->table_tax + $sum('table_tax');
+        $extraDiscount = (float) $payable->tax_extra_discount + $sum('tax_extra_discount');
+    @endphp
     @if ($discount > 0)
-        <div><dt>Discount</dt><dd>{{ number_format($discount, 2) }} ({{ $percentage }}%)</dd></div>
+        <dl class="detail-list amount-lines">
+            <div><dt>Amount before discount</dt><dd>{{ number_format($price, 2) }}</dd></div>
+            <div><dt>Discount</dt><dd>{{ number_format($discount, 2) }} ({{ $percentage }}%)</dd></div>
+        </dl>
     @endif
-    <div><dt>{{ $taxed ? 'Net (after discount)' : 'Net Amount' }}</dt><dd class="font-bold">{{ number_format($net, 2) }}
+    <dl class="detail-list amount-lines {{ $discount > 0 ? 'mt-4' : '' }}">
+        <div><dt>Amount</dt><dd>{{ number_format($net, 2) }}</dd></div>
         @if ($extras != 0)
-            <span class="block text-xs font-normal text-slate-500">+ extras {{ number_format($extras, 2) }} = due {{ number_format($payable->payableAmount(), 2) }}</span>
+            <div><dt>Extras</dt><dd>{{ number_format($extrasNet, 2) }}</dd></div>
         @endif
-    </dd></div>
-</dl>
-{{-- taxes (docs/payments-plan.md §3): a reservation with "Invoice requested" — its tax type, the net before tax, the taxes and what
-     it costs (the Paid / Remaining below are against this total) --}}
-@if ($kind === 'reservation' && $payable->invoice_requested)
-    @php($taxRule = \Modules\PaymentModule\app\Services\Tax\TaxRule::fromSnapshot($payable))
-    <dl class="detail-list amount-lines mt-4">
-        <div class="wide"><dt>Invoice</dt><dd><span class="badge badge-status-info">Requested</span>
-            <span class="text-xs text-slate-500">{{ $payable->isTaxed() ? $taxRule?->label() : ($payable->package_id ? 'through the package' : '') }}</span></dd></div>
-        @if ($payable->isTaxed())
-            <div><dt>Net Before Tax</dt><dd>{{ number_format((float) $payable->tax_net, 2) }}</dd></div>
-            @if ((float) $payable->table_tax != 0)
-                <div><dt>Table Tax</dt><dd>{{ number_format((float) $payable->table_tax, 2) }}</dd></div>
+        <div><dt>Net (before tax)</dt><dd class="font-bold">{{ number_format($netBeforeTax, 2) }}</dd></div>
+    </dl>
+    @if ($taxed)
+        <dl class="detail-list amount-lines mt-4">
+            <div><dt>VAT</dt><dd>{{ $payable->tax_vat_exempt ? 'Exempt' : number_format((float) $payable->vat + $sum('vat'), 2) }}</dd></div>
+            @if ($tableTax > 0)
+                <div><dt>Table Tax</dt><dd>{{ number_format($tableTax, 2) }}</dd></div>
             @endif
-            <div><dt>VAT</dt><dd>{{ $payable->tax_vat_exempt ? 'Exempt' : number_format((float) $payable->vat, 2) }}</dd></div>
-            @if ((float) $payable->tax_extra_discount != 0)
-                <div><dt>Extra Discount</dt><dd>{{ number_format((float) $payable->tax_extra_discount, 2) }}</dd></div>
+            @if ($extraDiscount != 0)
+                <div><dt>Extra Discount</dt><dd>{{ number_format($extraDiscount, 2) }}</dd></div>
             @endif
-            <div><dt>Total (incl. taxes)</dt><dd class="amount-total">{{ number_format((float) $payable->tax_total, 2) }}</dd></div>
+            <div><dt>Total</dt><dd class="amount-total">{{ number_format($payable->totalDue(), 2) }}</dd></div>
+        </dl>
+        <div class="mt-2 text-xs text-slate-500"><span class="badge badge-status-info">Invoice requested</span> {{ \Modules\PaymentModule\app\Services\Tax\TaxRule::fromSnapshot($payable)?->label() }}</div>
+    @else
+        <dl class="detail-list amount-lines mt-4">
+            <div><dt>Total Due</dt><dd class="amount-total">{{ number_format($payable->totalDue(), 2) }}</dd></div>
+        </dl>
+        @if ($payable->invoice_requested && $payable->package_id)
+            <div class="mt-2 text-xs text-slate-500"><span class="badge badge-status-info">Invoice requested</span> through the package</div>
         @endif
+    @endif
+@else
+    <dl class="detail-list amount-lines">
+        <div><dt>Amount</dt><dd>{{ number_format($price, 2) }}</dd></div>
+        @if ($discount > 0)
+            <div><dt>Discount</dt><dd>{{ number_format($discount, 2) }} ({{ $percentage }}%)</dd></div>
+        @endif
+        <div><dt>Net Amount</dt><dd class="font-bold">{{ number_format($net, 2) }}
+            @if ($extras != 0)
+                <span class="block text-xs font-normal text-slate-500">+ extras {{ number_format($extras, 2) }} = due {{ number_format($payable->payableAmount(), 2) }}</span>
+            @endif
+        </dd></div>
     </dl>
 @endif
 @if ($paidLine ?? true)

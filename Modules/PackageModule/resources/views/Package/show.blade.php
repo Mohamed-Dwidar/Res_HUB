@@ -8,6 +8,8 @@
 @section('modal-size', 'lg')
 
 @section('actions')
+    {{-- the combined invoice PDF (package + extras, 2026-11-08) --}}
+    @include('paymentmodule::Payment.partials.invoice-button', ['payable' => $package, 'kind' => 'package'])
     <a href="{{ route($area . '.packages.edit', $package->id) }}" data-modal class="btn btn-secondary"><i
             data-lucide="pencil"></i> Edit</a>
     {{-- the customer package statement (PDF, new tab) --}}

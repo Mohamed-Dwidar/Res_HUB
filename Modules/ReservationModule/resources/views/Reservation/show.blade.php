@@ -25,6 +25,8 @@
 @section('actions')
     {{-- WhatsApp (MessagingModule): the suggested type by the reservation's state --}}
     @include('messagingmodule::Message.partials.button')
+    {{-- the combined invoice PDF (booking + extras; not inside a package: the package has it) --}}
+    @include('paymentmodule::Payment.partials.invoice-button', ['payable' => $reservation, 'kind' => 'reservation'])
     {{-- the status: a drop menu like its badge, changed by ajax --}}
     @include('reservationmodule::Reservation.partials.status-menu')
     @unless ($reservation->isCounted() || Gate::denies('reservations.status'))
@@ -73,7 +75,7 @@
         @if ($reservation->canTakePayments())
             @php($remaining = (float) $reservation->remaining)
             <div class="money-box ml-auto">
-                <div class="money-box__item money-box__item--due" title="{{ $reservation->isTaxed() ? 'Total incl. taxes' : 'Net amount' }}">
+                <div class="money-box__item money-box__item--due" title="{{ ($reservation->isTaxed() ? 'Total incl. taxes' : 'Net amount') . ($reservation->extrasTotal() != 0 ? ' + extras' : '') }}">
                     <span>Due</span><b>{{ number_format($reservation->payableAmount(), 2) }}</b>
                 </div>
                 <div class="money-box__item money-box__item--paid">
@@ -112,6 +114,11 @@
                 </dd></div>
             @endif
         </dl>
+    @endif
+
+    {{-- extras charged on the reservation (2026-11-08: buffet, printing …; PaymentModule); inside a package: "add it on the package" --}}
+    @if ($reservation->canHaveExtras() || !$reservation->canTakePayments() || $reservation->extrasTotal() != 0)
+        @include('paymentmodule::Extra.partials.extras', ['extrable' => $reservation, 'kind' => 'reservation'])
     @endif
 
     {{-- the Cash In block without its Due / Paid / Remaining (shown above), + the Add Cash In fields (Pay / "+ Cash In") --}}

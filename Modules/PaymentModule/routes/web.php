@@ -35,6 +35,8 @@ $paymentRoutes = function ($controller) {
     Route::post('/', [$controller, 'store'])->name('store')->can('payments.create');
     Route::get('{id}', [$controller, 'show'])->name('show')->can('payments.view');
     Route::get('{id}/receipt', [$controller, 'receipt'])->name('receipt')->can('payments.receipt');
+    // the combined invoice PDF of a reservation paid on its own / a package (2026-11-08; same right as the receipts), ?lang=ar
+    Route::get('invoice/{kind}/{id}', [$controller, 'invoice'])->name('invoice')->where('kind', 'reservation|package')->can('payments.receipt');
     // edit: the owner any payment, an employee their own cash in while their shift is open (PaymentService::canEdit())
     Route::get('{id}/edit', [$controller, 'edit'])->name('edit')->can('payments.edit_own_open');
     Route::put('{id}', [$controller, 'update'])->name('update')->can('payments.edit_own_open');

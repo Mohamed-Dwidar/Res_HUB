@@ -40,7 +40,7 @@ return [
             'packages.edit' => 'Edit packages',
             'packages.delete' => 'Delete packages (without reservations / payments)',
             'packages.statement' => 'Export the package statement PDF',
-            'extras.create' => 'Add extras to a package',
+            'extras.create' => 'Add extras to a package / reservation',
         ],
         'Cash In' => [
             'payments.view' => 'See the Payments page (own cash in, one day) and the payments of a reservation / package / member',

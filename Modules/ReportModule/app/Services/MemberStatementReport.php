@@ -13,7 +13,7 @@ use Modules\ReservationModule\app\Models\Reservation;
 /**
  * Report 2 — Member statement (docs/reports-plan.md §2): one member's charges and payments in date order with a running balance.
  * Charges: his reservations paid on their own (package_id 0; what it costs = Reservation::DUE_SQL, a not counted status = 0 with
- * its status name), dated by the START; his packages (after_discount, dated by date_from, else the day it was made); their extras
+ * its status name), dated by the START; his packages (after_discount, dated by date_from, else the day it was made); their extras + his own reservations' extras (2026-11-08, with their taxes)
  * (dated by the extra's date; an adjustment = a balance move, may be negative). Payments of those reservations / packages:
  * cash in + / withholding + / refunds − (paid_at). Reservations inside a package = information lines at 0 (optional).
  * Balance > 0 = the member owes, < 0 = credit; the closing balance with no date limit = Σ the stored remaining of those rows
@@ -58,6 +58,9 @@ class MemberStatementReport
                 ->selectRaw("'package', id, COALESCE(date_from, DATE(created_at)), 2, after_discount, 0"))
             ->unionAll(DB::table('extras')->where('extrable_type', $packageType)->whereIn('extrable_id', $packages)->whereNull('deleted_at')
                 ->selectRaw("IF(type = 'adjustment', 'adjustment', 'extra'), id, COALESCE(date, DATE(created_at)), 3, amount, 0"))
+            // the extras of his own reservations (2026-11-08): with their taxes when the invoice is requested (= extras_total)
+            ->unionAll(DB::table('extras')->where('extrable_type', $reservationType)->whereIn('extrable_id', $ownReservations)->whereNull('deleted_at')
+                ->selectRaw("'extra', id, COALESCE(date, DATE(created_at)), 3, COALESCE(tax_total, amount), 0"))
             ->unionAll(DB::table('payments')->whereNull('deleted_at')->where('account_id', $accountId)
                 ->where(fn ($query) => $query
                     ->where(fn ($query) => $query->where('payable_type', $reservationType)->whereIn('payable_id', $ownReservations))
@@ -174,7 +177,7 @@ class MemberStatementReport
                 if (!$model) return ['Extra', '-'];
                 $adjustment = $model->type === 'adjustment';
                 return [$adjustment ? 'Adjustment' : 'Extra', $model->item . ($adjustment ? '' : ' · ' . rtrim(rtrim(number_format((float) $model->quantity, 2), '0'), '.') . ' × ' . number_format((float) $model->unit_price, 2))
-                    . ' · package #' . $model->extrable_id];
+                    . ' · ' . ($model->extrable_type === (new Reservation())->getMorphClass() ? 'reservation' : 'package') . ' #' . $model->extrable_id];
             case 'payment':
                 if (!$model) return ['Cash In', '-'];
                 $type = ['payment' => 'Cash In', 'withholding' => 'Withholding', 'refund' => 'Refund'][$model->type] ?? 'Cash In';

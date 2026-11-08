@@ -10,7 +10,7 @@ use Modules\PaymentModule\app\Services\ExtraService;
 use Modules\PaymentModule\app\Services\IncomeCategoryService;
 
 /**
- * Add an extra to a package (from the package view, popup), shared by the account and employees (2026-10-21).
+ * Add an extra to a package / a reservation (2026-11-08) from its view (popup), shared by the account and employees (2026-10-21).
  * Employees: the type "extra" only (a sale, positive unit price — ExtraRequest); adjustments, edit and delete = the account.
  * After saving, the popup shows the package view again (json "modal"). The controller gives area(): "account" | "employee".
  */
@@ -32,28 +32,46 @@ trait ExtraActions
         return Auth::user()->userable->ownerAccountId();
     }
 
+    // after saving, the popup shows the package / reservation view again
     private function answer(string $message, Extra $extra)
     {
-        $url = route($this->area() . '.packages.show', $extra->extrable_id);
+        $kind = ExtraService::kindOf($extra->extrable);
+        $url = route($this->area() . '.' . $kind . 's.show', $extra->extrable_id);
         return response()->json(['message' => $message, 'reload' => true, 'modal' => $url, 'redirect' => $url]);
     }
 
-    // ?package_id=X
+    // ?package_id=X or ?reservation_id=X (2026-11-08) → [kind, the package / reservation]
+    private function extrable(Request $request): array
+    {
+        $kind = $request->filled('reservation_id') ? 'reservation' : 'package';
+        return [$kind, $this->extraService->findExtrable($this->accountId(), $kind, (int) $request->input($kind . '_id'))];
+    }
+
+    // the Income Category list of the form (reservation and package alike): every active, non-system category + default prices
+    private function categoryOptions(string $kind, $currentId = null): array
+    {
+        return $this->categoryService->extraOptions($this->accountId(), $currentId);
+    }
+
     public function create(Request $request)
     {
-        $package = $this->extraService->findExtrable($this->accountId(), 'package', (int) $request->input('package_id'));
+        [$kind, $extrable] = $this->extrable($request);
+        if ($error = $this->extraService->extrableError($extrable)) {
+            abort(422, $error);
+        }
         return view('paymentmodule::Extra.create', [
-            'package' => $package,
+            'kind' => $kind,
+            'extrable' => $extrable,
             'extra' => new Extra(['type' => 'extra', 'quantity' => 1, 'date' => today()]),
-            'categories' => $this->categoryService->options($this->accountId()),
+            'categories' => $this->categoryOptions($kind),
         ]);
     }
 
     public function store(ExtraRequest $request)
     {
-        $package = $this->extraService->findExtrable($this->accountId(), 'package', (int) $request->input('package_id'));
-        $extra = $this->extraService->create($this->accountId(), $package, $request->validated(), Auth::user());
+        [$kind, $extrable] = $this->extrable($request);
+        $extra = $this->extraService->create($this->accountId(), $extrable, $request->validated(), Auth::user());
 
-        return $this->answer('The ' . strtolower($extra->type_label) . ' has been added to the package.', $extra);
+        return $this->answer('The ' . strtolower($extra->type_label) . ' has been added to the ' . $kind . '.', $extra);
     }
 }

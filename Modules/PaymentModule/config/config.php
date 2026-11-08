@@ -13,9 +13,11 @@ return [
     ],
 
     // the system's income categories (income_categories.generated_key, made on first use by IncomeCategoryService::generated()):
-    // a cash advance repayment (HR H4, not income); not offered in the Add Cash In form; its Cash In is locked (changed from HR)
+    // never income (2026-11-08 rule), not offered in the Add Cash In / Add Extra forms, their Cash In locked: a cash advance
+    // repayment (HR H4, changed from HR) and VAT (manual) (#6 keyed by database/fixes/2026-11-08-vat-manual-system-category.sql)
     'generated_income_categories' => [
         'advance_repayment' => ['en' => 'Advance repayment', 'ar' => 'سداد سلفة'],
+        'vat_manual' => ['en' => 'VAT (manual)', 'ar' => 'ضريبة القيمة المضافة (يدوي)'],
     ],
 
     'number_start' => (int) env('PAYMENT_NUMBER_START', 100001),

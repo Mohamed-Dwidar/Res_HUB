@@ -43,7 +43,7 @@
     <dl class="detail-list">
         <div><dt>Due</dt><dd>{{ number_format($payable->payableAmount(), 2) }}
             @if (method_exists($payable, 'extrasTotal') && $payable->extrasTotal() != 0)
-                <span class="text-xs text-slate-500">(net {{ number_format($payable->after_discount, 2) }} + extras {{ number_format($payable->extrasTotal(), 2) }})</span>
+                <span class="text-xs text-slate-500">(net {{ number_format($payable->payableAmount() - $payable->extrasTotal(), 2) }} + extras {{ number_format($payable->extrasTotal(), 2) }})</span>
             @endif
         </dd></div>
         <div><dt>Paid</dt><dd>{{ number_format($payable->paid_amount, 2) }}</dd></div>

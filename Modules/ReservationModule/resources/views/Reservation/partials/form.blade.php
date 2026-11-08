@@ -211,7 +211,8 @@
         data-in-package="{{ $renewing && $reservation->package_id ? 1 : 0 }}"
         @if ($storedRule) data-stored-plan="{{ $reservation->plan_id }}"
             data-stored="{{ json_encode(['vat' => $storedRule->vatBasisPoints(), 'table' => $storedRule->tableBasisPoints(), 'inclusive' => $storedRule->inclusive, 'rounding' => $storedRule->rounding]) }}" @endif
-        @if ($reservation?->exists) data-paid="{{ (float) $reservation->paid_amount }}" data-due="{{ $reservation->dueAmount() }}" data-was="{{ $reservation->invoice_requested ? 1 : 0 }}" @endif>
+        @if ($reservation?->exists) data-paid="{{ (float) $reservation->paid_amount }}" data-due="{{ $reservation->totalDue() }}" data-was="{{ $reservation->invoice_requested ? 1 : 0 }}"
+            data-extras="{{ json_encode(app(\Modules\PaymentModule\app\Services\ExtraService::class)->amountsOf($reservation)) }}" @endif>
         @unless ($renewing && $reservation->package_id)
             <div @unless ($renewing) data-show-if="book_for=member" @endunless>
                 @include('layoutmodule::partials.checkbox', ['name' => 'invoice_requested', 'label' => 'Invoice requested',

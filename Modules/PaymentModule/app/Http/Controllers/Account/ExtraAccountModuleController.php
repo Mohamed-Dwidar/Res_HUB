@@ -6,8 +6,9 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Modules\PaymentModule\app\Http\Requests\ExtraRequest;
 use Modules\PaymentModule\app\Http\Controllers\Concerns\ExtraActions;
+use Modules\PaymentModule\app\Services\ExtraService;
 
-// logged in account: the extras / adjustments of its packages: add (ExtraActions, shared with employees) + edit / delete
+// logged in account: the extras / adjustments of its packages and reservations (extras only): add (ExtraActions, shared with employees) + edit / delete
 // in the popup, from the package view; after saving, the popup shows the package view again (json "modal")
 class ExtraAccountModuleController extends Controller
 {
@@ -21,10 +22,12 @@ class ExtraAccountModuleController extends Controller
     public function edit($id)
     {
         $extra = $this->extraService->findOne($this->accountId(), $id);
+        $kind = ExtraService::kindOf($extra->extrable);
         return view('paymentmodule::Extra.edit', [
-            'package' => $extra->extrable,
+            'kind' => $kind,
+            'extrable' => $extra->extrable,
             'extra' => $extra,
-            'categories' => $this->categoryService->options($this->accountId(), $extra->income_category_id),
+            'categories' => $this->categoryOptions($kind, $extra->income_category_id),
         ]);
     }
 
