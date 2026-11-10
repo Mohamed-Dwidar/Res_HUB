@@ -11,5 +11,5 @@
 {{-- income = every category but the system ones (2026-11-08, no checkbox); no taxes here: extras follow their reservation /
      package (2026-11-08); the old tax flag columns are kept, unused --}}
 @if ($category?->isGenerated())
-    <div class="mt-5 {{ config('layoutmodule.form.hint') }}">System category: never counted as income.</div>
+    <div class="mt-5 {{ config('layoutmodule.form.hint') }}">System category: {{ $category->generatedFlag('income') ? 'counted as income, never taxed, can\'t be deleted.' : 'never counted as income.' }}</div>
 @endif

@@ -26,6 +26,7 @@ class PaymentModuleServiceProvider extends ModuleServiceProvider
         \Modules\PaymentModule\app\Console\RefreshPaymentsCommand::class,
         \Modules\PaymentModule\app\Console\RecalculateShiftsCommand::class,
         \Modules\PaymentModule\app\Console\MoveVatPaymentsCommand::class,
+        \Modules\PaymentModule\app\Console\CleanOverpaymentsCommand::class,
     ];
 
     /**

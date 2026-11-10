@@ -13,11 +13,14 @@ return [
     ],
 
     // the system's income categories (income_categories.generated_key, made on first use by IncomeCategoryService::generated()):
-    // never income (2026-11-08 rule), not offered in the Add Cash In / Add Extra forms, their Cash In locked: a cash advance
-    // repayment (HR H4, changed from HR) and VAT (manual) (#6 keyed by database/fixes/2026-11-08-vat-manual-system-category.sql)
+    // never deleted, not offered in Add Cash In; by default never income, not in Add Extra, their Cash In locked: a cash advance
+    // repayment (HR H4, changed from HR) and VAT (manual) (#6 keyed by database/fixes/2026-11-08-vat-manual-system-category.sql);
+    // flags: income = counts as income, extra = offered in Add Extra, untaxed = an extra of it never takes taxes
+    // rounding (2026-11-10, payments:clean-overpayments): the small amount added so a reservation / package owes what was paid
     'generated_income_categories' => [
         'advance_repayment' => ['en' => 'Advance repayment', 'ar' => 'سداد سلفة'],
         'vat_manual' => ['en' => 'VAT (manual)', 'ar' => 'ضريبة القيمة المضافة (يدوي)'],
+        'rounding' => ['en' => 'Rounding', 'ar' => 'تقريب', 'income' => true, 'extra' => true, 'untaxed' => true],
     ],
 
     'number_start' => (int) env('PAYMENT_NUMBER_START', 100001),

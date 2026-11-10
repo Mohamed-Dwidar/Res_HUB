@@ -146,7 +146,8 @@ class ExtraService
      */
     private function applyTax(Extra $extra, Model $extrable): void
     {
-        $rule = $extrable instanceof Reservation && $extrable->invoice_requested ? TaxRule::fromSnapshot($extrable) : null;
+        // a category flagged `untaxed` (Rounding, 2026-11-10): never taxes
+        $rule = $extrable instanceof Reservation && $extrable->invoice_requested && !$this->untaxed($extra) ? TaxRule::fromSnapshot($extrable) : null;
         if (!$rule) {
             $extra->forceFill(array_fill_keys(array_merge(TaxSnapshot::TYPE, TaxSnapshot::AMOUNTS), null));
             return;
@@ -161,9 +162,22 @@ class ExtraService
 
     // the reservation form's "will owe X more / less" (custom.js reservationTax()): its extras' amounts before tax — the form
     // taxes them with the same rule as the booking, like applyTax()
+    // (untaxed ones left out: the invoice toggle never changes them)
     public function amountsOf(Reservation $reservation): array
     {
-        return $reservation->extras()->pluck('amount')->map(fn ($amount) => (float) $amount)->all();
+        return $reservation->extras()->with('incomeCategory')->get()->reject(fn ($extra) => $this->untaxed($extra))
+            ->map(fn ($extra) => (float) $extra->amount)->values()->all();
+    }
+
+    // an extra of a system category flagged `untaxed` (Rounding)
+    private function untaxed(Extra $extra): bool
+    {
+        if (!$extra->income_category_id) {
+            return false;
+        }
+        $category = $extra->relationLoaded('incomeCategory') && $extra->incomeCategory?->id === (int) $extra->income_category_id
+            ? $extra->incomeCategory : IncomeCategory::find($extra->income_category_id);
+        return (bool) $category?->generatedFlag('untaxed');
     }
 
     // after an extra changed: a reservation's stored total, then paid / remaining

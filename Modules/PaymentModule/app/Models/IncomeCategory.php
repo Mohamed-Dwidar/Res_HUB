@@ -28,6 +28,18 @@ class IncomeCategory extends Model
         return $this->generated_key !== null;
     }
 
+    // a flag of a system category's config (income | extra | untaxed); a normal category: null
+    public function generatedFlag(string $flag): bool
+    {
+        return $this->isGenerated() && !empty(config('paymentmodule.generated_income_categories.' . $this->generated_key . '.' . $flag));
+    }
+
+    // the system keys with that flag (e.g. 'extra' → ['rounding'])
+    public static function generatedKeysWith(string $flag): array
+    {
+        return array_keys(array_filter(config('paymentmodule.generated_income_categories', []), fn ($item) => !empty($item[$flag])));
+    }
+
     protected $casts = [
         'is_active' => 'boolean',
         // false = not income: set by the rule (2026-11-08) = a system category (generated_key); the income reports leave it out
