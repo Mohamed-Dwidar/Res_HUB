@@ -128,6 +128,12 @@
             'url' => route('account.reports.pnl'),
             'active' => request()->routeIs('account.reports.pnl*'),
         ],
+        [
+            'title' => 'Members',
+            'icon' => 'users',
+            'url' => route('account.reports.members'),
+            'active' => request()->routeIs('account.reports.members*'),
+        ],
 
         // HrModule (docs/hr-plan.md, H1 2026-11-04): ONE Staff list + the staff page; later Payroll
         ['divider' => 'HR'],

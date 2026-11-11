@@ -134,6 +134,13 @@
             'url' => route('employee.reports.pnl'),
             'active' => request()->routeIs('employee.reports.pnl*'),
         ],
+        [
+            'title' => 'Members',
+            'can' => 'reports.members',
+            'icon' => 'users',
+            'url' => route('employee.reports.members'),
+            'active' => request()->routeIs('employee.reports.members*'),
+        ],
     ], fn ($item) => Gate::allows($item['can'])));
     if ($reports) {
         $items = array_merge($items, [['divider' => 'Reports']], $reports);

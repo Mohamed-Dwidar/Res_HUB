@@ -2801,6 +2801,10 @@ document.addEventListener("click", function (e) {
     document.querySelectorAll("[data-report-panel]").forEach(function (panel) {
         panel.hidden = panel.dataset.reportPanel !== button.dataset.reportView;
     });
+    // fields of one tab only (Members › Inactive): [data-tab-only="<data-report-tab>"]
+    if (button.dataset.reportTab) document.querySelectorAll("[data-tab-only]").forEach(function (field) {
+        field.hidden = field.dataset.tabOnly !== button.dataset.reportTab;
+    });
     // DataTables sizes its columns again on a resize (a table drawn while hidden)
     window.dispatchEvent(new Event("resize"));
 });
@@ -2808,7 +2812,8 @@ document.addEventListener("click", function (e) {
 // ------------------------------------------------------------------
 // Report drill-down (ReportModule, 2026-11-07)
 //  - tr.report-click: a click anywhere on the row (not on a link / button) = its a[data-modal] (keeps the popup back history), else
-//    its data-open-url in the popup (Expenses › Details → the Cash Out, Income rows → their payments)
+//    its data-open-url in the popup (Expenses › Details → the Cash Out, Income rows → their payments), or its data-open-page in
+//    a new tab (Members → the member statement)
 //  - tr[data-drill-category] (Expenses › By Category): Details of that block + category with the same dates / filters, and a
 //    "← Back to categories" link [data-report-back] that puts the previous category / kind back
 // ------------------------------------------------------------------
@@ -2819,6 +2824,8 @@ document.addEventListener("click", function (e) {
     var link = row.querySelector("a[data-modal]");
     if (link) link.click();
     else if (row.dataset.openUrl) appModal.open(row.dataset.openUrl);
+    // a full page in a new tab (Members report → the member statement)
+    else if (row.dataset.openPage) window.open(row.dataset.openPage, "_blank", "noopener");
 });
 function reportShowView(name) {
     var button = document.querySelector('[data-report-view="' + name + '"]');

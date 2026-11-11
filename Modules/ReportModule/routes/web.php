@@ -42,6 +42,11 @@ $reportRoutes = function ($controller) {
     Route::get('pnl', [$controller, 'pnl'])->name('pnl')->can('reports.pnl');
     Route::get('pnl/data', [$controller, 'pnlData'])->name('pnl.data')->can('reports.pnl');
     Route::get('pnl/excel', [$controller, 'pnlExcel'])->name('pnl.excel')->can('reports.pnl');
+    // 8. Members
+    Route::get('members', [$controller, 'members'])->name('members')->can('reports.members');
+    Route::get('members/data', [$controller, 'membersData'])->name('members.data')->can('reports.members');
+    Route::get('members/occupations', [$controller, 'membersOccupations'])->name('members.occupations')->can('reports.members');
+    Route::get('members/excel', [$controller, 'membersExcel'])->name('members.excel')->can('reports.members');
     Route::get('expenses/excel', [$controller, 'expensesExcel'])->name('expenses.excel')->can('reports.expenses');
 };
 

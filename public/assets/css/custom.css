@@ -4044,3 +4044,8 @@ tr.report-click:hover td {
 .pnl-table__sum {
     font-weight: 600;
 }
+
+/* Members report (2026-11-11): the Inactive tab's own fields (custom.js [data-tab-only]) + the phone = a WhatsApp link */
+.filter-bar__group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.filter-bar__group[hidden] { display: none; }
+.member-wa-link { color: rgb(22 163 74); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }

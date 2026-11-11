@@ -3,6 +3,7 @@
 namespace Modules\ReportModule\app\Http\Controllers\Concerns;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
@@ -21,6 +22,8 @@ use Modules\ReportModule\app\Services\OccupancyReport;
 use Modules\ReportModule\app\Exports\OccupancyExport;
 use Modules\ReportModule\app\Exports\PnlExport;
 use Modules\ReportModule\app\Services\PnlReport;
+use Modules\ReportModule\app\Services\MemberReport;
+use Modules\ReportModule\app\Exports\MemberExport;
 use Modules\ReportModule\app\Exports\SubscriptionExport;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Services\RenewalView;
@@ -494,5 +497,100 @@ trait ReportActions
         $this->logExport('Report: Profit & Loss', $filters, count($data['income']) + count($data['expenses']));
 
         return Excel::download(new PnlExport($data, $report->rangeText($filters)), 'profit-loss-' . now()->format('Y-m-d') . '.xlsx');
+    }
+
+    // ---- 8. Members ----
+
+    public function members()
+    {
+        return view('reportmodule::Report.members', $this->placeOptions() + [
+            'area' => $this->area(),
+            'initial' => ReportDates::thisMonth(),
+            'days' => MemberReport::DEFAULT_DAYS,
+            'min' => MemberReport::DEFAULT_MIN,
+            'within' => MemberReport::DEFAULT_WITHIN,
+        ]);
+    }
+
+    private function memberFilters(Request $request, MemberReport $report): array
+    {
+        return $report->filters(['search' => $request->input('search.value', $request->input('search'))] + $request->except('search'));
+    }
+
+    // DataTables server side: the chosen member tab's rows; json counts = every tab's count, html = the totals box
+    public function membersData(Request $request, MemberReport $report)
+    {
+        $filters = $this->memberFilters($request, $report);
+        $accountId = $this->accountId();
+        $view = $filters['view'] === 'occupation' ? 'new' : $filters['view'];
+        $query = $report->tab($accountId, $filters, $view);
+        if (!$request->input('order')) {
+            $report->order($query, $view);
+        }
+        $area = $this->area();
+        // a row opens the member statement (a new tab) when the login may open it
+        $canOpen = Gate::allows('reports.member_statement');
+        $format = Reservation::DATE_FORMAT;
+        $date = fn ($value) => $value ? Carbon::parse($value)->format($format) : '-';
+        $messaging = app(\Modules\MessagingModule\app\Services\MessagingService::class);
+
+        return DataTables::query($query)
+            ->filter(fn () => null)
+            ->setRowId(fn ($row) => 'row-' . $row->member_id)
+            ->setRowAttr(['data-open-page' => fn ($row) => $canOpen ? route($area . '.reports.member-statement', ['member_id' => $row->member_id]) : null])
+            ->setRowClass($canOpen ? 'report-click' : '')
+            ->editColumn('name', fn ($row) => view('reportmodule::Report.partials.member-name', ['row' => $row])->render())
+            // the phone opens WhatsApp (wa.me; the WhatsApp popups' number rule), else plain text
+            ->editColumn('phone', function ($row) use ($messaging) {
+                [$number] = $row->phone ? $messaging->phone((new Member)->forceFill(['phone' => $row->phone])) : [null];
+                return $number ? '<a href="https://wa.me/' . $number . '" target="_blank" rel="noopener" class="member-wa-link">' . e($row->phone) . '</a>'
+                    : e($row->phone ?: '-');
+            })
+            ->editColumn('first_visit', fn ($row) => $date($row->first_visit))
+            ->editColumn('last_visit', fn ($row) => $date($row->last_visit))
+            ->editColumn('paid', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->paid, 'class' => 'money-in'])->render())
+            ->editColumn('balance', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->balance, 'class' => $row->balance < 0 ? 'money-withholding' : 'money-out'])->render())
+            ->rawColumns(['name', 'phone', 'paid', 'balance', 'DT_RowAttr.data-open-page'])
+            ->only(['DT_RowId', 'DT_RowAttr', 'DT_RowClass', 'name', 'phone', 'first_visit', 'last_visit', 'reservations', 'paid', 'balance'])
+            ->with('counts', collect($report->counts($accountId, $filters))->mapWithKeys(fn ($n, $tab) => ['members-' . $tab => $n])->all())
+            ->with('html', [
+                'member-totals' => view('reportmodule::Report.partials.member-totals', ['totals' => $report->totals($accountId, $filters),
+                    'filters' => $filters, 'range' => $report->rangeText($filters)])->render(),
+            ])
+            ->toJson();
+    }
+
+    // DataTables server side: By occupation (one row per occupation)
+    public function membersOccupations(Request $request, MemberReport $report)
+    {
+        $filters = $this->memberFilters($request, $report);
+        $query = $report->occupations($this->accountId(), $filters);
+        if (!$request->input('order')) {
+            $query->orderByDesc('paid')->orderByDesc('members');
+        }
+
+        return DataTables::query(DB::query()->fromSub($query, 'x'))
+            ->filter(fn () => null)
+            ->setRowId(fn ($row) => 'row-job-' . (int) $row->job_id)
+            ->editColumn('paid', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->paid, 'class' => 'money-in'])->render())
+            ->rawColumns(['paid'])
+            ->only(['DT_RowId', 'occupation', 'members', 'new_members', 'paid'])
+            ->toJson();
+    }
+
+    public function membersExcel(Request $request, MemberReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $accountId = $this->accountId();
+        $totals = $report->totals($accountId, $filters);
+        $this->logExport('Report: Members', $filters, (int) $totals->rows_count);
+        if ($filters['view'] === 'occupation') {
+            $query = $report->occupations($accountId, $filters)->orderByDesc('paid')->orderByDesc('members');
+        } else {
+            $query = $report->order($report->tab($accountId, $filters), $filters['view']);
+        }
+
+        return Excel::download(new MemberExport($query, $totals, $filters['view'], $report->rangeText($filters)),
+            'members-' . $filters['view'] . '-' . now()->format('Y-m-d') . '.xlsx');
     }
 }
