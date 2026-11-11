@@ -1001,6 +1001,19 @@ function reservationLockMember(form) {
     if (memberText) {
         memberText.hidden = !memberId;
         memberText.querySelector("[data-package-member-name]").textContent = memberId ? (option.dataset.memberText || "#" + memberId) : "";
+        // the package's member commitment: beside the Package box (like the Member field), moved there once
+        var commitmentBox = form._packageCommitment || memberText.querySelector("[data-member-commitment]");
+        if (commitmentBox) {
+            if (!form._packageCommitment) {
+                form._packageCommitment = commitmentBox;
+                var control = packageEl.tomselect ? packageEl.tomselect.wrapper : packageEl;
+                var line = document.createElement("div");
+                line.className = "member-select-line";
+                control.parentNode.insertBefore(line, control);
+                line.append(control, commitmentBox);
+            }
+            memberCommitmentShow(commitmentBox, memberId || "");
+        }
     }
     if (memberId) {
         if (searchable) {
@@ -1298,6 +1311,7 @@ function initSearchable(root) {
         if (select.tomselect) return;
         if (select.hasAttribute("data-member-select")) {
             memberSelect(select);
+            memberCommitment(select);
             return;
         }
         var searchable = new TomSelect(select, {
@@ -1396,6 +1410,65 @@ function memberSelect(select) {
         ts.load(ts.control_input.value);
     });
 }
+
+// the reservation form: the chosen member's commitment badge (member-select 'commitment' => true, 2026-11-11):
+// {area}.members.commitment?member_id= → "92% 27 reservations · 2 cancelled" (green ≥ 90, yellow 70–89,
+// red < 70 — the Members report colors); none yet = "No reservations yet"; no member = hidden; the newest answer only.
+// Shown BESIDE the input (user): the box is moved next to the Tom Select box, both in .member-select-line
+function memberCommitment(select) {
+    var box = select._commitmentBox;
+    if (!box) {
+        var row = select.closest("[data-field]") && select.closest("[data-field]").nextElementSibling;
+        box = row && row.querySelector("[data-member-commitment]");
+        if (!box) return;
+        select._commitmentBox = box;
+        var control = select.tomselect ? select.tomselect.wrapper : select;
+        var line = document.createElement("div");
+        line.className = "member-select-line";
+        control.parentNode.insertBefore(line, control);
+        line.append(control, box);
+    }
+    memberCommitmentShow(box, select.value);
+}
+
+// one badge box ([data-member-commitment] + data-url): the Member field, the package's member line (Book For = Package),
+// the fixed member of the Renew form (data-member-id, filled by initForms)
+function memberCommitmentShow(box, memberId) {
+    var token = (box._token || 0) + 1;
+    box._token = token;
+    if (!memberId) {
+        box.hidden = true;
+        return;
+    }
+    fetch(box.dataset.url + "?member_id=" + encodeURIComponent(memberId), { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+        .then(function (response) {
+            if (!response.ok) throw response;
+            return response.json();
+        })
+        .then(function (data) {
+            if (token !== box._token) return;
+            box.textContent = "";
+            if (data.commitment === null) {
+                box.textContent = "No reservations yet";
+            } else {
+                var badge = document.createElement("span");
+                badge.className = "badge " + (data.commitment >= 90 ? "badge-status-success" : data.commitment >= 70 ? "badge-status-warning" : "badge-status-danger");
+                badge.textContent = data.commitment + "%";
+                                // the member statement's wording: "N reservations · M cancelled"
+                var text = data.total + (data.total === 1 ? " reservation" : " reservations") + " · " + (data.total - data.counted) + " cancelled";
+                badge.title = text;
+                box.append(badge, " " + text);
+            }
+            box.hidden = false;
+        })
+        .catch(function () {
+            if (token === box._token) box.hidden = true;
+        });
+}
+
+document.addEventListener("change", function (e) {
+    if (e.target.matches && e.target.matches("select[data-member-select]")) memberCommitment(e.target);
+});
 
 function memberQuickBox(select) {
     var field = select.closest("[data-field]");
@@ -1692,6 +1765,8 @@ function initForms(root) {
         applyConditions(form);
         if (form.querySelector("select[data-filter-parents]")) filterChain(form);
         if (form.matches("[data-reservation-form]")) {
+            // the Renew form's fixed member: its commitment badge
+            form.querySelectorAll("[data-member-commitment][data-member-id]").forEach(function (box) { memberCommitmentShow(box, box.dataset.memberId); });
             reservationLockMember(form);
             reservationCapacity(form);
             reservationTypeOptions(form);

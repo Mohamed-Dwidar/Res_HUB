@@ -22,7 +22,7 @@
     <form id="reservations-filters" class="filter-bar">
         {{-- opened from the Members list (?member_id=): the All tab --}}
         @include('layoutmodule::partials.filter-tabs', ['tabs' => \Modules\ReservationModule\app\Models\Reservation::TABS, 'default' => 'today', 'initial' => $member ? 'all' : null, 'dates' => \Modules\ReservationModule\app\Models\Reservation::tabDates(), 'counts' => $counts, 'counter' => 'reservations-'])
-        <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Member name or phone" autocomplete="off">
+        <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Member, phone or reservation no." autocomplete="off">
         @include('layoutmodule::partials.date-range-filter')
         {{-- ?member_id= (the Members list count): this member only, chosen when the list opens; Clear / "All Members" = everyone --}}
         @if ($member)

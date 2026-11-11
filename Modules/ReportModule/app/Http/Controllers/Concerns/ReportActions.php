@@ -450,7 +450,8 @@ trait ReportActions
             'area' => $this->area(),
             'initial' => ReportDates::thisMonth(),
             // no "All": occupancy needs dates (× = this month)
-            'presets' => array_values(array_filter(ReportDates::presets(), fn ($preset) => $preset['from'] !== null)),
+            // no All / Until today: occupancy needs dates, at most OccupancyReport::MAX_DAYS
+            'presets' => array_values(array_filter(ReportDates::presets(), fn ($preset) => $preset['from'] !== null && ($preset['key'] ?? '') !== 'until_today')),
             'types' => $places['types'],
             'spaces' => $places['spaces'],
         ]);
@@ -539,7 +540,8 @@ trait ReportActions
             ->setRowId(fn ($row) => 'row-' . $row->member_id)
             ->setRowAttr(['data-open-page' => fn ($row) => $canOpen ? route($area . '.reports.member-statement', ['member_id' => $row->member_id]) : null])
             ->setRowClass($canOpen ? 'report-click' : '')
-            ->editColumn('name', fn ($row) => view('reportmodule::Report.partials.member-name', ['row' => $row])->render())
+            ->editColumn('name', fn ($row) => '<span class="font-medium">' . e($row->name) . '</span>')
+            ->editColumn('commitment', fn ($row) => view('reportmodule::Report.partials.member-commitment', ['row' => $row])->render())
             // the phone opens WhatsApp (wa.me; the WhatsApp popups' number rule), else plain text
             ->editColumn('phone', function ($row) use ($messaging) {
                 [$number] = $row->phone ? $messaging->phone((new Member)->forceFill(['phone' => $row->phone])) : [null];
@@ -550,12 +552,12 @@ trait ReportActions
             ->editColumn('last_visit', fn ($row) => $date($row->last_visit))
             ->editColumn('paid', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->paid, 'class' => 'money-in'])->render())
             ->editColumn('balance', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->balance, 'class' => $row->balance < 0 ? 'money-withholding' : 'money-out'])->render())
-            ->rawColumns(['name', 'phone', 'paid', 'balance', 'DT_RowAttr.data-open-page'])
-            ->only(['DT_RowId', 'DT_RowAttr', 'DT_RowClass', 'name', 'phone', 'first_visit', 'last_visit', 'reservations', 'paid', 'balance'])
+            ->rawColumns(['name', 'phone', 'commitment', 'paid', 'balance', 'DT_RowAttr.data-open-page'])
+            ->only(['DT_RowId', 'DT_RowAttr', 'DT_RowClass', 'name', 'phone', 'reservations', 'commitment', 'first_visit', 'last_visit', 'paid', 'balance'])
             ->with('counts', collect($report->counts($accountId, $filters))->mapWithKeys(fn ($n, $tab) => ['members-' . $tab => $n])->all())
             ->with('html', [
                 'member-totals' => view('reportmodule::Report.partials.member-totals', ['totals' => $report->totals($accountId, $filters),
-                    'filters' => $filters, 'range' => $report->rangeText($filters)])->render(),
+                    'filters' => $filters, 'range' => $report->rangeText($filters), 'balanceDate' => $report->balanceDate($filters)])->render(),
             ])
             ->toJson();
     }

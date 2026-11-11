@@ -12,10 +12,12 @@ use Modules\ReservationModule\app\Models\ReservationStatus;
 /**
  * Report 8 — Members: one row per member, aggregated in SQL (account scoped, merged / deleted members left out).
  * - First visit = the first counted reservation's start or the first package's start (date_from, else created), all time;
- *   Last visit = the latest counted reservation that started up to now; Reservations = counted reservations, all time.
+ *   Last visit = the latest reservation that started up to now; Reservations = every reservation, all time — cancelled included
+ *   (2026-11-11: a member whose reservations are all cancelled shows, commitment 0%).
  * - Paid = cash in − refunds of the member in the dates (`payments.member_id`, `Payment::PAID_SQL`; reservations, packages and other
  *   income counted as income — the Income report's rows, with tax: what the member paid).
- * - Balance = today's stored remaining of the reservations paid on their own + the packages (+ owes, − credit), like report 1.
+ * - Balance = the member statement's balance as of the range end, never after the business date (charges − payments dated up
+ *   to it: no future charges, 2026-11-11), `balanceDate()`.
  * - Space type → Space → Unit filters: reservations of that place only (and their payments; packages / other income left out).
  * - Commitment = counted (not cancelled) reservations ÷ all reservations, all time (the place filters apply).
  * Tabs: new = first visit in the dates | top = paid in the dates > 0, most first | inactive = regulars who stopped: at least
@@ -31,6 +33,8 @@ class MemberReport
     const DEFAULT_DAYS = 60;
 
     const DEFAULT_MIN = 3;
+
+    const COMMITMENT_BELOW = [50, 70, 90];
 
     const DEFAULT_WITHIN = 365;
 
@@ -50,6 +54,8 @@ class MemberReport
             'space_id' => (int) ($input['space_id'] ?? 0),
             'unit_id' => (int) ($input['unit_id'] ?? 0),
             'days' => $days,
+            // Commitment filter: below 50 / 70 / 90 % (0 = all)
+            'commitment' => in_array((int) ($input['commitment'] ?? 0), self::COMMITMENT_BELOW) ? (int) $input['commitment'] : 0,
             'min_reservations' => $min >= 1 && $min <= 1000 ? $min : self::DEFAULT_MIN,
             // never shorter than N days + 1 (else the window is empty)
             'within' => max($within >= 1 && $within <= 7300 ? $within : self::DEFAULT_WITHIN, $days + 1),
@@ -77,6 +83,15 @@ class MemberReport
     {
         [$today] = Reservation::businessToday();
         return $today->copy()->startOfDay()->subDays($filters['within']);
+    }
+
+    // the Balance column's date: the range end, never after the business date (none / All = the business date)
+    public function balanceDate(array $filters): Carbon
+    {
+        [$today] = Reservation::businessToday();
+        $today = $today->copy()->startOfDay();
+        $end = $filters['date_from'] ? Carbon::parse($filters['date_to'] ?: $filters['date_from'])->startOfDay() : $today;
+        return $end->gt($today) ? $today : $end;
     }
 
     // a place filter is chosen (packages / other income left out)
@@ -120,11 +135,12 @@ class MemberReport
 
         $reservations = $this->wherePlace(Reservation::query()->where('reservations.account_id', $accountId)->where('reservations.member_id', '>', 0), $filters, 'reservations')
             ->toBase()->groupBy('reservations.member_id')
-            ->selectRaw("reservations.member_id, MIN(IF($c, reservations.start_at, NULL)) as first_start,
-                MAX(IF($c AND reservations.start_at <= ?, reservations.start_at, NULL)) as last_visit,
-                MAX(IF($c, COALESCE(reservations.end_at, reservations.start_at), NULL)) as last_reach, SUM($c) as reservations,
-                ROUND(SUM($c) * 100 / COUNT(*)) as commitment,
-                SUM($c AND reservations.start_at >= ? AND reservations.start_at < ?) as in_range", [now(), $from, $to]);
+            // every reservation, cancelled included (user 2026-11-11): first / last visit, count, in_range; commitment = counted ÷ all
+            ->selectRaw("reservations.member_id, MIN(reservations.start_at) as first_start,
+                MAX(IF(reservations.start_at <= ?, reservations.start_at, NULL)) as last_visit,
+                MAX(COALESCE(reservations.end_at, reservations.start_at)) as last_reach, COUNT(*) as reservations,
+                ROUND(SUM($c) * 100 / COUNT(*)) as commitment, COUNT(*) - SUM($c) as cancelled,
+                SUM(reservations.start_at >= ? AND reservations.start_at < ?) as in_range", [now(), $from, $to]);
 
         $packages = Package::query()->where('packages.account_id', $accountId)->where('packages.member_id', '>', 0)
             ->toBase()->groupBy('packages.member_id')
@@ -139,12 +155,8 @@ class MemberReport
             ->toBase()->groupBy('payments.member_id')
             ->selectRaw('payments.member_id, ROUND(SUM(' . str_replace(['type', 'amount'], ['payments.type', 'payments.amount'], Payment::PAID_SQL) . '), 2) as paid');
 
-        $balance = DB::query()->fromSub(
-            Reservation::query()->where('account_id', $accountId)->where('package_id', 0)->where('remaining', '<>', 0)->where('member_id', '>', 0)
-                ->toBase()->select('member_id', 'remaining')
-                ->unionAll(Package::query()->where('account_id', $accountId)->where('remaining', '<>', 0)->where('member_id', '>', 0)
-                    ->toBase()->select('member_id', 'remaining')), 'b')
-            ->groupBy('b.member_id')->selectRaw('b.member_id, ROUND(SUM(b.remaining), 2) as balance');
+        // the balance as of the range end, never after the business date (no future charges; the member statement's lines)
+        $balance = app(MemberStatementReport::class)->balances($accountId, $this->balanceDate($filters)->toDateString());
 
         $first = $type ? 'DATE(r.first_start)'
             : 'CASE WHEN r.first_start IS NULL THEN pk.first_package WHEN pk.first_package IS NULL THEN DATE(r.first_start) ELSE LEAST(DATE(r.first_start), pk.first_package) END';
@@ -159,7 +171,7 @@ class MemberReport
             ->leftJoin('job_positions as j', 'j.id', '=', 'm.job_id')
             ->selectRaw("m.id as member_id, m.name, m.phone, COALESCE(NULLIF(c.name_en, ''), c.name_ar) as company, m.job_id,
                 COALESCE(NULLIF(j.name_en, ''), j.name_ar) as occupation, $first as first_visit, r.last_visit, r.last_reach,
-                COALESCE(r.reservations, 0) as reservations, r.commitment, COALESCE(r.in_range, 0) as in_range,
+                COALESCE(r.reservations, 0) as reservations, r.commitment, COALESCE(r.cancelled, 0) as cancelled, COALESCE(r.in_range, 0) as in_range,
                 COALESCE(pd.paid, 0) as paid, COALESCE(bl.balance, 0) as balance");
 
         if ($filters['search'] !== '') {
@@ -177,6 +189,9 @@ class MemberReport
         $view ??= $filters['view'];
         [$from, $to] = $this->bounds($filters);
         $query = $this->members($accountId, $filters);
+        if ($filters['commitment']) {
+            $query->where('t.commitment', '<', $filters['commitment']);
+        }
 
         return match ($view) {
             'new' => $query->where('t.first_visit', '>=', $from->toDateString())->where('t.first_visit', '<', $to->toDateString()),

@@ -16,8 +16,9 @@ use Modules\ReservationModule\app\Models\Reservation;
  * its status name), dated by the START; his packages (after_discount, dated by date_from, else the day it was made); their extras + his own reservations' extras (2026-11-08, with their taxes)
  * (dated by the extra's date; an adjustment = a balance move, may be negative). Payments of those reservations / packages:
  * cash in + / withholding + / refunds − (paid_at). Reservations inside a package = information lines at 0 (optional).
- * Balance > 0 = the member owes, < 0 = credit; the closing balance with no date limit = Σ the stored remaining of those rows
- * (= his Net in the Outstanding report, future periods included). Opening = every line before the range (SQL sums);
+ * Balance > 0 = the member owes, < 0 = credit. "All dates" (no end) = up to the business date unless "Include future" (2026-11-11,
+ * user: no future charges by default); with Include future the closing = Σ the stored remaining of those rows (= his Net in the
+ * Outstanding report, future periods included). `balances()` = the same lines for every member up to a date (the Members report). Opening = every line before the range (SQL sums);
  * the lines of the range are one member's: read into PHP (descriptions, running balance).
  */
 class MemberStatementReport
@@ -30,6 +31,7 @@ class MemberStatementReport
             'date_from' => $date($input['date_from'] ?? null),
             'date_to' => $date($input['date_to'] ?? null),
             'package_lines' => !empty($input['package_lines']),
+            'include_future' => !empty($input['include_future']),
         ];
     }
 
@@ -87,6 +89,10 @@ class MemberStatementReport
         }
         $from = $filters['date_from'];
         $to = $filters['date_to'] ?: ($from ?: null);
+        // no end: up to the business date, unless Include future
+        if (!$to && !$filters['include_future']) {
+            $to = Reservation::businessToday()[0]->toDateString();
+        }
 
         $opening = $from
             ? (float) $this->lines($accountId, $member->id, false)->where('day', '<', $from)->sum(DB::raw('charge - payment'))
@@ -111,12 +117,55 @@ class MemberStatementReport
             'member' => $member,
             'from' => $from ? Carbon::parse($from) : null,
             'to' => $to ? Carbon::parse($to) : null,
+            'all_dates' => !$filters['date_from'] && !$filters['date_to'],
+            'commitment' => $this->commitment($accountId, $member->id),
+            'include_future' => $filters['include_future'],
             'opening' => round($opening, 2),
             'lines' => $lines,
             'charges' => $charges,
             'payments' => $payments,
             'closing' => round($opening + $charges - $payments, 2),
         ];
+    }
+
+    // the Members report's Commitment: counted ÷ all his reservations (all time, packages' too) → [percent|null, counted, all]
+    public function commitment($accountId, int $memberId): array
+    {
+        $row = Reservation::query()->where('account_id', $accountId)->where('member_id', $memberId)->toBase()
+            ->selectRaw('COUNT(*) as total, SUM(reservation_status_id NOT IN (' . (implode(',', array_map('intval', \Modules\ReservationModule\app\Models\ReservationStatus::notCountedIds())) ?: '0') . ')) as counted')
+            ->first();
+        $total = (int) $row->total;
+        return ['percent' => $total ? (int) round($row->counted * 100 / $total) : null, 'counted' => (int) $row->counted, 'total' => $total];
+    }
+
+    /**
+     * Every member's balance up to $end (Y-m-d, included): the statement's lines (own reservations by start, packages, their extras,
+     * the payments of those rows) dated ≤ $end, charge − payment, grouped by member → (member_id, balance).
+     */
+    public function balances($accountId, string $end)
+    {
+        $reservationType = (new Reservation())->getMorphClass();
+        $packageType = (new Package())->getMorphClass();
+        $own = fn () => DB::table('reservations as r')->where('r.account_id', $accountId)->where('r.package_id', 0)->whereNull('r.deleted_at')->where('r.member_id', '>', 0);
+        $packages = fn () => DB::table('packages as p')->where('p.account_id', $accountId)->whereNull('p.deleted_at')->where('p.member_id', '>', 0);
+        $due = str_replace('reservations.', 'r.', Reservation::DUE_SQL);
+
+        $lines = $own()->join('reservation_statuses as s', 's.id', '=', 'r.reservation_status_id')
+            ->whereRaw('DATE(r.start_at) <= ?', [$end])
+            ->selectRaw("r.member_id, IF(s.is_counted = 1, $due, 0) as amount")
+            ->unionAll($packages()->whereRaw('COALESCE(p.date_from, DATE(p.created_at)) <= ?', [$end])->selectRaw('p.member_id, p.after_discount'))
+            ->unionAll($packages()->join('extras as e', fn ($join) => $join->on('e.extrable_id', '=', 'p.id')->where('e.extrable_type', $packageType))
+                ->whereNull('e.deleted_at')->whereRaw('COALESCE(e.date, DATE(e.created_at)) <= ?', [$end])->selectRaw('p.member_id, e.amount'))
+            ->unionAll($own()->join('extras as e', fn ($join) => $join->on('e.extrable_id', '=', 'r.id')->where('e.extrable_type', $reservationType))
+                ->whereNull('e.deleted_at')->whereRaw('COALESCE(e.date, DATE(e.created_at)) <= ?', [$end])->selectRaw('r.member_id, COALESCE(e.tax_total, e.amount)'))
+            ->unionAll($own()->join('payments as pm', fn ($join) => $join->on('pm.payable_id', '=', 'r.id')->where('pm.payable_type', $reservationType))
+                ->whereNull('pm.deleted_at')->where('pm.paid_at', '<=', $end)
+                ->selectRaw('r.member_id, -(' . str_replace(['type', 'amount'], ['pm.type', 'pm.amount'], Payment::PAID_SQL) . ')'))
+            ->unionAll($packages()->join('payments as pm', fn ($join) => $join->on('pm.payable_id', '=', 'p.id')->where('pm.payable_type', $packageType))
+                ->whereNull('pm.deleted_at')->where('pm.paid_at', '<=', $end)
+                ->selectRaw('p.member_id, -(' . str_replace(['type', 'amount'], ['pm.type', 'pm.amount'], Payment::PAID_SQL) . ')'));
+
+        return DB::query()->fromSub($lines, 'b')->groupBy('b.member_id')->selectRaw('b.member_id, ROUND(SUM(b.amount), 2) as balance');
     }
 
     // the models of the lines (one query per kind, their relations eager loaded)

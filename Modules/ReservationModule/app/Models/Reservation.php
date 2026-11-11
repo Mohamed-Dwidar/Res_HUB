@@ -722,8 +722,18 @@ class Reservation extends Model implements Payable
     public function scopeFilter($query, array $filters = [])
     {
         if (!empty($filters['search'])) {
-            $search = '%' . $filters['search'] . '%';
-            $query->whereHas('member', fn ($query) => $query->where('name', 'like', $search)->orWhere('phone', 'like', str_replace(' ', '', $search)));
+            $text = trim($filters['search']);
+            $search = '%' . $text . '%';
+            $member = fn ($query) => $query->whereHas('member', fn ($query) => $query->where('name', 'like', $search)->orWhere('phone', 'like', str_replace(' ', '', $search)));
+            if (preg_match('/^#\s*(\d+)$/', $text, $m)) {
+                // "#123" = the reservation number only
+                $query->where('reservations.id', (int) $m[1]);
+            } elseif (ctype_digit($text)) {
+                // digits = the reservation number or a member's phone
+                $query->where(fn ($query) => $query->where('reservations.id', (int) $text)->orWhere($member));
+            } else {
+                $member($query);
+            }
         }
 
         foreach (['reservation_status_id', 'space_id', 'unit_id', 'package_id', 'member_id', 'subscription_type_id'] as $field) {

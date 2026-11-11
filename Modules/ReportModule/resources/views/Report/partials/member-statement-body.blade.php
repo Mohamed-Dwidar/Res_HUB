@@ -10,7 +10,14 @@
     @php $member = $statement['member']; @endphp
     <div class="statement-head">
         <div>
-            <div class="text-base font-medium">{{ $member->name }}</div>
+            <div class="text-base font-medium">{{ $member->name }}
+                @if ($statement['commitment']['percent'] !== null)
+                    @php $cancelled = $statement['commitment']['total'] - $statement['commitment']['counted']; @endphp
+                    @include('reportmodule::Report.partials.member-commitment', ['row' => (object) ['commitment' => $statement['commitment']['percent'],
+                        'reservations' => $statement['commitment']['total'], 'cancelled' => $cancelled]])
+                    <span class="text-xs font-normal text-slate-500">{{ $statement['commitment']['total'] }} {{ Str::plural('reservation', $statement['commitment']['total']) }} · {{ $cancelled }} cancelled</span>
+                @endif
+            </div>
             <div class="text-xs text-slate-500">{{ collect([$member->phone, $member->company?->name])->filter()->implode(' · ') }}</div>
             <div class="text-xs text-slate-500">
                 {{ $statement['from'] ? $statement['from']->format($dateFormat) : 'From the start' }}

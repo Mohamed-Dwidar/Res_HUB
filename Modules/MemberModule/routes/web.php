@@ -14,6 +14,7 @@ $memberRoutes = function ($controller) {
     Route::get('data', [$controller, 'data'])->name('data')->can('members.view');
     // the Member drop menus of the reservation / package / cash in / withholding forms: search + the quick add duplicate check
     Route::get('search', [$controller, 'search'])->name('search')->can('members.pick');
+    Route::get('commitment', [$controller, 'commitment'])->name('commitment')->can('members.pick');
     Route::get('lookup', [$controller, 'lookup'])->name('lookup')->can('members.create');
     Route::get('create', [$controller, 'create'])->name('create')->can('members.create');
     Route::post('/', [$controller, 'store'])->name('store')->can('members.create');

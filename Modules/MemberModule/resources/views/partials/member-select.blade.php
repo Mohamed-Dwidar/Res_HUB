@@ -10,6 +10,8 @@
       by phone_key): taken → "This mobile belongs to <name>" + Use this member. Save = {area}.members.store?quick=1 (the Members
       page rules, MemberRequest), the new member is selected (its change event: the forms' own chains follow).
     $companies: [id => name] of the account (optional company of a new member).
+    $commitment: true = the chosen member's commitment badge next to the field (the reservation form, 2026-11-11):
+      {area}.members.commitment?member_id= on every change (custom.js memberCommitment()), the Members report rule.
 --}}
 @php
     $area = request()->routeIs('employee.*') ? 'employee' : 'account';
@@ -22,10 +24,17 @@
     'options' => ['' => $placeholder ?? '- Select -'] + $selected, 'value' => $member->id ?? null,
     'attrs' => 'data-member-select data-search-url="' . route($area . '.members.search') . '"' . (empty($required) ? ' data-member-optional' : '') . ($canAdd ? '' : ' data-member-no-add'),
     'hint' => $hint ?? 'Search by name or mobile.'])
-@if ($canAdd)
+@if ($canAdd || !empty($commitment))
 <div class="member-quick-link-row">
-    <button type="button" class="member-quick-link" data-member-quick-open><i data-lucide="user-plus"></i> New member</button>
+    @if ($canAdd)
+        <button type="button" class="member-quick-link" data-member-quick-open><i data-lucide="user-plus"></i> New member</button>
+    @endif
+    @if (!empty($commitment))
+        <span class="member-commitment" data-member-commitment data-url="{{ route($area . '.members.commitment') }}" hidden></span>
+    @endif
 </div>
+@endif
+@if ($canAdd)
 
 <div class="member-quick" data-member-quick hidden
     data-store-url="{{ route($area . '.members.store', ['quick' => 1]) }}" data-lookup-url="{{ route($area . '.members.lookup') }}">

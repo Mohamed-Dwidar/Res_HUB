@@ -88,7 +88,11 @@
     @endif
     <div class="form-section">Member</div>
     <dl class="detail-list">
-        <div><dt>Member</dt><dd>{{ $reservation->member?->name ?? '-' }} @if ($reservation->member?->phone)<span class="text-xs text-slate-500">{{ $reservation->member->phone }}</span>@endif</dd></div>
+        <div><dt>Member</dt><dd>{{ $reservation->member?->name ?? '-' }} @if ($reservation->member?->phone)<span class="text-xs text-slate-500">{{ $reservation->member->phone }}</span>@endif
+            @if ($reservation->member)
+                <span class="member-commitment" data-member-commitment data-member-id="{{ $reservation->member->id }}"
+                    data-url="{{ route((request()->routeIs('employee.*') ? 'employee' : 'account') . '.members.commitment') }}" hidden></span>
+            @endif</dd></div>
         @if ($reservation->package_id)
             <div><dt>Package</dt><dd>{{ $reservation->package?->name ?? '#' . $reservation->package_id }}</dd></div>
         @endif
@@ -106,11 +110,13 @@
     @include('layoutmodule::partials.field', ['name' => 'package_id', 'label' => 'Package', 'type' => 'select', 'required' => true, 'searchable' => true,
         'width' => 'long', 'options' => ['' => '- Select -'] + $packageOptions, 'value' => $reservation?->package_id ?: null,
         'hint' => 'Search by package or member name.'])
-    <div class="package-member" data-package-member hidden>Member: <b data-package-member-name></b></div>
+    <div class="package-member" data-package-member hidden>Member: <b data-package-member-name></b>
+        <span class="member-commitment" data-member-commitment
+            data-url="{{ route((request()->routeIs('employee.*') ? 'employee' : 'account') . '.members.commitment') }}" hidden></span></div>
 </div>
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1" data-show-if="book_for=member">
     {{-- server search + quick add (membermodule::partials.member-select) --}}
-    @include('membermodule::partials.member-select', ['member' => $reservation?->member, 'required' => true, 'companies' => $companies])
+    @include('membermodule::partials.member-select', ['member' => $reservation?->member, 'required' => true, 'companies' => $companies, 'commitment' => true])
 </div>
 @endif
 

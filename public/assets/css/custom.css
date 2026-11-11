@@ -1382,6 +1382,31 @@ tr.row-removing {
 
 .member-quick-link-row {
     margin-top: -0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* the reservation form: the chosen member's commitment (custom.js memberCommitment()) */
+.member-commitment {
+    font-size: 0.8rem;
+    color: rgb(100 116 139);
+    white-space: nowrap;
+}
+
+/* the Member box + its commitment on one line */
+.member-select-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+}
+
+/* the field keeps its own width (field-long: 400px at most); a phone puts the commitment under it */
+.member-select-line > .ts-wrapper {
+    flex: 1 1 260px;
+    min-width: 0;
 }
 
 /* the reservation form, Book For = Package: the package's member under the list */

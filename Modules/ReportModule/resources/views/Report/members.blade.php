@@ -16,7 +16,7 @@
 
 @section('content')
     @include('reportmodule::Report.partials.intro', ['text' => 'New members, top members by paid, inactive members, members by occupation.',
-        'details' => 'First visit = the first reservation or package (any date); Last visit = the latest reservation that has started; Reservations = all counted reservations. New = first visit in the dates. Top members = paid in the dates (cash in − refunds, with tax). Commitment % (next to the name) = not cancelled ÷ all reservations, all time. Inactive = regulars who stopped: at least the minimum reservations, the last one between "Last visit within" and "No visit for" days ago (a future booking or a running period keeps a member active; the dates do not apply). By occupation = members with a reservation or a payment in the dates. Balance = today\'s balance (+ owes, − credit). A space type / space / unit keeps only its reservations and their payments. The phone opens WhatsApp.'])
+        'details' => 'First visit = the first reservation or package (any date); Last visit = the latest reservation that has started; Reservations = every reservation, cancelled included. New = first visit in the dates. Top members = paid in the dates (cash in − refunds, with tax). Commitment % = not cancelled ÷ all reservations, all time. Inactive = regulars who stopped: at least the minimum reservations, the last one between "Last visit within" and "No visit for" days ago (a future booking or a running period keeps a member active; the dates do not apply). By occupation = members with a reservation or a payment in the dates. Balance = charges − payments dated up to the end of the dates, never after today (no future charges; + owes, − credit). A space type / space / unit keeps only its reservations and their payments. The phone opens WhatsApp.'])
 
     <form id="member-filters" class="report-toolbar mt-5">
         <div class="filter-bar">
@@ -54,6 +54,12 @@
                     <option value="{{ $id }}" @class(['option-inactive' => !$unit['active']]) data-match="space_id:{{ $unit['space_id'] }} subscription_type_id:{{ $unit['subscription_type_id'] }}">{{ $unit['name'] }}{{ $unit['active'] ? '' : ' (Inactive)' }}</option>
                 @endforeach
             </select>
+            <select name="commitment" class="{{ config('layoutmodule.form.select') }}" aria-label="Commitment">
+                <option value="">All Commitment</option>
+                @foreach (\Modules\ReportModule\app\Services\MemberReport::COMMITMENT_BELOW as $percent)
+                    <option value="{{ $percent }}">Commitment &lt; {{ $percent }}%</option>
+                @endforeach
+            </select>
             @include('layoutmodule::partials.datatable-clear')
         </div>
 
@@ -84,6 +90,7 @@
                     <th data-data="last_visit" data-name="last_visit" data-class="whitespace-nowrap">Last Visit</th>
                     <th data-data="paid" data-name="paid" data-class="text-right whitespace-nowrap">Paid</th>
                     <th data-data="balance" data-name="balance" data-class="text-right whitespace-nowrap">Balance</th>
+                    <th data-data="commitment" data-name="commitment" data-class="text-center">Commitment</th>
                 </tr>
             </thead>
         </table>

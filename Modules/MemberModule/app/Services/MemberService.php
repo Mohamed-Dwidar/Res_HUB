@@ -5,6 +5,7 @@ namespace Modules\MemberModule\app\Services;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Modules\MemberModule\app\Models\Member;
+use Modules\ReservationModule\app\Models\ReservationStatus;
 use Modules\MemberModule\app\Repositories\MemberRepository;
 
 /**
@@ -48,6 +49,20 @@ class MemberService
 
         return $query->orderBy('name')->limit($limit)->get(['id', 'name', 'phone'])
             ->map(fn ($member) => ['id' => $member->id, 'text' => $member->name . ' ' . $member->phone])->all();
+    }
+
+    // the reservation form's commitment badge (2026-11-11): counted (not cancelled) ÷ all reservations, all time — the Members
+    // report rule (ReportModule MemberReport); null = no reservations yet. 404 for another account's member
+    public function commitment($accountId, $id): array
+    {
+        $member = $this->findOne($accountId, $id);
+        $notCounted = array_map('intval', ReservationStatus::notCountedIds());
+        $row = $member->reservations()->toBase()->selectRaw('COUNT(*) as total, '
+            . ($notCounted ? 'SUM(reservation_status_id NOT IN (' . implode(',', $notCounted) . '))' : 'COUNT(*)') . ' as counted')->first();
+        $total = (int) $row->total;
+        $counted = (int) $row->counted;
+
+        return ['total' => $total, 'counted' => $counted, 'commitment' => $total ? (int) round($counted * 100 / $total) : null];
     }
 
     // the member with this phone (by phone_key) in the account, or null: the quick add duplicate check

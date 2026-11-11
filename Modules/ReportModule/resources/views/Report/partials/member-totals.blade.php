@@ -8,7 +8,7 @@
     @endif
     <div class="money-box__item money-box__item--paid"><span>Paid</span><b>{{ $money('paid') }}</b></div>
     @if ($filters['view'] !== 'occupation')
-        <div class="money-box__item money-box__item--owed"><span>Balance</span><b>{{ $money('balance') }}</b></div>
+        <div class="money-box__item money-box__item--owed"><span>Balance{{ !empty($balanceDate) ? ' on ' . $balanceDate->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) : '' }}</span><b>{{ $money('balance') }}</b></div>
     @endif
     @if ($range)
         <div class="money-box__item"><span>Dates</span><b>{{ $range }}</b></div>

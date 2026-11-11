@@ -105,6 +105,12 @@ trait MemberActions
         return response()->json(mb_strlen($q) < 2 ? [] : $this->memberService->search($this->accountId(), $q));
     }
 
+    // the reservation form's commitment badge: ?member_id= → {total, counted, commitment}
+    public function commitment(Request $request)
+    {
+        return response()->json($this->memberService->commitment($this->accountId(), (int) $request->query('member_id')));
+    }
+
     // the quick add duplicate check: ?phone= → {member: {id, name, phone, text}} or {member: null} (same account, by phone_key)
     public function lookup(Request $request)
     {

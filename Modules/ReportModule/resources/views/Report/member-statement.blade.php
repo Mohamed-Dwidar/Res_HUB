@@ -17,7 +17,7 @@
 
 @section('content')
     @include('reportmodule::Report.partials.intro', ['text' => 'One member\'s charges and payments with the running balance.',
-        'details' => 'Reservations by their start date, packages, extras and payments (refunds minus). A positive balance = the member owes, negative = credit. Cancelled reservations show at 0. "Package reservations" adds the reservations inside packages as lines at 0.'])
+        'details' => 'Reservations by their start date, packages, extras and payments (refunds minus). A positive balance = the member owes, negative = credit. Cancelled reservations show at 0. With All dates the statement stops at today; "Include future" adds the upcoming reservations. "Package reservations" adds the reservations inside packages as lines at 0.'])
 
     <form id="statement-filters" class="mt-5" data-member-statement data-url="{{ route($area . '.reports.member-statement.data') }}">
         {{-- one line: Member (the reservation form's field: field partial + Tom Select server search, the report's own search route,
@@ -34,6 +34,10 @@
             </div>
             <label class="filter-check">
                 <input type="checkbox" name="package_lines" value="1" class="{{ config('layoutmodule.form.checkbox') }}"> Package reservations
+            </label>
+            {{-- All dates = up to today; ticked = upcoming reservations too (like Outstanding) --}}
+            <label class="filter-check">
+                <input type="checkbox" name="include_future" value="1" class="{{ config('layoutmodule.form.checkbox') }}"> Include future
             </label>
             @include('layoutmodule::partials.datatable-clear')
         </div>

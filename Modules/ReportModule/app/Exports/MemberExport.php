@@ -41,7 +41,7 @@ class MemberExport implements FromQuery, WithHeadings, WithMapping, WithColumnFo
     {
         return [['Members · ' . MemberReport::TABS[$this->view] . ' · ' . $this->range], $this->occupations()
             ? ['Occupation', 'Members', 'New members', 'Paid']
-            : ['No.', 'Member', 'Phone', 'Reservations', 'Commitment %', 'First visit', 'Last visit', 'Paid', 'Balance']];
+            : ['No.', 'Member', 'Phone', 'Reservations', 'First visit', 'Last visit', 'Paid', 'Balance', 'Commitment %']];
     }
 
     public function map($row): array
@@ -50,14 +50,14 @@ class MemberExport implements FromQuery, WithHeadings, WithMapping, WithColumnFo
             return [$row->occupation, (int) $row->members, (int) $row->new_members, (float) $row->paid];
         }
         $date = fn ($value) => $value ? Carbon::parse($value)->format(Reservation::DATE_FORMAT) : null;
-        return [$row->member_id, $row->name, $row->phone, (int) $row->reservations, $row->commitment === null ? null : (int) $row->commitment,
-            $date($row->first_visit), $date($row->last_visit), (float) $row->paid, (float) $row->balance];
+        return [$row->member_id, $row->name, $row->phone, (int) $row->reservations,
+            $date($row->first_visit), $date($row->last_visit), (float) $row->paid, (float) $row->balance, $row->commitment === null ? null : (int) $row->commitment];
     }
 
     public function columnFormats(): array
     {
         return $this->occupations() ? ['D' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1]
-            : ['H' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1, 'I' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1];
+            : ['G' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1, 'H' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1];
     }
 
     public function registerEvents(): array
@@ -69,9 +69,9 @@ class MemberExport implements FromQuery, WithHeadings, WithMapping, WithColumnFo
             $row = $sheet->getHighestRow() + 1;
             $sheet->fromArray([$this->occupations()
                 ? ['Total', (int) $this->totals->members, (int) $this->totals->new_members, $this->totals->paid]
-                : ['Total (' . (int) $this->totals->members . ')', '', '', '', '', '', '', $this->totals->paid, $this->totals->balance]], null, 'A' . $row);
+                : ['Total (' . (int) $this->totals->members . ')', '', '', '', '', '', $this->totals->paid, $this->totals->balance, '']], null, 'A' . $row);
             $sheet->getStyle('A' . $row . ':' . $last . $row)->getFont()->setBold(true);
-            $sheet->getStyle(($this->occupations() ? 'D' : 'H') . $row . ':' . $last . $row)->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1);
+            $sheet->getStyle(($this->occupations() ? 'D' : 'G') . $row . ':' . ($this->occupations() ? 'D' : 'H') . $row)->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1);
             $sheet->freezePane('A3');
         }];
     }

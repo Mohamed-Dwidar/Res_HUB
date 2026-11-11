@@ -37,6 +37,7 @@ class PnlReport
             ['label' => 'This year', 'from' => today()->startOfYear()->toDateString(), 'to' => today()->endOfYear()->toDateString()],
             ['label' => 'Last year', 'from' => $lastYear->copy()->startOfYear()->toDateString(), 'to' => $lastYear->copy()->endOfYear()->toDateString()],
             ['label' => 'Last 12 months', 'from' => today()->subMonthsNoOverflow(11)->startOfMonth()->toDateString(), 'to' => today()->endOfMonth()->toDateString()],
+            ['label' => 'Until today', 'from' => ReportDates::earliest(), 'to' => today()->toDateString()],
         ];
     }
 
