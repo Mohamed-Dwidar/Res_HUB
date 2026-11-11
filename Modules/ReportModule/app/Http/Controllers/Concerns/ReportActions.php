@@ -19,6 +19,8 @@ use Modules\ReportModule\app\Services\ExpenseReport;
 use Modules\ReportModule\app\Services\SubscriptionReport;
 use Modules\ReportModule\app\Services\OccupancyReport;
 use Modules\ReportModule\app\Exports\OccupancyExport;
+use Modules\ReportModule\app\Exports\PnlExport;
+use Modules\ReportModule\app\Services\PnlReport;
 use Modules\ReportModule\app\Exports\SubscriptionExport;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Services\RenewalView;
@@ -467,5 +469,30 @@ trait ReportActions
         $this->logExport('Report: Occupancy', $filters, collect($data['spaces'])->sum(fn ($space) => count($space['units'])));
 
         return Excel::download(new OccupancyExport($data, $report->rangeText($filters)), 'occupancy-' . now()->format('Y-m-d') . '.xlsx');
+    }
+
+    // ---- 7. Profit & Loss ----
+
+    public function pnl()
+    {
+        return view('reportmodule::Report.pnl', ['area' => $this->area(), 'initial' => PnlReport::initial(), 'presets' => PnlReport::presets()]);
+    }
+
+    // the report as html (json html; custom.js "Live report")
+    public function pnlData(Request $request, PnlReport $report)
+    {
+        $filters = $report->filters($request->all());
+        return response()->json(['html' => view('reportmodule::Report.partials.pnl-body', $report->data($this->accountId(), $filters)
+            + ['range' => $report->rangeText($filters), 'dates' => $report->datesText($filters)])->render()]);
+    }
+
+    public function pnlExcel(Request $request, PnlReport $report)
+    {
+        $filters = $report->filters($request->all());
+        $data = $report->data($this->accountId(), $filters);
+        abort_if($data['error'], 422, $data['error']);
+        $this->logExport('Report: Profit & Loss', $filters, count($data['income']) + count($data['expenses']));
+
+        return Excel::download(new PnlExport($data, $report->rangeText($filters)), 'profit-loss-' . now()->format('Y-m-d') . '.xlsx');
     }
 }

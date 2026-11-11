@@ -3835,7 +3835,8 @@ td.renewal-row__action > .wa-btn {
     gap: 1rem;
 }
 [data-statement-body].is-loading,
-[data-occupancy-body].is-loading {
+[data-occupancy-body].is-loading,
+[data-pnl-body].is-loading {
     opacity: 0.5;
 }
 .report-total td {
@@ -4010,4 +4011,36 @@ tr.report-click:hover td {
 .occupancy-unset {
     margin: 0.4rem 0 0 1.1rem;
     list-style: disc;
+}
+
+/* ===== Profit & Loss report (ReportModule R7) ===== */
+.pnl-table td:first-child,
+.pnl-table th:first-child {
+    white-space: nowrap;
+    position: sticky;
+    left: 0;
+    background: #fff;
+}
+.pnl-table td:not(:first-child) {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.pnl-table__section td {
+    font-weight: 600;
+    color: rgb(var(--color-primary));
+    background: rgb(248 250 252) !important;
+}
+.pnl-table__section--below td {
+    color: rgb(100 116 139);
+}
+.pnl-table__total td {
+    font-weight: 600;
+    border-top: 1px solid rgb(203 213 225);
+}
+.pnl-table__muted td {
+    color: rgb(100 116 139);
+    font-size: 0.8rem;
+}
+.pnl-table__sum {
+    font-weight: 600;
 }

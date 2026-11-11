@@ -164,6 +164,15 @@ trait ExpenseActions
     {
         $expense = $this->expenseService->create($this->accountId(), $request->validated(), Auth::user());
 
+        // added from the Schedule page "New" menu: the Payments list (Cash Out tab)
+        if ($request->boolean('back_to_list')) {
+            return response()->json([
+                'message' => 'Cash Out #' . $expense->expense_no . ' has been added to your shift.',
+                'redirect' => route($this->area() . '.payments.index', ['type' => 'out']),
+                'go' => true,
+            ]);
+        }
+
         return response()->json([
             'message' => 'Cash Out #' . $expense->expense_no . ' has been added to your shift.',
             'reload' => true,

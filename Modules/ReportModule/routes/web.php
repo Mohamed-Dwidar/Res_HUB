@@ -38,6 +38,10 @@ $reportRoutes = function ($controller) {
     Route::get('occupancy', [$controller, 'occupancy'])->name('occupancy')->can('reports.occupancy');
     Route::get('occupancy/data', [$controller, 'occupancyData'])->name('occupancy.data')->can('reports.occupancy');
     Route::get('occupancy/excel', [$controller, 'occupancyExcel'])->name('occupancy.excel')->can('reports.occupancy');
+    // 7. Profit & Loss
+    Route::get('pnl', [$controller, 'pnl'])->name('pnl')->can('reports.pnl');
+    Route::get('pnl/data', [$controller, 'pnlData'])->name('pnl.data')->can('reports.pnl');
+    Route::get('pnl/excel', [$controller, 'pnlExcel'])->name('pnl.excel')->can('reports.pnl');
     Route::get('expenses/excel', [$controller, 'expensesExcel'])->name('expenses.excel')->can('reports.expenses');
 };
 

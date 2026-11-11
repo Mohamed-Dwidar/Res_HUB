@@ -57,6 +57,7 @@ class PaymentRequest extends FormRequest
             'back_to_payable' => 'boolean',
             // the form was opened from the employee's "My Shift" page
             'back_to_shift' => 'boolean',
+            'back_to_list' => 'boolean',
         ];
     }
 

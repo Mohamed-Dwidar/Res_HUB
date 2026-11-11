@@ -52,9 +52,9 @@ class IncomeReport
 
     /**
      * Every counted payment: group_key | group_sort | group_label | type | amount | tax_factor | own_tax
-     * (plain SQL: payments + their reservation / package / category, soft deleted payments left out)
+     * (plain SQL: payments + their reservation / package / category, soft deleted payments left out; also read by PnlReport)
      */
-    private function rows($accountId, array $filters)
+    public function rows($accountId, array $filters)
     {
         $reservation = (new Reservation())->getMorphClass();
         $package = (new Package())->getMorphClass();

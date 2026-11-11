@@ -122,6 +122,12 @@
             'url' => route('account.reports.occupancy'),
             'active' => request()->routeIs('account.reports.occupancy*'),
         ],
+        [
+            'title' => 'Profit & Loss',
+            'icon' => 'scale',
+            'url' => route('account.reports.pnl'),
+            'active' => request()->routeIs('account.reports.pnl*'),
+        ],
 
         // HrModule (docs/hr-plan.md, H1 2026-11-04): ONE Staff list + the staff page; later Payroll
         ['divider' => 'HR'],

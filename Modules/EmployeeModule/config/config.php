@@ -102,6 +102,7 @@ return [
             'reports.expenses' => 'Report: Expenses',
             'reports.subscriptions' => 'Report: Subscriptions',
             'reports.occupancy' => 'Report: Occupancy',
+            'reports.pnl' => 'Report: Profit & Loss',
         ],
         // 2026-11-04 (user): logins are made / changed / switched off ONLY from the staff form's System Access section
         'System Access' => [

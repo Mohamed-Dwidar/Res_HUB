@@ -373,6 +373,13 @@ function ajaxSubmit(form) {
                 return;
             }
 
+            // json.go: open the redirect page at once (no list reload / Schedule refresh first), e.g. Cash In / Cash Out from the Schedule
+            if (json.go && json.redirect) {
+                toastAfterRedirect(json.message);
+                window.location.href = json.redirect;
+                return;
+            }
+
             var inModal = form.closest("#app-modal");
             var tables = window.dataTables;
             var done = false;

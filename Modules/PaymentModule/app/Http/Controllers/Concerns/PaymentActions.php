@@ -342,6 +342,15 @@ trait PaymentActions
             ]);
         }
 
+        // added from the Schedule page "New" menu: the Payments list (Cash In tab)
+        if ($request->boolean('back_to_list')) {
+            return response()->json([
+                'message' => 'Cash In #' . $payment->payment_no . ' has been added successfully.',
+                'redirect' => route($this->area() . '.payments.index', ['type' => 'in']),
+                'go' => true,
+            ]);
+        }
+
         return response()->json([
             'message' => 'Cash In #' . $payment->payment_no . ' has been added successfully.',
             'reload' => true,

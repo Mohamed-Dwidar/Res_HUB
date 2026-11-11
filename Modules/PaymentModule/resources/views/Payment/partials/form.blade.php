@@ -20,6 +20,10 @@
 @if (request()->boolean('back_to_shift'))
     <input type="hidden" name="back_to_shift" value="1">
 @endif
+{{-- opened from the Schedule page "New" menu: the Payments list (Cash In tab) after saving --}}
+@if (request()->boolean('back_to_list'))
+    <input type="hidden" name="back_to_list" value="1">
+@endif
 
 @if ($payable ?? null)
     <input type="hidden" name="payable" value="{{ $payableKind }}">

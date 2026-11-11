@@ -15,6 +15,10 @@
         data-confirm-button="Add"
         data-confirm-variant="success">
         @csrf
+        {{-- opened from the Schedule page "New" menu: the Payments list (Cash Out tab) after saving --}}
+        @if (request()->boolean('back_to_list'))
+            <input type="hidden" name="back_to_list" value="1">
+        @endif
         @include('paymentmodule::Expense.partials.form')
         @include('layoutmodule::partials.form-actions', ['cancel' => route($area . '.payments.index', ['type' => 'out'])])
     </form>
