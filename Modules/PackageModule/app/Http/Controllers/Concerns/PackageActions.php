@@ -61,14 +61,16 @@ trait PackageActions
 
     /**
      * The list columns (docs/reservations-list-plan.md, packages list 2026-10-13), for data() and for one row after a change:
-     * Package (+ member) | Period (From / Ends) | Reservations (counted / booked hours, two lines) | Amount (net, + price · −discount%)
+     * Package (+ member) | Period (From / Ends) | Reservations (counted / booked hours, two lines) | Amount (due = net + extras, + price · −discount% · extras)
      * | Paid (black bold) | Remaining | Created By | Status (package + payment badges); Activate / Deactivate in the row menu
      */
     private function table(array $filters, $id = null)
     {
         $tab = $this->tab($filters);
         // + counted_reservations / booked_minutes, + who added it (By)
-        $query = $this->packageService->listQuery($this->accountId())->withReservationStats()->with('creatable.userable');
+        $query = $this->packageService->listQuery($this->accountId())->withReservationStats()->with('creatable.userable')
+            // Σ extras in the same query (HasExtras::extrasTotal() reads extras_sum_amount): the Amount column = due
+            ->withSum('extras', 'amount');
         if ($id) {
             $query->whereKey($id);
         }
@@ -81,6 +83,8 @@ trait PackageActions
             ->addColumn('period', fn ($package) => view('packagemodule::Package.partials.row-period', compact('package'))->render())
             ->addColumn('reservations', fn ($package) => view('packagemodule::Package.partials.row-reservations', compact('package'))->render())
             ->addColumn('status', fn ($package) => view('packagemodule::Package.partials.row-status', compact('package'))->render())
+            // sorted by the due (net + extras), what the cell shows
+            ->orderColumn('after_discount', fn ($query, $order) => $query->orderByRaw('packages.after_discount + COALESCE(extras_sum_amount, 0) ' . ($order === 'asc' ? 'asc' : 'desc')))
             ->editColumn('after_discount', fn ($package) => view('packagemodule::Package.partials.row-amount', compact('package'))->render())
             // black, bold (custom.css .amount-paid)
             ->editColumn('paid_amount', fn ($package) => '<span class="amount-paid">' . number_format($package->paid_amount, 2) . '</span>')

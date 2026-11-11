@@ -6,6 +6,7 @@
 ---
 
 ## Current status
+- **List Amount = due (2026-11-11, user bug: Era Soft 11-2026 showed 11,182.50, due 9,362.50), UNCOMMITTED, no migration, tested (HTTP kernel: #252 = 9,362.50 + "12,425.00 · −10% · extras −1,820.00", sort asc / desc, reservation #730 90.00 = 89.00 + extras 1.00), not in a browser:** packages list Amount = `payableAmount()` (net + extras, `withSum('extras')` in the list query, sorted by it); reservations list / Schedule Amount = `totalDue()` + "<booking> · extras ±X".
 - **Schedule "New" menu: + Cash In / Cash Out (2026-11-11, user), UNCOMMITTED, no migration, tested (HTTP kernel: Schedule + both popups render with `back_to_list`), saves not tested:** items after the reservation types (`payments.create` / `expenses.create`), popup `?back_to_list=1` → hidden field → store answers `{redirect: payments.index?type=in|out, go: true}`; custom.js `json.go` = redirect at once (skips the Schedule refresh / list reload).
 - **Reports R7 Profit & Loss (2026-11-11, user), UNCOMMITTED, no migration, tested (HTTP kernel: page / data / Excel 200 for the owner, an employee without the key 403, > 36 months refused; totals = the Income report's Net and the Expenses report's total for 2026 Jan–Nov, 2025, Oct 2026; below the line checked with rolled back test rows), not in a browser:** `PnlReport` (month columns + Total, whole months, never past this month, ≤ 36; Income = `IncomeReport::rows()` (now public) group type, net before tax; Expenses = Cash Out by category, Salaries first (system `salaries`, shift + company), other company Cash Out "Company · <category>"; Net profit + Margin; below the line: advances given (company Cash Out `advances`), repaid in cash (Cash In `advance_repayment`), deducted from salaries (`employee_advance_moves` deduct by period), change), page `Report/pnl` (live html, presets This month / Last month / This year (start) / Last year / Last 12 months), `PnlExport`, permission `reports.pnl` (no preset; not given to Accounting Office), sidebars Reports › Profit & Loss. Local 2026 Jan–Nov: income 3,393,555.03, expenses 1,759,019.93, net 1,634,535.10 (48.2%). Note: Salaries = what was paid (after advance deductions); "Tax" / "Office Equipment & Assets" Cash Out counted as expenses.
 - **Overpayments cleanup (2026-11-10, user), `php artisan payments:clean-overpayments [--account=] [--run] [--url=]` (PaymentModule `Console/CleanOverpaymentsCommand` + `Exports/OverpaymentsExport`; dry run by default), no migration, RUN on `dwidar_res_hub` by Claude (backup `storage/app/backups/overpayments-before-cleanup-20261110.sql`: payments, shift_closings, shift_events, extras, income_categories, reservations, packages); NOT on the server yet.** Credits by rule (due = paid + remaining): (1) card surcharge = due a multiple of 5, credit ≤ 3% of due + 1 and ≤ 50 → the latest cash in reduced by the credit, or soft deleted when it IS the surcharge (equal to the credit, user OK), closed shift recalculated + edited, `shift_events` payment_edit / payment_delete, reason "Card surcharge recorded by mistake" — a closing whose saved total already differs from its rows is never recalculated (the row → Excel; here #1, the owner's imported closing); (2) rounding = due not a multiple of 5, credit ≤ 5 → extra "Rounding" (new system income category `generated_key` rounding: counts as income, offered in Add Extra, never taxed (`ExtraService::untaxed()`), no system category deletable; config flags income / extra / untaxed); (3) the rest unchanged → Excel `storage/app/private/exports/overpayments-other-account<id>-<time>.xlsx` (live links). Local result: 47 surcharge rows (605.00: 23 reduced, 24 deleted 286.50), 10 imported closings changed (#3, 4, 6–13), 237 rounding extras (456.65), 141 to review (57,063.05); found: 2 credits had stale stored remaining (#3569, #920) → `payments:refresh` must run BEFORE the command (139 / 51,463.05 after). Second run = 0 / 0. **Server steps:** back up DB (+ APP_KEY) → `git pull` → `optimize:clear` → `payments:refresh` (FIRST: stale remaining) → `payments:clean-overpayments` (dry run: check counts / closings / Excel) → `--run` → download the Excel from `storage/app/private/exports/` → `payments:refresh` = 0. Committed `2c99972` + docs `cbe26f0`, pushed.
@@ -465,6 +466,12 @@
 
 ## Session log
 
+### 2026-11-11 — Packages / reservations list Amount = due (incl. extras)
+- **Changed:** `Package/partials/row-amount`, `PackageActions::table()`, `Reservation/partials/row-amount`
+- **Why:** user (Amount didn't match Paid / Remaining)
+- **Affects:** packages list, reservations list, Schedule hourly / full day lists
+- **Commit:** none yet
+
 ### 2026-11-11 — Schedule New menu: Cash In / Cash Out
 - **Changed:** `Schedule/index`, PaymentModule `Payment/partials/form`, `Expense/create`, `PaymentRequest`, `PaymentActions::store()`, `ExpenseActions::store()`, custom.js (`json.go`)
 - **Why:** user
@@ -516,11 +523,5 @@
 ### 2026-11-07 — Reports R4 Expenses (R3 + page pattern committed)
 - **Changed:** ReportModule (`ExpenseReport`, `ExpenseExport`, routes, `Report/expenses` + partials), both sidebars, custom.js (report view buttons); docs
 - **Why:** user (report 4 of 6)
-- **Affects:** Reports sidebar section
-- **Commit:** none yet
-
-### 2026-11-07 — Reports R3 Income
-- **Changed:** ReportModule (`IncomeReport`, `IncomeExport`, routes, `Report/income` + totals partial), both sidebars; docs
-- **Why:** user (report 3 of 6)
 - **Affects:** Reports sidebar section
 - **Commit:** none yet
