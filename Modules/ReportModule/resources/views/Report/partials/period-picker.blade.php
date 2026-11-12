@@ -3,7 +3,7 @@
     range) + Compare with (previous / same period last year / a period I pick / none). Shared by the Financial Dashboard, Income,
     Expenses and P&L. Value '' = the page's default (not counted by Clear); a link from the dashboard opens it on the same period
     (data-initial: datatables.js / custom.js periodPicker() set it, Clear goes back to the defaults).
-    $typeDefault ('month'), $compareDefault ('none'), $presets (the Custom date field's quick ranges), $initial (its starting range)
+    $typeDefault ('month'), $compareDefault ('none'), $compareKeys (the Compare options in this order; default all), $presets (the Custom date field's quick ranges), $initial (its starting range)
 --}}
 @php
     use Modules\ReportModule\app\Services\ReportPeriod;
@@ -35,7 +35,7 @@
         @include('layoutmodule::partials.date-range-filter', ['initial' => $custom, 'presets' => $presets ?? ReportDates::presets()])
     </div>
     <select name="compare" class="{{ config('layoutmodule.form.select') }}" aria-label="Compare with" {{ $initialOf('compare') }}>
-        @foreach (ReportPeriod::COMPARES as $key => $label)
+        @foreach (array_intersect_key(array_replace(array_flip($compareKeys ?? array_keys(ReportPeriod::COMPARES)), ReportPeriod::COMPARES), ReportPeriod::COMPARES) as $key => $label)
             <option value="{{ $value($key, $compareDefault) }}" @selected($key === $compareDefault)>{{ $key === 'none' ? 'No comparison' : 'Compare: ' . $label }}</option>
         @endforeach
     </select>

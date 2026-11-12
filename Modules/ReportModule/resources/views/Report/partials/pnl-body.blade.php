@@ -1,6 +1,6 @@
 {{-- the Profit & Loss report under the toolbar (PnlReport::data()): totals box, then the table — a column per month / quarter /
-     half-year / year + Total; with a comparison each cell = 3 lines (Report.partials.pnl-cell): columns vs "Change in columns"
-     (col_compare), Total vs the picked comparison (Income | Expenses | Net profit | Margin | Below the line) --}}
+     half-year / year + Total; with a comparison each cell = 3 lines (Report.partials.pnl-cell): columns vs the page's Compare
+     (col_compare), Total vs the compared range (Income | Expenses | Net profit | Margin | Below the line) --}}
 @php
     $compared ??= false;
     $running ??= null;

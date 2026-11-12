@@ -17,8 +17,8 @@ use Modules\ReservationModule\app\Models\Reservation;
  * of the system income category `advance_repayment`), deducted from salaries (employee_advance_moves `deduct`, by payroll month).
  * Columns (2026-11-12): month | quarter | half | year (the page's "Columns" select) or day (the dashboard's chart of a short period);
  * `exact` = the days as given (the dashboard: the same days as the Income / Expenses reports), else whole months.
- * The running column (the business date inside it) = "(to date)"; each column's compared amount ("Change in columns": same period
- * last year (default) / previous column / none, a running column on the same days) = columnCompare().
+ * The running column (the business date inside it) = "(to date)"; each column's compared amount (the page's Compare: same period
+ * last year (default) / previous period = previous column / a period I pick / none, a running column on the same days) = columnCompare().
  * compare() adds a comparison period's totals to each line (rows found only there come in with zeros).
  */
 class PnlReport
@@ -28,8 +28,6 @@ class PnlReport
     const MAX_COLUMNS = 36;
 
     const COLUMNS = ['month' => 'Months', 'quarter' => 'Quarters', 'half' => 'Half-years', 'year' => 'Years'];
-
-    const COL_CHANGES = ['last_year' => 'vs same period last year', 'previous' => 'vs previous column', 'none' => 'none'];
 
     // months per column
     const SPAN = ['month' => 1, 'quarter' => 3, 'half' => 6, 'year' => 12];
@@ -43,8 +41,10 @@ class PnlReport
             'date_to' => $date($input['date_to'] ?? null),
             'columns' => array_key_exists($columns, self::COLUMNS) || $columns === 'day' ? $columns : 'month',
             'exact' => !empty($input['exact']),
-            // what each column is compared with (the page's "Change in columns"): '' = last_year
-            'col_change' => in_array($input['col_change'] ?? '', ['previous', 'none'], true) ? $input['col_change'] : 'last_year',
+            // what each column is compared with = the page's Compare (ReportPeriod): last_year | previous | custom (cmp_from / cmp_to) | none
+            'col_change' => in_array($input['col_change'] ?? '', ['last_year', 'previous', 'custom'], true) ? $input['col_change'] : 'none',
+            'cmp_from' => $date($input['cmp_from'] ?? null),
+            'cmp_to' => $date($input['cmp_to'] ?? null),
         ];
     }
 
@@ -210,7 +210,8 @@ class PnlReport
             return $data;
         }
         $data = $this->running($data, $columns);
-        return $filters['col_change'] === 'none' ? $data : $this->columnCompare($accountId, $data, $from, $to, $columns, $filters['col_change']);
+        return $filters['col_change'] === 'none' || ($filters['col_change'] === 'custom' && !$filters['cmp_from']) ? $data
+            : $this->columnCompare($accountId, $data, $from, $to, $columns, $filters);
     }
 
     // Salaries first, then the shift categories, then company Cash Out of other categories; by name
@@ -257,20 +258,28 @@ class PnlReport
     }
 
     /**
-     * Each column's compared amount ("Change in columns"): last_year = the same column a year earlier, previous = the column
-     * before it (the first column: the one before the range) — ONE more read of the range shifted back (12 months / one column).
+     * Each column's compared amount (the page's Compare): last_year = the same column a year earlier, previous = the column
+     * before it (the first column: the one before the range) — ONE more read of the range shifted back (12 months / one column);
+     * custom = the picked days, column n vs its n-th column.
      * A running column is compared on the same days (last year: up to the same date; previous: the previous column's start + the
      * same number of days). Every line gets cmp_months [key => amount] + cmp_total; margin cmp_months / cmp_total;
      * $data['col_compare'] = [mode, labels [key => compared column's label], range (the compared days)]. Lines found only in the
      * compared range come in with zero columns.
      */
-    private function columnCompare($accountId, array $data, Carbon $from, Carbon $to, string $columns, string $mode): array
+    private function columnCompare($accountId, array $data, Carbon $from, Carbon $to, string $columns, array $filters): array
     {
+        $mode = $filters['col_change'];
         $shift = $mode === 'last_year' ? 12 : self::SPAN[$columns];
         $cmpFrom = $from->copy()->subMonthsNoOverflow($shift);
         $cmpTo = $to->copy()->subMonthsNoOverflow($shift)->endOfMonth()->startOfDay();
-        $running = $data['running'];
-        if ($running) {
+        // a period I pick: its own days, its columns matched by position (never cut)
+        $running = $mode === 'custom' ? null : $data['running'];
+        if ($mode === 'custom') {
+            [$cmpFrom, $cmpTo] = [Carbon::parse($filters['cmp_from']), Carbon::parse($filters['cmp_to'] ?: $filters['cmp_from'])];
+            if ($cmpTo->lt($cmpFrom)) {
+                [$cmpFrom, $cmpTo] = [$cmpTo, $cmpFrom];
+            }
+        } elseif ($running) {
             if ($mode === 'last_year') {
                 $cmpTo = $running['date']->copy()->subYearNoOverflow();
             } else {

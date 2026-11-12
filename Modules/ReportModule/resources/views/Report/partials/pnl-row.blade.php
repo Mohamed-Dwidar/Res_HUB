@@ -1,7 +1,6 @@
 {{-- one Profit & Loss line: label | a cell per column | Total — each cell = Report.partials.pnl-cell (3 lines with a comparison:
-     amount, the compared amount + its label, the change). Columns: vs $colCompare (PnlReport's data['col_compare']: same period
-     last year / previous column; the running column on the same days); Total: vs the picked comparison ($cmpRange, row['compare'])
-     else vs the columns' compared range. $class = the amounts' colour ('signed' = green / red by sign), $total = a bold line,
+     amount, the compared amount + its label, the change). Columns: vs $colCompare (PnlReport's data['col_compare'] from the page's Compare;
+     the running column on the same days); Total: vs the compared range ($cmpRange, row['compare']). $class = the amounts' colour ('signed' = green / red by sign), $total = a bold line,
      $trClass = the row's classes, $upIsGood = false for expenses (a rise is red), $percent = the margin line --}}
 @php
     $upIsGood ??= true;

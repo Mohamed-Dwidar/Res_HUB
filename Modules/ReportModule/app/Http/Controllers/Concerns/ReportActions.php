@@ -562,12 +562,13 @@ trait ReportActions
         return view('reportmodule::Report.pnl', ['area' => $this->area(), 'initial' => PnlReport::initial(), 'presets' => PnlReport::presets()]);
     }
 
-    // the P&L of the picked period (ReportPeriod: default this year, no comparison) [+ the comparison's totals]:
+    // the P&L of the picked period (ReportPeriod: default this year, compared with the same period last year) [+ the comparison's totals]:
     // [data, filters, compare range text | null]
     private function pnlCompared(Request $request, PnlReport $report): array
     {
-        $period = ReportPeriod::resolve($request->all(), 'year', 'none');
-        $filters = $report->filters(ReportPeriod::apply($request->all(), $period));
+        // ONE Compare drives the cells (each column vs its compared column) and the Total (vs the compared range)
+        $period = ReportPeriod::resolve($request->all(), 'year', 'last_year');
+        $filters = $report->filters(['col_change' => $period['compare']] + ReportPeriod::apply($request->all(), $period));
         $data = $report->data($this->accountId(), $filters);
         $cmpRange = null;
         if (!$data['error'] && ($cmpInput = ReportPeriod::compareInput($request->all(), $period))) {
