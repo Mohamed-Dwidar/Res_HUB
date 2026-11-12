@@ -11,6 +11,9 @@ use Modules\ReportModule\app\Http\Controllers\Employee\ReportEmployeeModuleContr
  *  one permission key per report (the owner passes all). A new report = its routes here + its sidebar items + its key.
  */
 $reportRoutes = function ($controller) {
+    // Financial Dashboard (2026-11-12)
+    Route::get('dashboard', [$controller, 'dashboard'])->name('dashboard')->can('reports.dashboard');
+    Route::get('dashboard/data', [$controller, 'dashboardData'])->name('dashboard.data')->can('reports.dashboard');
     Route::get('outstanding', [$controller, 'outstanding'])->name('outstanding')->can('reports.outstanding');
     Route::get('outstanding/data', [$controller, 'outstandingData'])->name('outstanding.data')->can('reports.outstanding');
     Route::get('outstanding/excel', [$controller, 'outstandingExcel'])->name('outstanding.excel')->can('reports.outstanding');

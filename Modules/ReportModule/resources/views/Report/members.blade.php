@@ -70,7 +70,7 @@
             <div class="report-segments" role="group" aria-label="Tab">
                 @foreach (\Modules\ReportModule\app\Services\MemberReport::TABS as $value => $label)
                     <button type="button" data-filter-tab data-name="view" data-value="{{ $value === 'new' ? '' : $value }}"
-                        data-report-view="{{ $value === 'occupation' ? 'occupation' : 'members' }}" data-report-tab="{{ $value }}" @class(['active' => $value === 'new'])>
+                        data-report-view="{{ $value === 'occupation' ? 'occupation' : 'members' }}" data-report-tab="{{ $value }}" @class(['active' => $value === 'new']) @if ($value !== 'new' && request('view') === $value) data-initial-tab @endif>
                         {{ $label }} (<span data-counter="members-{{ $value }}">0</span>)
                     </button>
                 @endforeach

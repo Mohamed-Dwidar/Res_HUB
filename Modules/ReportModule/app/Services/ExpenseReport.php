@@ -83,6 +83,23 @@ class ExpenseReport
             ->selectRaw("g.*, IF(g.is_company = 1, 'Company Cash Out', 'Shift Cash Out') as block, CONCAT(g.is_company, '-', g.category) as sort_key");
     }
 
+    // By category with a comparison period (2026-11-12): + cmp_amount (a category found only there comes in with 0 count / amount)
+    public function byCategoryCompared($accountId, array $filters, array $cmpFilters)
+    {
+        $source = $this->base($accountId, $filters)->toBase()
+            ->selectRaw('expenses.is_company, expenses.expense_category_id, expenses.amount, 0 as c_amount, 1 as cur')
+            ->unionAll($this->base($accountId, $cmpFilters)->toBase()
+                ->selectRaw('expenses.is_company, expenses.expense_category_id, 0, expenses.amount, 0'));
+        $grouped = DB::query()->fromSub($source, 'x')
+            ->leftJoin('expense_categories as c', 'c.id', '=', 'x.expense_category_id')
+            ->groupBy('x.is_company', 'x.expense_category_id')
+            ->selectRaw("x.is_company, x.expense_category_id, MAX(COALESCE(NULLIF(c.name_en, ''), c.name_ar, 'No category')) as category,
+                SUM(x.cur) as count, ROUND(SUM(x.amount), 2) as amount, ROUND(SUM(x.c_amount), 2) as cmp_amount");
+
+        return DB::query()->fromSub($grouped, 'g')
+            ->selectRaw("g.*, IF(g.is_company = 1, 'Company Cash Out', 'Shift Cash Out') as block, CONCAT(g.is_company, '-', g.category) as sort_key");
+    }
+
     // Details: every Cash Out (newest first by default), its category / method / recorder loaded
     public function details($accountId, array $filters)
     {

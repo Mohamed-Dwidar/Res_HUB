@@ -3,7 +3,8 @@
 {{--
     Report 4 — Expenses (docs/reports-plan.md §4): Cash Out by date in two blocks, Shift Cash Out and Company Cash Out (advances,
     salaries). Page pattern (reports-plan / progress): intro + (i); rows: search + date (starts on this month, presets inside) |
-    category, method, Shift / Company, Clear; totals box; view buttons By Category | Details above the tables (client side:
+    category, method, Shift / Company, Clear; totals box (2026-11-12: the period picker + Compare with: the comparison's amount +
+    Change in By Category, changes in the totals box; Details = the current period only); view buttons By Category | Details above the tables (client side:
     custom.js [data-report-view]; both tables follow the same filters). A By Category row = Details of that category (+ Back link);
     a Details row = the Cash Out popup.
 --}}
@@ -22,7 +23,7 @@
     <form id="expense-filters" class="report-toolbar mt-5">
         <div class="filter-bar">
             <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Item, notes or No." autocomplete="off">
-            @include('layoutmodule::partials.date-range-filter', ['initial' => $initial, 'presets' => \Modules\ReportModule\app\Services\ReportDates::presets()])
+            @include('reportmodule::Report.partials.period-picker', ['initial' => $initial])
         </div>
         <div class="filter-bar">
             <select name="category_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Category">
@@ -65,6 +66,8 @@
                     <th data-data="category" data-name="category">Category</th>
                     <th data-data="count" data-name="count" data-class="text-center">Count</th>
                     <th data-data="amount" data-name="amount" data-class="text-right whitespace-nowrap">Amount</th>
+                    <th data-data="cmp_amount" data-name="cmp_amount" data-class="text-right whitespace-nowrap" data-visible-if="compare"><span data-html="expense-cmp-title">Compare</span></th>
+                    <th data-data="change" data-orderable="false" data-class="text-right whitespace-nowrap" data-visible-if="compare">Change</th>
                 </tr>
             </thead>
             <tfoot>
@@ -72,6 +75,8 @@
                     <td colspan="2" data-html="expense-foot-label">Total</td>
                     <td class="text-center" data-html="expense-foot-count"></td>
                     <td class="text-right whitespace-nowrap money-out" data-html="expense-foot-amount"></td>
+                    <td class="text-right whitespace-nowrap" data-html="expense-foot-cmp_amount"></td>
+                    <td class="text-right whitespace-nowrap" data-html="expense-foot-change"></td>
                 </tr>
             </tfoot>
         </table>

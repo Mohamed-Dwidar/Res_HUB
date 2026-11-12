@@ -30,6 +30,8 @@ use Modules\ReservationModule\app\Services\RenewalView;
 use Modules\ReportModule\app\Exports\MemberStatementExport;
 use Modules\ReportModule\app\Services\IncomeReport;
 use Modules\ReportModule\app\Services\ReportDates;
+use Modules\ReportModule\app\Services\ReportPeriod;
+use Modules\ReportModule\app\Services\DashboardReport;
 use Modules\ReportModule\app\Exports\OutstandingExport;
 use Modules\ReportModule\app\Services\MemberStatementReport;
 use niklasravnsborg\LaravelPdf\Facades\Pdf;
@@ -88,10 +90,46 @@ trait ReportActions
             && (app(CashScope::class)->paymentsCollector() === null || $payment->payable_type || (int) $payment->creatable_id === (int) Auth::id());
     }
 
+    // the date field's starting range: the URL's dates (a link from the Financial Dashboard), else this month
+    private function linkedDates(): array
+    {
+        $date = fn ($value) => is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
+        $from = $date(request('date_from'));
+        return $from ? [$from, $date(request('date_to')) ?: $from] : ReportDates::thisMonth();
+    }
+
     private function logExport(string $page, array $filters, int $rows, string $format = 'xlsx'): void
     {
         app(AccessLogService::class)->record('export', Auth::user(),
             ['page' => $page, 'format' => $format, 'filters' => array_filter($filters), 'rows' => $rows], true);
+    }
+
+    // ---- Financial Dashboard (2026-11-12) ----
+
+    public function dashboard()
+    {
+        return view('reportmodule::Report.dashboard', ['area' => $this->area()]);
+    }
+
+    // the dashboard as html (json html; custom.js "Live report" → "Financial Dashboard" draws the charts): every card / chart links
+    // to its report on the same period, only when the login may open that report
+    public function dashboardData(Request $request, DashboardReport $report)
+    {
+        $data = $report->data($this->accountId(), $request->all());
+        $area = $this->area();
+        $period = ReportPeriod::linkQuery($request->all(), $data['period']);
+        $link = fn ($report, $route, array $query = []) => Gate::allows('reports.' . $report) ? route($area . '.reports.' . $route, $query) : null;
+        $links = $data['error'] ? [] : [
+            'income' => $link('income', 'income', $period),
+            'income_type' => $link('income', 'income', $period + ['group' => 'type']),
+            'expenses' => $link('expenses', 'expenses', $period),
+            'pnl' => $link('pnl', 'pnl', $period),
+            'outstanding' => $link('outstanding', 'outstanding'),
+            'members' => $link('members', 'members', ['view' => 'top'] + $data['dates']),
+            'occupancy' => $link('occupancy', 'occupancy', $data['dates']),
+        ];
+
+        return response()->json(['html' => view('reportmodule::Report.partials.dashboard-body', $data + ['links' => $links])->render()]);
     }
 
     // ---- 1. Outstanding & credits ----
@@ -220,13 +258,25 @@ trait ReportActions
         ]);
     }
 
+    // the Income filters with the picked period's days (ReportPeriod: default this month, no comparison) + the comparison's
+    // filters (null = none): [filters, cmpFilters, period]
+    private function incomeFilters(Request $request, IncomeReport $report): array
+    {
+        $period = ReportPeriod::resolve($request->all(), 'month', 'none');
+        $cmpInput = ReportPeriod::compareInput($request->all(), $period);
+        return [$report->filters(ReportPeriod::apply($request->all(), $period)), $cmpInput ? $report->filters($cmpInput) : null, $period];
+    }
+
     // DataTables server side: one row per group + the totals (json html: box, footer cells, the group column's title)
     public function incomeData(Request $request, IncomeReport $report)
     {
-        $filters = $report->filters($request->all());
+        [$filters, $cmpFilters, $period] = $this->incomeFilters($request, $report);
         $totals = $report->totals($this->accountId(), $filters);
+        $cmpTotals = $cmpFilters ? $report->totals($this->accountId(), $cmpFilters) : null;
         $cell = fn ($field, $class = null) => fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->$field, 'class' => $class])->render();
-        $query = $report->query($this->accountId(), $filters);
+        // the Month grouping has no matching rows in another period: the comparison stays in the totals box
+        $tableCompare = $cmpFilters && $filters['group'] !== 'month' ? $cmpFilters : null;
+        $query = $report->query($this->accountId(), $filters, $tableCompare);
         // no column clicked = the group's own order (spaces / units, Packages, other income; methods; months)
         if (!$request->input('order')) {
             $query->orderBy('group_sort');
@@ -237,7 +287,7 @@ trait ReportActions
             ->setRowId(fn ($row) => 'row-' . md5($row->group_key))
             // a click = the popup of this row's payments (the same filters + group)
             ->setRowAttr(['data-open-url' => fn ($row) => route($this->area() . '.reports.income.group',
-                ['key' => $row->group_key] + array_filter($filters))])
+                ['key' => $row->group_key, 'period' => 'custom'] + array_filter($filters))])
             ->setRowClass('report-click')
             ->editColumn('cash_in', $cell('cash_in', 'money-in'))
             ->editColumn('refunds', $cell('refunds', 'money-out'))
@@ -245,10 +295,16 @@ trait ReportActions
             ->editColumn('tax', $cell('tax'))
             ->editColumn('net', $cell('net'))
             ->editColumn('total', $cell('total', 'font-medium'))
-            ->rawColumns(['cash_in', 'refunds', 'withholding', 'tax', 'net', 'total', 'DT_RowAttr.data-open-url'])
-            ->only(['DT_RowId', 'group_label', 'payments', 'cash_in', 'refunds', 'withholding', 'tax', 'net', 'total'])
+            ->addColumn('cmp_net', fn ($row) => $tableCompare ? view('reportmodule::Report.partials.money', ['value' => $row->cmp_net, 'class' => 'text-slate-500'])->render() : '-')
+            ->addColumn('change', fn ($row) => $tableCompare ? view('reportmodule::Report.partials.change', ['change' => ReportPeriod::change($row->net, $row->cmp_net)])->render() : '-')
+            ->rawColumns(['cash_in', 'refunds', 'withholding', 'tax', 'net', 'total', 'cmp_net', 'change', 'DT_RowAttr.data-open-url'])
+            ->only(['DT_RowId', 'group_label', 'payments', 'cash_in', 'refunds', 'withholding', 'tax', 'net', 'total', 'cmp_net', 'change'])
             ->with('html', [
-                'income-totals' => view('reportmodule::Report.partials.income-totals', ['totals' => $totals])->render(),
+                'income-totals' => view('reportmodule::Report.partials.income-totals', ['totals' => $totals, 'cmp' => $cmpTotals,
+                    'range' => $report->rangeText($filters), 'cmpRange' => $cmpFilters ? $report->rangeText($cmpFilters) : null])->render(),
+                'income-cmp-title' => e($cmpFilters ? 'Net · ' . $report->rangeText($cmpFilters) : 'Compare'),
+                'income-foot-cmp_net' => $tableCompare ? number_format($cmpTotals->net, 2) : '',
+                'income-foot-change' => $tableCompare ? view('reportmodule::Report.partials.change', ['change' => ReportPeriod::change($totals->net, $cmpTotals->net)])->render() : '',
                 'income-group-title' => e(IncomeReport::GROUPS[$filters['group']]),
                 'income-foot-label' => e('Total (' . (int) $totals->groups_count . ' rows)'),
                 'income-foot-payments' => (int) $totals->payments,
@@ -265,7 +321,7 @@ trait ReportActions
     // the popup of one row: its payments (newest first, at most IncomeReport::GROUP_LIMIT) + the row's totals
     public function incomeGroup(Request $request, IncomeReport $report)
     {
-        $filters = $report->filters($request->all());
+        [$filters] = $this->incomeFilters($request, $report);
         $data = $report->groupPayments($this->accountId(), $filters, (string) $request->query('key', ''));
 
         return view('reportmodule::Report.income-group', $data + [
@@ -279,11 +335,15 @@ trait ReportActions
 
     public function incomeExcel(Request $request, IncomeReport $report)
     {
-        $filters = $report->filters($request->all());
+        [$filters, $cmpFilters] = $this->incomeFilters($request, $report);
         $totals = $report->totals($this->accountId(), $filters);
-        $this->logExport('Report: Income', $filters, (int) $totals->groups_count);
+        $cmpTotals = $cmpFilters ? $report->totals($this->accountId(), $cmpFilters) : null;
+        // the page's rule: the Month grouping compares the totals only
+        $rowCompare = $cmpFilters && $filters['group'] !== 'month' ? $cmpFilters : null;
+        $this->logExport('Report: Income', $filters + ['compare' => $cmpFilters ? $report->rangeText($cmpFilters) : null], (int) $totals->groups_count);
 
-        return Excel::download(new IncomeExport($report->query($this->accountId(), $filters), $totals, IncomeReport::GROUPS[$filters['group']], $report->rangeText($filters)),
+        return Excel::download(new IncomeExport($report->query($this->accountId(), $filters, $rowCompare), $totals, IncomeReport::GROUPS[$filters['group']],
+            $report->rangeText($filters), $cmpFilters ? $report->rangeText($cmpFilters) : null, $cmpTotals, (bool) $rowCompare),
             'income-' . now()->format('Y-m-d') . '.xlsx');
     }
 
@@ -299,17 +359,27 @@ trait ReportActions
         ]);
     }
 
-    private function expenseFilters(Request $request, ExpenseReport $report): array
+    // the Expenses filters with the picked period's days (ReportPeriod: default this month, no comparison); $compare = the
+    // comparison's filters instead (null = none)
+    private function expenseFilters(Request $request, ExpenseReport $report, bool $compare = false): ?array
     {
-        return $report->filters(['search' => $request->input('search.value', $request->input('search'))] + $request->except('search'));
+        $input = ['search' => $request->input('search.value', $request->input('search'))] + $request->except('search');
+        $period = ReportPeriod::resolve($input, 'month', 'none');
+        if ($compare) {
+            $cmpInput = ReportPeriod::compareInput($input, $period);
+            return $cmpInput ? $report->filters($cmpInput) : null;
+        }
+        return $report->filters(ReportPeriod::apply($input, $period));
     }
 
     // By category (DataTables): one row per block + category; the totals (json html) come with this table
     public function expensesCategories(Request $request, ExpenseReport $report)
     {
         $filters = $this->expenseFilters($request, $report);
+        $cmpFilters = $this->expenseFilters($request, $report, true);
         $totals = $report->totals($this->accountId(), $filters);
-        $query = $report->byCategory($this->accountId(), $filters);
+        $cmpTotals = $cmpFilters ? $report->totals($this->accountId(), $cmpFilters) : null;
+        $query = $cmpFilters ? $report->byCategoryCompared($this->accountId(), $filters, $cmpFilters) : $report->byCategory($this->accountId(), $filters);
         if (!$request->input('order')) {
             $query->orderBy('is_company')->orderBy('category');
         }
@@ -324,10 +394,16 @@ trait ReportActions
             ->setRowClass('report-click')
             ->editColumn('block', fn ($row) => view('reportmodule::Report.partials.expense-block', ['company' => (bool) $row->is_company])->render())
             ->editColumn('amount', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->amount, 'class' => 'money-out'])->render())
-            ->rawColumns(['block', 'amount', 'DT_RowAttr.data-drill-label'])
-            ->only(['DT_RowId', 'block', 'category', 'count', 'amount'])
+            ->addColumn('cmp_amount', fn ($row) => $cmpFilters ? view('reportmodule::Report.partials.money', ['value' => $row->cmp_amount, 'class' => 'text-slate-500'])->render() : '-')
+            ->addColumn('change', fn ($row) => $cmpFilters ? view('reportmodule::Report.partials.change', ['change' => ReportPeriod::change($row->amount, $row->cmp_amount, false)])->render() : '-')
+            ->rawColumns(['block', 'amount', 'cmp_amount', 'change', 'DT_RowAttr.data-drill-label'])
+            ->only(['DT_RowId', 'block', 'category', 'count', 'amount', 'cmp_amount', 'change'])
             ->with('html', [
-                'expense-totals' => view('reportmodule::Report.partials.expense-totals', ['totals' => $totals])->render(),
+                'expense-totals' => view('reportmodule::Report.partials.expense-totals', ['totals' => $totals, 'cmp' => $cmpTotals,
+                    'range' => $report->rangeText($filters), 'cmpRange' => $cmpFilters ? $report->rangeText($cmpFilters) : null])->render(),
+                'expense-cmp-title' => e($cmpFilters ? $report->rangeText($cmpFilters) : 'Compare'),
+                'expense-foot-cmp_amount' => $cmpTotals ? number_format($cmpTotals->total, 2) : '',
+                'expense-foot-change' => $cmpTotals ? view('reportmodule::Report.partials.change', ['change' => ReportPeriod::change($totals->total, $cmpTotals->total, false)])->render() : '',
                 'expense-foot-label' => e('Total (' . (int) $totals->categories . ' rows)'),
                 'expense-foot-count' => (int) $totals->count,
                 'expense-foot-amount' => number_format($totals->total, 2),
@@ -365,11 +441,13 @@ trait ReportActions
 
     public function expensesExcel(Request $request, ExpenseReport $report)
     {
-        $filters = $report->filters($request->all());
+        $filters = $this->expenseFilters($request, $report);
+        $cmpFilters = $this->expenseFilters($request, $report, true);
         $totals = $report->totals($this->accountId(), $filters);
-        $this->logExport('Report: Expenses', $filters, (int) $totals->count);
+        $cmpTotals = $cmpFilters ? $report->totals($this->accountId(), $cmpFilters) : null;
+        $this->logExport('Report: Expenses', $filters + ['compare' => $cmpFilters ? $report->rangeText($cmpFilters) : null], (int) $totals->count);
 
-        return Excel::download(new ExpenseExport($report, $this->accountId(), $filters, $totals), 'expenses-' . now()->format('Y-m-d') . '.xlsx');
+        return Excel::download(new ExpenseExport($report, $this->accountId(), $filters, $totals, $cmpFilters, $cmpTotals), 'expenses-' . now()->format('Y-m-d') . '.xlsx');
     }
 
     // ---- 5. Subscriptions ----
@@ -450,7 +528,7 @@ trait ReportActions
         $places = $this->placeOptions();
         return view('reportmodule::Report.occupancy', [
             'area' => $this->area(),
-            'initial' => ReportDates::thisMonth(),
+            'initial' => $this->linkedDates(),
             // no "All": occupancy needs dates (× = this month)
             // no All / Until today: occupancy needs dates, at most OccupancyReport::MAX_DAYS
             'presets' => array_values(array_filter(ReportDates::presets(), fn ($preset) => $preset['from'] !== null && ($preset['key'] ?? '') !== 'until_today')),
@@ -484,22 +562,39 @@ trait ReportActions
         return view('reportmodule::Report.pnl', ['area' => $this->area(), 'initial' => PnlReport::initial(), 'presets' => PnlReport::presets()]);
     }
 
+    // the P&L of the picked period (ReportPeriod: default this year, no comparison) [+ the comparison's totals]:
+    // [data, filters, compare range text | null]
+    private function pnlCompared(Request $request, PnlReport $report): array
+    {
+        $period = ReportPeriod::resolve($request->all(), 'year', 'none');
+        $filters = $report->filters(ReportPeriod::apply($request->all(), $period));
+        $data = $report->data($this->accountId(), $filters);
+        $cmpRange = null;
+        if (!$data['error'] && ($cmpInput = ReportPeriod::compareInput($request->all(), $period))) {
+            // the comparison = its totals only (one column); a running period's comparison stops on the same day (exact days)
+            $cmpFilters = $report->filters(['columns' => 'year', 'exact' => $period['cut']] + $cmpInput);
+            $data = $report->compare($data, $report->data($this->accountId(), $cmpFilters));
+            $cmpRange = $period['cut'] ? ReportPeriod::rangeText($period['cmp_from'], $period['cmp_to']) : $report->rangeText($cmpFilters);
+        }
+
+        return [$data, $filters, $cmpRange];
+    }
+
     // the report as html (json html; custom.js "Live report")
     public function pnlData(Request $request, PnlReport $report)
     {
-        $filters = $report->filters($request->all());
-        return response()->json(['html' => view('reportmodule::Report.partials.pnl-body', $report->data($this->accountId(), $filters)
-            + ['range' => $report->rangeText($filters), 'dates' => $report->datesText($filters)])->render()]);
+        [$data, $filters, $cmpRange] = $this->pnlCompared($request, $report);
+        return response()->json(['html' => view('reportmodule::Report.partials.pnl-body', $data
+            + ['range' => $report->rangeText($filters), 'dates' => $report->datesText($filters), 'cmpRange' => $cmpRange])->render()]);
     }
 
     public function pnlExcel(Request $request, PnlReport $report)
     {
-        $filters = $report->filters($request->all());
-        $data = $report->data($this->accountId(), $filters);
+        [$data, $filters, $cmpRange] = $this->pnlCompared($request, $report);
         abort_if($data['error'], 422, $data['error']);
-        $this->logExport('Report: Profit & Loss', $filters, count($data['income']) + count($data['expenses']));
+        $this->logExport('Report: Profit & Loss', $filters + ['compare' => $cmpRange], count($data['income']) + count($data['expenses']));
 
-        return Excel::download(new PnlExport($data, $report->rangeText($filters)), 'profit-loss-' . now()->format('Y-m-d') . '.xlsx');
+        return Excel::download(new PnlExport($data, $report->rangeText($filters), $cmpRange), 'profit-loss-' . now()->format('Y-m-d') . '.xlsx');
     }
 
     // ---- 8. Members ----
@@ -508,7 +603,7 @@ trait ReportActions
     {
         return view('reportmodule::Report.members', $this->placeOptions() + [
             'area' => $this->area(),
-            'initial' => ReportDates::thisMonth(),
+            'initial' => $this->linkedDates(),
             'days' => MemberReport::DEFAULT_DAYS,
             'min' => MemberReport::DEFAULT_MIN,
             'within' => MemberReport::DEFAULT_WITHIN,

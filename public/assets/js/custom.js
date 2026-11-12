@@ -2973,6 +2973,22 @@ document.addEventListener("reset", function (e) {
 }, true);
 
 // ------------------------------------------------------------------
+// Period picker (ReportModule Report.partials.period-picker, 2026-11-12): a value from the URL (data-initial, a link from the
+// Financial Dashboard) on the live report forms (datatables.js does it on the list pages); its show-if fields follow it, also after
+// Clear. Registered before "Live report" so its first load reads these values.
+// ------------------------------------------------------------------
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("form[data-report-live] [data-period-picker]").forEach(function (picker) {
+        picker.querySelectorAll("[data-initial]").forEach(function (el) { el.value = el.dataset.initial; });
+        applyConditions(picker.closest("form"));
+    });
+});
+document.addEventListener("reset", function (e) {
+    var form = e.target;
+    if (form.querySelector && form.querySelector("[data-period-picker]")) setTimeout(function () { applyConditions(form); });
+});
+
+// ------------------------------------------------------------------
 // Live report (ReportModule, 2026-11-07, Occupancy): form[data-report-live] — on every change (and on page load) its data-url
 // (json html) goes into data-target; Clear empties the filters (the date field goes back to its starting range) and reloads
 // ------------------------------------------------------------------
@@ -3012,6 +3028,8 @@ document.addEventListener("DOMContentLoaded", function () {
                     if (mine !== token) return;
                     body.innerHTML = json.html;
                     createIcons({ icons: window.icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
+                    // the new content is in (the Financial Dashboard draws its charts)
+                    body.dispatchEvent(new CustomEvent("report:loaded", { bubbles: true }));
                 })
                 .catch(function () {
                     if (mine === token) body.innerHTML = '<div class="box p-5 text-danger">Could not load the report, please try again.</div>';
@@ -3028,4 +3046,108 @@ document.addEventListener("DOMContentLoaded", function () {
         });
         load();
     });
+});
+
+// ------------------------------------------------------------------
+// Financial Dashboard (ReportModule, 2026-11-12): after each "Live report" load, the charts from [data-dash-data] on
+// canvas[data-dash-chart] — Chart.js 4.5.1 (the template's local vendors/chartjs.js, pushed by the page only).
+// Colours: the categorical order of the validated palette (blue, orange, aqua, yellow, magenta, green, violet, red), "Other" /
+// the comparison = grey; one y axis per chart.
+// ------------------------------------------------------------------
+var dashCharts = [];
+var DASH_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+var DASH_GREY = "#a3a3a3";
+function dashMoney(value) {
+    return Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function dashCanvas(root, key) {
+    return root.querySelector('canvas[data-dash-chart="' + key + '"]');
+}
+function dashDraw(root) {
+    var holder = root.querySelector("[data-dash-data]");
+    dashCharts.forEach(function (chart) { chart.destroy(); });
+    dashCharts = [];
+    if (!holder || !window.Chart) return;
+    var data = JSON.parse(holder.textContent);
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.color = "#64748b";
+    var grid = { color: "rgba(100, 116, 139, 0.12)" };
+    // tooltip: "label: 1,234.00" (axis = the value axis: y for upright bars / lines, x for side bars)
+    var moneyTip = function (axis) {
+        return { callbacks: { label: function (c) { return " " + c.dataset.label + ": " + dashMoney(c.parsed[axis]); } } };
+    };
+    var add = function (key, config) {
+        var canvas = dashCanvas(root, key);
+        if (canvas) dashCharts.push(new Chart(canvas, config));
+    };
+
+    // income / expenses bars + the net profit line per sub-period
+    add("trend", {
+        data: {
+            labels: data.trend.labels,
+            datasets: [
+                { type: "line", label: "Net profit", data: data.trend.net, borderColor: "#334155", backgroundColor: "#334155", borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.25, order: 0 },
+                { type: "bar", label: "Income", data: data.trend.income, backgroundColor: DASH_COLORS[0], borderRadius: 4, order: 1 },
+                { type: "bar", label: "Expenses", data: data.trend.expenses, backgroundColor: DASH_COLORS[1], borderRadius: 4, order: 1 },
+            ],
+        },
+        options: {
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: { legend: { position: "top", align: "end", labels: { boxWidth: 12 } }, tooltip: moneyTip("y") },
+            scales: { x: { grid: { display: false } }, y: { grid: grid, ticks: { callback: function (v) { return Number(v).toLocaleString("en-US"); } } } },
+        },
+    });
+
+    // donuts: income by subscription type, expenses by category ("Other" grey)
+    ["income", "expenses"].forEach(function (key) {
+        var slices = data[key] || [];
+        add(key, {
+            type: "doughnut",
+            data: {
+                labels: slices.map(function (s) { return s.label; }),
+                datasets: [{
+                    data: slices.map(function (s) { return s.value; }),
+                    backgroundColor: slices.map(function (s, i) { return /^Other \(/.test(s.label) ? DASH_GREY : DASH_COLORS[i % DASH_COLORS.length]; }),
+                    borderColor: "#fff", borderWidth: 2,
+                }],
+            },
+            options: {
+                maintainAspectRatio: false, cutout: "62%",
+                plugins: {
+                    legend: { position: "right", labels: { boxWidth: 12 } },
+                    tooltip: { callbacks: { label: function (c) {
+                        var total = c.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+                        return " " + c.label + ": " + dashMoney(c.parsed) + " (" + (total ? Math.round(c.parsed / total * 1000) / 10 : 0) + "%)";
+                    } } },
+                },
+            },
+        });
+    });
+
+    // top 10 members by paid (one series: no legend)
+    add("members", {
+        type: "bar",
+        data: { labels: (data.members || []).map(function (m) { return m.label; }), datasets: [{ label: "Paid", data: (data.members || []).map(function (m) { return m.value; }), backgroundColor: DASH_COLORS[0], borderRadius: 4 }] },
+        options: { indexAxis: "y", maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: moneyTip("x") },
+            scales: { x: { grid: grid, ticks: { maxRotation: 0, callback: function (v) { return Number(v).toLocaleString("en-US", { notation: "compact" }); } } }, y: { grid: { display: false } } } },
+    });
+
+    // occupancy % per space [+ the comparison in grey]
+    var occ = data.occupancy || {};
+    var occSets = [{ label: data.range, data: occ.values, backgroundColor: DASH_COLORS[0], borderRadius: 4 }];
+    if (occ.compare) occSets.push({ label: data.cmpRange, data: occ.compare, backgroundColor: DASH_GREY, borderRadius: 4 });
+    add("occupancy", {
+        type: "bar",
+        data: { labels: occ.labels || [], datasets: occSets },
+        options: {
+            indexAxis: "y", maintainAspectRatio: false,
+            plugins: { legend: { display: !!occ.compare, position: "top", align: "end", labels: { boxWidth: 12 } },
+                tooltip: { callbacks: { label: function (c) { return " " + c.dataset.label + ": " + (c.parsed.x === null ? "-" : c.parsed.x + "%"); } } } },
+            scales: { x: { min: 0, suggestedMax: 100, grid: grid, ticks: { callback: function (v) { return v + "%"; } } }, y: { grid: { display: false } } },
+        },
+    });
+}
+document.addEventListener("report:loaded", function (e) {
+    if (e.target.matches("[data-dashboard-body]")) dashDraw(e.target);
 });

@@ -87,6 +87,12 @@
         // ReportModule (docs/reports-plan.md, 2026-11-06): one item per report
         ['divider' => 'Reports'],
         [
+            'title' => 'Financial Dashboard',
+            'icon' => 'pie-chart',
+            'url' => route('account.reports.dashboard'),
+            'active' => request()->routeIs('account.reports.dashboard*'),
+        ],
+        [
             'title' => 'Outstanding & Credits',
             'icon' => 'scale',
             'url' => route('account.reports.outstanding'),

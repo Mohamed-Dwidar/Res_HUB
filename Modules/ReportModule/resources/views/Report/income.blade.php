@@ -3,7 +3,8 @@
 {{--
     Report 3 — Income (docs/reports-plan.md §3), cash basis: cash in + withholding − refunds by payment date, grouped by one of
     Space › Unit | Type | Plan | Method | Month (segmented buttons above the table). Toolbar rows: the date field (starts on this month,
-    presets Today / This month / Last month / All inside it) | type → space → unit (once a space is chosen) / plan, method, Clear.
+    presets Today / This month / Last month / All inside it; 2026-11-12: the period picker — Month / Quarter / Half-year / Year /
+    Custom + Compare with: the comparison's Net + Change columns, changes in the totals box) | type → space → unit (once a space is chosen) / plan, method, Clear.
 --}}
 @section('title')
     Income
@@ -19,7 +20,7 @@
 
     <form id="income-filters" class="report-toolbar mt-5">
         <div class="filter-bar">
-            @include('layoutmodule::partials.date-range-filter', ['initial' => $initial, 'presets' => \Modules\ReportModule\app\Services\ReportDates::presets()])
+            @include('reportmodule::Report.partials.period-picker', ['initial' => $initial])
         </div>
         <div class="filter-bar">
             <select name="subscription_type_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Type">
@@ -80,6 +81,8 @@
                     <th data-data="tax" data-name="tax" data-class="text-right whitespace-nowrap">Tax</th>
                     <th data-data="net" data-name="net" data-class="text-right whitespace-nowrap">Net (before tax)</th>
                     <th data-data="total" data-name="total" data-class="text-right whitespace-nowrap">Total</th>
+                    <th data-data="cmp_net" data-name="cmp_net" data-class="text-right whitespace-nowrap" data-visible-if="compare"><span data-html="income-cmp-title">Compare</span></th>
+                    <th data-data="change" data-orderable="false" data-class="text-right whitespace-nowrap" data-visible-if="compare">Change</th>
                 </tr>
             </thead>
             <tfoot>
@@ -92,6 +95,8 @@
                     <td class="text-right whitespace-nowrap" data-html="income-foot-tax"></td>
                     <td class="text-right whitespace-nowrap" data-html="income-foot-net"></td>
                     <td class="text-right whitespace-nowrap" data-html="income-foot-total"></td>
+                    <td class="text-right whitespace-nowrap" data-html="income-foot-cmp_net"></td>
+                    <td class="text-right whitespace-nowrap" data-html="income-foot-change"></td>
                 </tr>
             </tfoot>
         </table>

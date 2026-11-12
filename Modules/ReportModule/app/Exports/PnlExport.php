@@ -14,8 +14,18 @@ class PnlExport implements FromArray, WithEvents, WithTitle, ShouldAutoSize
 {
     private array $boldRows = [1, 2];
 
-    public function __construct(private array $data, private string $range)
+    // $cmpRange (2026-11-12): the comparison period → two more columns (its totals + the change)
+    public function __construct(private array $data, private string $range, private ?string $cmpRange = null)
     {
+    }
+
+    private function extra(array $row): array
+    {
+        if (!$this->cmpRange) {
+            return [];
+        }
+        $compare = (float) ($row['compare'] ?? 0);
+        return [$compare, round((float) $row['total'] - $compare, 2)];
     }
 
     public function title(): string
@@ -25,7 +35,7 @@ class PnlExport implements FromArray, WithEvents, WithTitle, ShouldAutoSize
 
     public function array(): array
     {
-        $line = fn ($label, $row) => array_merge([$label], array_values($row['months']), [$row['total']]);
+        $line = fn ($label, $row) => array_merge([$label], array_values($row['months']), [$row['total']], $this->extra($row));
         $section = function ($label) use (&$out) {
             $out[] = [$label];
             $this->boldRows[] = count($out);
@@ -35,8 +45,8 @@ class PnlExport implements FromArray, WithEvents, WithTitle, ShouldAutoSize
             $this->boldRows[] = count($out);
         };
         $totals = $this->data['totals'];
-        $out = [['Profit & Loss · ' . $this->range . ' · cash basis, income net before tax'],
-            array_merge([''], array_values($this->data['months']), ['Total'])];
+        $out = [['Profit & Loss · ' . $this->range . ($this->cmpRange ? ' vs ' . $this->cmpRange : '') . ' · cash basis, income net before tax'],
+            array_merge([''], array_values($this->data['months']), ['Total'], $this->cmpRange ? [$this->cmpRange, 'Change'] : [])];
 
         $section('Income');
         foreach ($this->data['income'] as $row) {
@@ -51,7 +61,8 @@ class PnlExport implements FromArray, WithEvents, WithTitle, ShouldAutoSize
         $total('Net profit', $totals['net']);
         $margin = $totals['margin'];
         $out[] = array_merge(['Margin'], array_map(fn ($ym) => $margin[$ym] === null ? null : $margin[$ym] / 100, array_keys($this->data['months'])),
-            [$margin['total'] === null ? null : $margin['total'] / 100]);
+            [$margin['total'] === null ? null : $margin['total'] / 100],
+            $this->cmpRange ? [($margin['compare'] ?? null) === null ? null : $margin['compare'] / 100] : []);
         $this->marginRow = count($out);
         $out[] = [];
         $section('Below the line · advances (not in the profit)');
@@ -68,7 +79,7 @@ class PnlExport implements FromArray, WithEvents, WithTitle, ShouldAutoSize
     {
         return [AfterSheet::class => function (AfterSheet $event) {
             $sheet = $event->sheet->getDelegate();
-            $last = Coordinate::stringFromColumnIndex(count($this->data['months']) + 2);
+            $last = Coordinate::stringFromColumnIndex(count($this->data['months']) + 2 + ($this->cmpRange ? 2 : 0));
             foreach ($this->boldRows as $row) {
                 $sheet->getStyle('A' . $row . ':' . $last . $row)->getFont()->setBold(true);
             }

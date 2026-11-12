@@ -96,6 +96,7 @@ return [
         // ReportModule (docs/reports-plan.md, 2026-11-06): one key per report = the whole account's data + its Excel / PDF;
         // no preset, never in Front desk
         'Reports' => [
+            'reports.dashboard' => 'Report: Financial Dashboard',
             'reports.outstanding' => 'Report: Outstanding & credits',
             'reports.member_statement' => 'Report: Member statement',
             'reports.income' => 'Report: Income',

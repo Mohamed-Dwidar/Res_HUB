@@ -4113,3 +4113,79 @@ tr.report-click:hover td {
 [data-modal-back][hidden] {
     display: none;
 }
+
+/* ------------------------------------------------------------------
+   Period picker + comparison (ReportModule Report.partials.period-picker / change, 2026-11-12)
+   ------------------------------------------------------------------ */
+.period-picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+.period-picker > select,
+.period-picker .date-range-filter {
+    width: auto;
+    min-width: 9rem;
+}
+.period-picker__compare {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.period-picker__compare input {
+    width: 9.5rem;
+}
+.change-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+    color: #64748b;
+}
+.change-badge--good { color: rgb(var(--color-success)); }
+.change-badge--bad { color: rgb(var(--color-danger)); }
+.money-box__item .change-badge { display: block; margin-top: 0.15rem; }
+.pnl-table__compare { color: #64748b; }
+
+/* Financial Dashboard */
+.dash-period { font-size: 0.875rem; }
+.dash-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 1rem;
+}
+.dash-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 1.1rem 1.25rem;
+    transition: box-shadow 0.15s;
+}
+a.dash-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1); }
+.dash-card__label { font-size: 0.8rem; color: #64748b; }
+.dash-card__value { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dash-card__change { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; font-size: 0.75rem; }
+.dash-card__change .change-badge { font-size: 0.85rem; }
+.dash-card__note { font-size: 0.75rem; color: #94a3b8; }
+.dash-charts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+.dash-chart { padding: 1rem 1.25rem; min-width: 0; }
+.dash-chart--wide { grid-column: 1 / -1; }
+.dash-chart__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+.dash-chart__link { font-size: 0.8rem; color: rgb(var(--color-primary)); white-space: nowrap; }
+.dash-chart__canvas { position: relative; height: 16rem; }
+.dash-chart__canvas--tall { height: 20rem; }
+.dash-chart__empty { padding: 2rem 0; text-align: center; color: #94a3b8; font-size: 0.875rem; }
+@media (max-width: 1023px) {
+    .dash-charts { grid-template-columns: minmax(0, 1fr); }
+}

@@ -135,14 +135,32 @@ class IncomeReport
         ROUND(SUM(IF(t.type = 'refund', -t.amount, t.amount)), 2) as total,
         COUNT(*) as payments";
 
-    // one row per group (DataTables / Excel): group_key, group_label, group_sort, cash_in, refunds, withholding, tax, net, total, payments
-    public function query($accountId, array $filters)
+    // one row per group (DataTables / Excel): group_key, group_label, group_sort, cash_in, refunds, withholding, tax, net, total, payments;
+    // $cmpFilters (2026-11-12, the period picker's comparison) adds cmp_total / cmp_net (a group found only there comes in with zeros)
+    public function query($accountId, array $filters, ?array $cmpFilters = null)
     {
-        $grouped = DB::query()->fromSub($this->rows($accountId, $filters), 't')
-            ->groupBy('t.group_key')
-            ->selectRaw('t.group_key, MAX(t.group_label) as group_label, MIN(t.group_sort) as group_sort,' . self::MONEY);
+        if (!$cmpFilters) {
+            $grouped = DB::query()->fromSub($this->rows($accountId, $filters), 't')
+                ->groupBy('t.group_key')
+                ->selectRaw('t.group_key, MAX(t.group_label) as group_label, MIN(t.group_sort) as group_sort,' . self::MONEY);
 
-        return DB::query()->fromSub($grouped, 'g')->selectRaw('g.*, ROUND(g.total - g.tax, 2) as net');
+            return DB::query()->fromSub($grouped, 'g')->selectRaw('g.*, ROUND(g.total - g.tax, 2) as net');
+        }
+
+        // the two periods' rows in one set: the comparison's money in c_* (its amount / tax 0), cur = counted payments
+        $columns = 'group_key, group_sort, group_label, type';
+        $source = DB::query()->fromSub($this->rows($accountId, $filters), 'a')
+            ->selectRaw("$columns, amount, tax_factor, own_tax, 0 as c_amount, 0 as c_tax_factor, 0 as c_own_tax, 1 as cur")
+            ->unionAll(DB::query()->fromSub($this->rows($accountId, $cmpFilters), 'b')
+                ->selectRaw("$columns, 0, 0, 0, amount, tax_factor, own_tax, 0"));
+        $grouped = DB::query()->fromSub($source, 't')
+            ->groupBy('t.group_key')
+            ->selectRaw('t.group_key, MAX(t.group_label) as group_label, MIN(t.group_sort) as group_sort,'
+                . str_replace('COUNT(*) as payments', 'SUM(t.cur) as payments', self::MONEY) . ",
+                ROUND(SUM(IF(t.type = 'refund', -t.c_amount, t.c_amount)), 2) as cmp_total,
+                ROUND(SUM(IF(t.type = 'refund', -1, 1) * (t.c_amount * t.c_tax_factor + t.c_own_tax)), 2) as cmp_tax");
+
+        return DB::query()->fromSub($grouped, 'g')->selectRaw('g.*, ROUND(g.total - g.tax, 2) as net, ROUND(g.cmp_total - g.cmp_tax, 2) as cmp_net');
     }
 
     const GROUP_LIMIT = 500;

@@ -15,15 +15,29 @@ use Modules\ReservationModule\app\Models\Reservation;
  * Net profit = Income − Expenses.
  * Below the line (NOT in the profit): advances given (company Cash Out of the system category `advances`), repaid in cash (Cash In
  * of the system income category `advance_repayment`), deducted from salaries (employee_advance_moves `deduct`, by payroll month).
+ * Columns (2026-11-12): month | quarter | half | year (the page's "Columns" select) or day (the dashboard's chart of a short period);
+ * `exact` = the days as given (the dashboard: the same days as the Income / Expenses reports), else whole months.
+ * The running column (the business date inside it) = "(to date)" + its change vs the same days of the previous column (running()).
+ * compare() adds a comparison period's totals to each line (rows found only there come in with zeros).
  */
 class PnlReport
 {
-    const MAX_MONTHS = 36;
+    const MAX_MONTHS = 120;
+
+    const MAX_COLUMNS = 36;
+
+    const COLUMNS = ['month' => 'Months', 'quarter' => 'Quarters', 'half' => 'Half-years', 'year' => 'Years'];
 
     public function filters(array $input): array
     {
         $date = fn ($value) => $value && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
-        return ['date_from' => $date($input['date_from'] ?? null), 'date_to' => $date($input['date_to'] ?? null)];
+        $columns = (string) ($input['columns'] ?? '');
+        return [
+            'date_from' => $date($input['date_from'] ?? null),
+            'date_to' => $date($input['date_to'] ?? null),
+            'columns' => array_key_exists($columns, self::COLUMNS) || $columns === 'day' ? $columns : 'month',
+            'exact' => !empty($input['exact']),
+        ];
     }
 
     // the page's quick ranges (no All: a P&L needs months)
@@ -50,6 +64,9 @@ class PnlReport
     public function range(array $filters): array
     {
         [$from, $to] = $filters['date_from'] ? [$filters['date_from'], $filters['date_to'] ?: $filters['date_from']] : self::initial();
+        if (!empty($filters['exact'])) {
+            return [Carbon::parse($from)->startOfDay(), Carbon::parse($to)->startOfDay()];
+        }
         $from = Carbon::parse($from)->startOfMonth();
         $to = Carbon::parse($to)->endOfMonth()->startOfDay();
         $thisMonth = today()->endOfMonth()->startOfDay();
@@ -66,14 +83,32 @@ class PnlReport
         return $from->format('M Y') . ($from->isSameMonth($to) ? '' : ' → ' . $to->format('M Y'));
     }
 
-    // ['Y-m' => 'Nov 2026', ...]
-    private function months(Carbon $from, Carbon $to): array
+    // the column a SQL period ('Y-m', or 'Y-m-d' for day columns) belongs to: [key, label]
+    private function bucket(string $period, string $columns): array
     {
-        $months = [];
-        for ($month = $from->copy(); $month->lte($to); $month->addMonthNoOverflow()) {
-            $months[$month->format('Y-m')] = $month->format('M Y');
+        $date = Carbon::parse(strlen($period) === 7 ? $period . '-01' : $period);
+        return match ($columns) {
+            'day' => [$period, $date->format('d M')],
+            'quarter' => [$date->year . '-Q' . $date->quarter, 'Q' . $date->quarter . ' ' . $date->year],
+            'half' => [$date->year . '-H' . ($date->month <= 6 ? 1 : 2), 'H' . ($date->month <= 6 ? 1 : 2) . ' ' . $date->year],
+            'year' => [(string) $date->year, (string) $date->year],
+            default => [$date->format('Y-m'), $date->format('M Y')],
+        };
+    }
+
+    // [key => label] of the columns of the range + [SQL period => column key]
+    private function columns(Carbon $from, Carbon $to, string $columns): array
+    {
+        $list = [];
+        $map = [];
+        $step = $columns === 'day' ? 'addDay' : 'addMonthNoOverflow';
+        for ($period = $columns === 'day' ? $from->copy() : $from->copy()->startOfMonth(); $period->lte($to); $period->$step()) {
+            $raw = $period->format($columns === 'day' ? 'Y-m-d' : 'Y-m');
+            [$key, $label] = $this->bucket($raw, $columns);
+            $list[$key] = $label;
+            $map[$raw] = $key;
         }
-        return $months;
+        return [$list, $map];
     }
 
     /**
@@ -83,18 +118,26 @@ class PnlReport
     public function data($accountId, array $filters): array
     {
         [$from, $to] = $this->range($filters);
-        $months = $this->months($from, $to);
-        if (count($months) > self::MAX_MONTHS) {
-            return ['error' => 'Choose at most ' . self::MAX_MONTHS . ' months.', 'months' => $months];
+        $columns = $filters['columns'] ?? 'month';
+        if ($columns === 'day' && $from->diffInDays($to) > 62) {
+            $columns = 'month';
+        }
+        if ($columns !== 'day' && $from->copy()->startOfMonth()->diffInMonths($to) >= self::MAX_MONTHS) {
+            return ['error' => 'Choose at most ' . self::MAX_MONTHS . ' months.', 'months' => []];
+        }
+        [$months, $this->map] = $this->columns($from, $to, $columns);
+        if (count($months) > self::MAX_COLUMNS) {
+            return ['error' => 'At most ' . self::MAX_COLUMNS . ' columns: choose fewer months or bigger columns (quarters, half-years, years).', 'months' => []];
         }
         $range = [$from->toDateString(), $to->toDateString()];
+        $fmt = $columns === 'day' ? '%Y-%m-%d' : '%Y-%m';
 
         // income: the Income report's rows, net before tax, by type + month
         $incomeReport = app(IncomeReport::class);
         $incomeRows = DB::query()->fromSub($incomeReport->rows($accountId, $incomeReport->filters(['group' => 'type',
                 'date_from' => $range[0], 'date_to' => $range[1]])), 't')
             ->groupBy('t.group_key', 'ym')
-            ->selectRaw("t.group_key as k, MAX(t.group_label) as label, MIN(t.group_sort) as sort, DATE_FORMAT(t.paid_at, '%Y-%m') as ym,
+            ->selectRaw("t.group_key as k, MAX(t.group_label) as label, MIN(t.group_sort) as sort, DATE_FORMAT(t.paid_at, '{$fmt}') as ym,
                 ROUND(SUM(IF(t.type = 'refund', -t.amount, t.amount)) - SUM(IF(t.type = 'refund', -1, 1) * (t.amount * t.tax_factor + t.own_tax)), 2) as amount")
             ->get();
 
@@ -108,7 +151,7 @@ class PnlReport
                     WHEN e.is_company = 1 THEN CONCAT('company-', e.expense_category_id) ELSE CONCAT('c', e.expense_category_id) END as k,
                 MAX(CONCAT(IF(e.is_company = 1 AND COALESCE(c.generated_key, '') NOT IN ('salaries', 'advances'), 'Company · ', ''),
                     COALESCE(NULLIF(c.name_en, ''), c.name_ar, 'No category'))) as label,
-                DATE_FORMAT(e.spent_at, '%Y-%m') as ym, ROUND(SUM(e.amount), 2) as amount")
+                DATE_FORMAT(e.spent_at, '{$fmt}') as ym, ROUND(SUM(e.amount), 2) as amount")
             ->get();
 
         $repaid = DB::table('payments as p')->join('income_categories as c', 'c.id', '=', 'p.income_category_id')
@@ -116,14 +159,14 @@ class PnlReport
             ->where('c.generated_key', 'advance_repayment')
             ->whereBetween('p.paid_at', $range)
             ->groupBy('ym')
-            ->selectRaw("DATE_FORMAT(p.paid_at, '%Y-%m') as ym, ROUND(SUM(IF(p.type = 'refund', -p.amount, p.amount)), 2) as amount")
+            ->selectRaw("DATE_FORMAT(p.paid_at, '{$fmt}') as ym, ROUND(SUM(IF(p.type = 'refund', -p.amount, p.amount)), 2) as amount")
             ->pluck('amount', 'ym');
 
         $deducted = DB::table('employee_advance_moves')
             ->where('account_id', $accountId)->whereNull('deleted_at')->where('type', 'deduct')
             ->whereBetween('period', $range)
             ->groupBy('ym')
-            ->selectRaw("DATE_FORMAT(period, '%Y-%m') as ym, ROUND(SUM(amount), 2) as amount")
+            ->selectRaw("DATE_FORMAT(period, '{$fmt}') as ym, ROUND(SUM(amount), 2) as amount")
             ->pluck('amount', 'ym');
 
         $income = $this->pivot($incomeRows, $months)->sortBy('sort')->values()->all();
@@ -145,14 +188,82 @@ class PnlReport
         $change = $this->line('change', 'Net advances outstanding (change)', collect($given['months'])
             ->map(fn ($amount, $ym) => round($amount - $repaidLine['months'][$ym] - $deductedLine['months'][$ym], 2))->all());
 
-        return [
+        $data = [
             'error' => null,
+            'columns' => $columns,
             'months' => $months,
             'income' => $income,
             'expenses' => $expenses,
             'totals' => ['income' => $totalIncome, 'expenses' => $totalExpenses, 'net' => $net, 'margin' => $margin],
             'below' => [$given, $repaidLine, $deductedLine, $change],
+            'running' => null,
         ];
+
+        return empty($filters['exact']) && $columns !== 'day' ? $this->running($accountId, $data, $from, $columns) : $data;
+    }
+
+    // a column's own first / last day (the period it names: month, quarter, half-year, year)
+    private function columnBounds(string $key, string $columns): array
+    {
+        $from = match ($columns) {
+            'quarter' => Carbon::create((int) substr($key, 0, 4), ((int) substr($key, -1) - 1) * 3 + 1, 1),
+            'half' => Carbon::create((int) substr($key, 0, 4), (int) substr($key, -1) === 1 ? 1 : 7, 1),
+            'year' => Carbon::create((int) $key, 1, 1),
+            default => Carbon::parse($key . '-01'),
+        };
+        $months = ['quarter' => 3, 'half' => 6, 'year' => 12][$columns] ?? 1;
+        return [$from, $from->copy()->addMonthsNoOverflow($months - 1)->endOfMonth()->startOfDay()];
+    }
+
+    /**
+     * The column still running on the business date (the last one) is marked "to date": its change is computed against the same
+     * number of days of the previous column (like ReportPeriod's running-period rule), not the whole previous column.
+     * $data['running'] = [key, to, prev_range]; every line gets 'prev_to_date' = the previous column's amount over those days.
+     */
+    private function running($accountId, array $data, Carbon $rangeFrom, string $columns): array
+    {
+        [$today] = Reservation::businessToday();
+        $today = $today->copy()->startOfDay();
+        // year keys come back from array_keys() as ints
+        $keys = array_map('strval', array_keys($data['months']));
+        $key = $this->bucket($today->format('Y-m-d'), $columns)[0];
+        $index = array_search($key, $keys, true);
+        if ($index === false) {
+            return $data;
+        }
+        [$start, $end] = $this->columnBounds($key, $columns);
+        if ($today->gte($end)) {
+            return $data;
+        }
+        $data['months'][$key] .= ' (to date)';
+        $data['running'] = ['key' => $key, 'to' => $today->format(Reservation::DATE_FORMAT), 'prev_range' => null];
+        if ($index === 0) {
+            return $data;
+        }
+        // the same days of the previous column: its start + (today − this column's start); both start no earlier than the range
+        $start = max($start, $rangeFrom);
+        [$prevStart, $prevEnd] = $this->columnBounds($keys[$index - 1], $columns);
+        $prevStart = max($prevStart, $rangeFrom);
+        $prevTo = min($prevEnd, $prevStart->copy()->addDays((int) $start->diffInDays($today)));
+        $prev = $this->data($accountId, ['date_from' => $prevStart->toDateString(), 'date_to' => $prevTo->toDateString(), 'columns' => 'year', 'exact' => 1]);
+        if ($prev['error']) {
+            return $data;
+        }
+        $data['running']['prev_range'] = ReportPeriod::rangeText($prevStart, $prevTo);
+        foreach (['income', 'expenses'] as $part) {
+            $other = collect($prev[$part])->keyBy('key');
+            foreach ($data[$part] as $i => $row) {
+                $data[$part][$i]['prev_to_date'] = (float) ($other[$row['key']]['total'] ?? 0);
+            }
+        }
+        foreach (['income', 'expenses', 'net'] as $line) {
+            $data['totals'][$line]['prev_to_date'] = (float) $prev['totals'][$line]['total'];
+        }
+        foreach ($data['below'] as $i => $row) {
+            $data['below'][$i]['prev_to_date'] = (float) ($prev['below'][$i]['total'] ?? 0);
+        }
+
+        return $data;
     }
 
     private function line($key, $label, array $months): array
@@ -160,10 +271,19 @@ class PnlReport
         return ['key' => $key, 'label' => $label, 'months' => $months, 'total' => round(array_sum($months), 2)];
     }
 
-    // [ym => amount] → every month of the range (0 when missing)
+    // [SQL period => column key] of the current data() call
+    private array $map = [];
+
+    // [SQL period => amount] → every column of the range (summed into its column, 0 when missing)
     private function fill($values, array $months): array
     {
-        return collect(array_keys($months))->mapWithKeys(fn ($ym) => [$ym => round((float) ($values[$ym] ?? 0), 2)])->all();
+        $out = array_fill_keys(array_keys($months), 0.0);
+        foreach ($values as $period => $amount) {
+            if (isset($this->map[$period])) {
+                $out[$this->map[$period]] += (float) $amount;
+            }
+        }
+        return array_map(fn ($amount) => round($amount, 2), $out);
     }
 
     // rows of (k, label, [sort], ym, amount) → one line per k
@@ -175,10 +295,43 @@ class PnlReport
         });
     }
 
+    /**
+     * The comparison period's totals on every line of $data: line['compare'] (+ rows found only in $cmp, with zero columns);
+     * totals income / expenses / net get ['compare'], margin ['compare'] too. $data['compared'] = true.
+     */
+    public function compare(array $data, array $cmp): array
+    {
+        if ($data['error'] || $cmp['error']) {
+            return $data;
+        }
+        $zero = array_fill_keys(array_keys($data['months']), 0.0);
+        foreach (['income', 'expenses'] as $part) {
+            $other = collect($cmp[$part])->keyBy('key');
+            $rows = collect($data[$part])->map(fn ($row) => $row + ['compare' => (float) ($other[$row['key']]['total'] ?? 0)]);
+            foreach ($other as $key => $row) {
+                if (!$rows->firstWhere('key', $key)) {
+                    $rows->push(['key' => $key, 'label' => $row['label'], 'months' => $zero, 'total' => 0.0, 'sort' => $row['sort'] ?? '', 'compare' => (float) $row['total'],
+                        'prev_to_date' => 0.0]);
+                }
+            }
+            $data[$part] = ($part === 'income' ? $rows->sortBy('sort') : $rows)->values()->all();
+        }
+        foreach (['income', 'expenses', 'net'] as $key) {
+            $data['totals'][$key]['compare'] = (float) $cmp['totals'][$key]['total'];
+        }
+        $data['totals']['margin']['compare'] = $cmp['totals']['margin']['total'];
+        foreach ($data['below'] as $index => $row) {
+            $data['below'][$index]['compare'] = (float) ($cmp['below'][$index]['total'] ?? 0);
+        }
+        $data['compared'] = true;
+
+        return $data;
+    }
+
     // the dates the totals box shows: "01-01-2026 → 30-11-2026"
     public function datesText(array $filters): string
     {
         [$from, $to] = $this->range($filters);
-        return $from->format(Reservation::DATE_FORMAT) . ' → ' . $to->copy()->endOfMonth()->format(Reservation::DATE_FORMAT);
+        return $from->format(Reservation::DATE_FORMAT) . ' → ' . (!empty($filters['exact']) ? $to : $to->copy()->endOfMonth())->format(Reservation::DATE_FORMAT);
     }
 }

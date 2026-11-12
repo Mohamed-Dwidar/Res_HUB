@@ -86,6 +86,13 @@
     // ReportModule (docs/reports-plan.md, 2026-11-06): a "Reports" section with the reports the role has
     $reports = array_values(array_filter([
         [
+            'title' => 'Financial Dashboard',
+            'can' => 'reports.dashboard',
+            'icon' => 'pie-chart',
+            'url' => route('employee.reports.dashboard'),
+            'active' => request()->routeIs('employee.reports.dashboard*'),
+        ],
+        [
             'title' => 'Outstanding & Credits',
             'can' => 'reports.outstanding',
             'icon' => 'scale',
