@@ -16,7 +16,7 @@
 
 @section('content')
     @include('reportmodule::Report.partials.intro', ['text' => 'Income − expenses, month by month.',
-        'details' => 'Cash basis, whole months (at most ' . \Modules\ReportModule\app\Services\PnlReport::MAX_COLUMNS . ' columns). The small % under a column = the change from the column before it; with a comparison, its totals + the change are the last two columns. Income = the Income report\'s Net (before tax): cash in + withholding − refunds of reservations, packages and other income counted as income, by the payment date, without VAT / table tax; by subscription type (package payments = Packages). Expenses = every Cash Out by its date (shift and company), by category; Salaries = what was paid. Net profit = Income − Expenses. Advances are not an expense: given / repaid in cash / deducted from salaries are shown below the line and are not in the profit.'])
+        'details' => 'Cash basis, whole months (at most ' . \Modules\ReportModule\app\Services\PnlReport::MAX_COLUMNS . ' columns). Each cell: the amount, then (with "Change in columns") the compared amount in grey + the change — vs the same period last year or the column before; a column still running is compared on the same days. Total: vs the picked comparison period, else vs the columns\' compared range. Income = the Income report\'s Net (before tax): cash in + withholding − refunds of reservations, packages and other income counted as income, by the payment date, without VAT / table tax; by subscription type (package payments = Packages). Expenses = every Cash Out by its date (shift and company), by category; Salaries = what was paid. Net profit = Income − Expenses. Advances are not an expense: given / repaid in cash / deducted from salaries are shown below the line and are not in the profit.'])
 
     <form id="pnl-filters" class="report-toolbar mt-5" data-report-live data-url="{{ route($area . '.reports.pnl.data') }}" data-target="[data-pnl-body]">
         <div class="filter-bar">
@@ -24,6 +24,11 @@
             <select name="columns" class="{{ config('layoutmodule.form.select') }}" aria-label="Columns">
                 @foreach (\Modules\ReportModule\app\Services\PnlReport::COLUMNS as $value => $label)
                     <option value="{{ $value === 'month' ? '' : $value }}">Columns: {{ $label }}</option>
+                @endforeach
+            </select>
+            <select name="col_change" class="{{ config('layoutmodule.form.select') }}" aria-label="Change in columns">
+                @foreach (\Modules\ReportModule\app\Services\PnlReport::COL_CHANGES as $value => $label)
+                    <option value="{{ $value === 'last_year' ? '' : $value }}">Change in columns: {{ $label }}</option>
                 @endforeach
             </select>
             @include('layoutmodule::partials.datatable-clear')

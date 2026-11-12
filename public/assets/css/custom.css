@@ -4103,6 +4103,48 @@ tr.report-click:hover td {
 .pnl-table__sum {
     font-weight: 600;
 }
+/* 2026-11-12: each cell = amount (bold) / compared amount + its label (small, grey) / the change badge; the first column stays
+   while the table scrolls sideways inside its card (solid backgrounds, so the numbers don't show through) */
+.pnl-table td:first-child,
+.pnl-table th:first-child {
+    z-index: 1;
+    box-shadow: 1px 0 0 rgb(226 232 240);
+}
+.pnl-table td {
+    vertical-align: top;
+}
+.pnl-table tr.row-net > td:first-child {
+    background: linear-gradient(rgb(var(--color-success) / 0.08), rgb(var(--color-success) / 0.08)), #fff;
+}
+.pnl-table tr.row-net.row-net--negative > td:first-child {
+    background: linear-gradient(rgb(var(--color-danger) / 0.06), rgb(var(--color-danger) / 0.06)), #fff;
+}
+.pnl-table__section td:first-child {
+    background: rgb(248 250 252) !important;
+}
+.pnl-cell__value {
+    font-weight: 600;
+}
+.pnl-cell__cmp {
+    margin-top: 0.15rem;
+    font-size: 0.72rem;
+    color: #64748b;
+}
+.pnl-cell__label {
+    color: #94a3b8;
+}
+.change-badge--pill {
+    margin-top: 0.2rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: rgb(241 245 249);
+}
+.change-badge--pill.change-badge--good {
+    background: rgb(var(--color-success) / 0.12);
+}
+.change-badge--pill.change-badge--bad {
+    background: rgb(var(--color-danger) / 0.1);
+}
 
 /* Members report (2026-11-11): the Inactive tab's own fields (custom.js [data-tab-only]) + the phone = a WhatsApp link */
 .filter-bar__group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }

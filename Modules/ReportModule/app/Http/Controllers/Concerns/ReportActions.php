@@ -572,7 +572,7 @@ trait ReportActions
         $cmpRange = null;
         if (!$data['error'] && ($cmpInput = ReportPeriod::compareInput($request->all(), $period))) {
             // the comparison = its totals only (one column); a running period's comparison stops on the same day (exact days)
-            $cmpFilters = $report->filters(['columns' => 'year', 'exact' => $period['cut']] + $cmpInput);
+            $cmpFilters = $report->filters(['columns' => 'year', 'exact' => $period['cut'], 'col_change' => 'none'] + $cmpInput);
             $data = $report->compare($data, $report->data($this->accountId(), $cmpFilters));
             $cmpRange = $period['cut'] ? ReportPeriod::rangeText($period['cmp_from'], $period['cmp_to']) : $report->rangeText($cmpFilters);
         }

@@ -17,7 +17,8 @@ use Modules\ReservationModule\app\Models\Reservation;
  * of the system income category `advance_repayment`), deducted from salaries (employee_advance_moves `deduct`, by payroll month).
  * Columns (2026-11-12): month | quarter | half | year (the page's "Columns" select) or day (the dashboard's chart of a short period);
  * `exact` = the days as given (the dashboard: the same days as the Income / Expenses reports), else whole months.
- * The running column (the business date inside it) = "(to date)" + its change vs the same days of the previous column (running()).
+ * The running column (the business date inside it) = "(to date)"; each column's compared amount ("Change in columns": same period
+ * last year (default) / previous column / none, a running column on the same days) = columnCompare().
  * compare() adds a comparison period's totals to each line (rows found only there come in with zeros).
  */
 class PnlReport
@@ -28,6 +29,11 @@ class PnlReport
 
     const COLUMNS = ['month' => 'Months', 'quarter' => 'Quarters', 'half' => 'Half-years', 'year' => 'Years'];
 
+    const COL_CHANGES = ['last_year' => 'vs same period last year', 'previous' => 'vs previous column', 'none' => 'none'];
+
+    // months per column
+    const SPAN = ['month' => 1, 'quarter' => 3, 'half' => 6, 'year' => 12];
+
     public function filters(array $input): array
     {
         $date = fn ($value) => $value && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
@@ -37,6 +43,8 @@ class PnlReport
             'date_to' => $date($input['date_to'] ?? null),
             'columns' => array_key_exists($columns, self::COLUMNS) || $columns === 'day' ? $columns : 'month',
             'exact' => !empty($input['exact']),
+            // what each column is compared with (the page's "Change in columns"): '' = last_year
+            'col_change' => in_array($input['col_change'] ?? '', ['previous', 'none'], true) ? $input['col_change'] : 'last_year',
         ];
     }
 
@@ -170,9 +178,7 @@ class PnlReport
             ->pluck('amount', 'ym');
 
         $income = $this->pivot($incomeRows, $months)->sortBy('sort')->values()->all();
-        $expenses = $this->pivot($expenseRows->where('k', '!=', 'advances'), $months)
-            ->sortBy(fn ($row) => ($row['key'] === 'salaries' ? '0' : (str_starts_with($row['key'], 'company-') ? '2' : '1')) . mb_strtolower($row['label']))
-            ->values()->all();
+        $expenses = $this->sortExpenses($this->pivot($expenseRows->where('k', '!=', 'advances'), $months));
 
         $sum = fn (array $rows) => $this->line(null, null, collect(array_keys($months))
             ->mapWithKeys(fn ($ym) => [$ym => round(collect($rows)->sum(fn ($row) => $row['months'][$ym]), 2)])->all());
@@ -197,9 +203,21 @@ class PnlReport
             'totals' => ['income' => $totalIncome, 'expenses' => $totalExpenses, 'net' => $net, 'margin' => $margin],
             'below' => [$given, $repaidLine, $deductedLine, $change],
             'running' => null,
+            'col_compare' => null,
         ];
 
-        return empty($filters['exact']) && $columns !== 'day' ? $this->running($accountId, $data, $from, $columns) : $data;
+        if (!empty($filters['exact']) || $columns === 'day') {
+            return $data;
+        }
+        $data = $this->running($data, $columns);
+        return $filters['col_change'] === 'none' ? $data : $this->columnCompare($accountId, $data, $from, $to, $columns, $filters['col_change']);
+    }
+
+    // Salaries first, then the shift categories, then company Cash Out of other categories; by name
+    private function sortExpenses($rows): array
+    {
+        return collect($rows)->sortBy(fn ($row) => ($row['key'] === 'salaries' ? '0' : (str_starts_with($row['key'], 'company-') ? '2' : '1')) . mb_strtolower($row['label']))
+            ->values()->all();
     }
 
     // a column's own first / last day (the period it names: month, quarter, half-year, year)
@@ -216,52 +234,91 @@ class PnlReport
     }
 
     /**
-     * The column still running on the business date (the last one) is marked "to date": its change is computed against the same
-     * number of days of the previous column (like ReportPeriod's running-period rule), not the whole previous column.
-     * $data['running'] = [key, to, prev_range]; every line gets 'prev_to_date' = the previous column's amount over those days.
+     * The column still running on the business date (the last one) is marked "to date" (its label + $data['running'] = [key, to]);
+     * columnCompare() compares it on the same days only.
      */
-    private function running($accountId, array $data, Carbon $rangeFrom, string $columns): array
+    private function running(array $data, string $columns): array
     {
         [$today] = Reservation::businessToday();
         $today = $today->copy()->startOfDay();
-        // year keys come back from array_keys() as ints
-        $keys = array_map('strval', array_keys($data['months']));
         $key = $this->bucket($today->format('Y-m-d'), $columns)[0];
-        $index = array_search($key, $keys, true);
-        if ($index === false) {
+        // year keys come back from array_keys() as ints
+        if (!in_array($key, array_map('strval', array_keys($data['months'])), true)) {
             return $data;
         }
-        [$start, $end] = $this->columnBounds($key, $columns);
+        [, $end] = $this->columnBounds($key, $columns);
         if ($today->gte($end)) {
             return $data;
         }
         $data['months'][$key] .= ' (to date)';
-        $data['running'] = ['key' => $key, 'to' => $today->format(Reservation::DATE_FORMAT), 'prev_range' => null];
-        if ($index === 0) {
-            return $data;
-        }
-        // the same days of the previous column: its start + (today − this column's start); both start no earlier than the range
-        $start = max($start, $rangeFrom);
-        [$prevStart, $prevEnd] = $this->columnBounds($keys[$index - 1], $columns);
-        $prevStart = max($prevStart, $rangeFrom);
-        $prevTo = min($prevEnd, $prevStart->copy()->addDays((int) $start->diffInDays($today)));
-        $prev = $this->data($accountId, ['date_from' => $prevStart->toDateString(), 'date_to' => $prevTo->toDateString(), 'columns' => 'year', 'exact' => 1]);
-        if ($prev['error']) {
-            return $data;
-        }
-        $data['running']['prev_range'] = ReportPeriod::rangeText($prevStart, $prevTo);
-        foreach (['income', 'expenses'] as $part) {
-            $other = collect($prev[$part])->keyBy('key');
-            foreach ($data[$part] as $i => $row) {
-                $data[$part][$i]['prev_to_date'] = (float) ($other[$row['key']]['total'] ?? 0);
+        $data['running'] = ['key' => $key, 'to' => $today->format(Reservation::DATE_FORMAT), 'date' => $today];
+
+        return $data;
+    }
+
+    /**
+     * Each column's compared amount ("Change in columns"): last_year = the same column a year earlier, previous = the column
+     * before it (the first column: the one before the range) — ONE more read of the range shifted back (12 months / one column).
+     * A running column is compared on the same days (last year: up to the same date; previous: the previous column's start + the
+     * same number of days). Every line gets cmp_months [key => amount] + cmp_total; margin cmp_months / cmp_total;
+     * $data['col_compare'] = [mode, labels [key => compared column's label], range (the compared days)]. Lines found only in the
+     * compared range come in with zero columns.
+     */
+    private function columnCompare($accountId, array $data, Carbon $from, Carbon $to, string $columns, string $mode): array
+    {
+        $shift = $mode === 'last_year' ? 12 : self::SPAN[$columns];
+        $cmpFrom = $from->copy()->subMonthsNoOverflow($shift);
+        $cmpTo = $to->copy()->subMonthsNoOverflow($shift)->endOfMonth()->startOfDay();
+        $running = $data['running'];
+        if ($running) {
+            if ($mode === 'last_year') {
+                $cmpTo = $running['date']->copy()->subYearNoOverflow();
+            } else {
+                [$start] = $this->columnBounds($running['key'], $columns);
+                $start = max($start, $from);
+                $prevStart = $start->copy()->subMonthsNoOverflow($shift);
+                [, $prevEnd] = $this->columnBounds($this->bucket($prevStart->format('Y-m-d'), $columns)[0], $columns);
+                $cmpTo = min($prevEnd, $prevStart->copy()->addDays((int) $start->diffInDays($running['date'])));
             }
         }
+        $cmp = $this->data($accountId, ['date_from' => $cmpFrom->toDateString(), 'date_to' => $cmpTo->toDateString(),
+            'columns' => $columns, 'exact' => true, 'col_change' => 'none']);
+        if ($cmp['error']) {
+            return $data;
+        }
+
+        // the n-th column ↔ the compared range's n-th column
+        $keys = array_map('strval', array_keys($data['months']));
+        $cmpKeys = array_map('strval', array_keys($cmp['months']));
+        $labels = [];
+        foreach ($keys as $n => $key) {
+            $labels[$key] = isset($cmpKeys[$n]) ? $cmp['months'][$cmpKeys[$n]]
+                . (($running['key'] ?? null) === $key ? ' (to ' . $cmpTo->format('d-m') . ')' : '') : null;
+        }
+        $pick = fn (?array $line) => ['cmp_months' => collect($keys)->mapWithKeys(fn ($key, $n) =>
+            [$key => (float) ($line['months'][$cmpKeys[$n] ?? ''] ?? 0)])->all(), 'cmp_total' => (float) ($line['total'] ?? 0)];
+        $zero = array_fill_keys(array_keys($data['months']), 0.0);
+
+        foreach (['income', 'expenses'] as $part) {
+            $other = collect($cmp[$part])->keyBy('key');
+            $rows = collect($data[$part])->map(fn ($row) => $pick($other[$row['key']] ?? null) + $row);
+            foreach ($other as $key => $row) {
+                if (!$rows->firstWhere('key', $key)) {
+                    $rows->push($pick($row) + ['key' => $key, 'label' => $row['label'], 'months' => $zero, 'total' => 0.0, 'sort' => $row['sort'] ?? '']);
+                }
+            }
+            $data[$part] = $part === 'income' ? $rows->sortBy('sort')->values()->all() : $this->sortExpenses($rows);
+        }
         foreach (['income', 'expenses', 'net'] as $line) {
-            $data['totals'][$line]['prev_to_date'] = (float) $prev['totals'][$line]['total'];
+            $data['totals'][$line] = $pick($cmp['totals'][$line]) + $data['totals'][$line];
         }
+        $cmpMargin = $cmp['totals']['margin'];
+        $data['totals']['margin_cmp'] = ['cmp_months' => collect($keys)->mapWithKeys(fn ($key, $n) => [$key => $cmpMargin[$cmpKeys[$n] ?? ''] ?? null])->all(),
+            'cmp_total' => $cmpMargin['total']];
         foreach ($data['below'] as $i => $row) {
-            $data['below'][$i]['prev_to_date'] = (float) ($prev['below'][$i]['total'] ?? 0);
+            $data['below'][$i] = $pick($cmp['below'][$i] ?? null) + $row;
         }
+        $data['col_compare'] = ['mode' => $mode, 'labels' => $labels, 'range' => ReportPeriod::rangeText($cmpFrom, $cmpTo)];
 
         return $data;
     }
@@ -310,8 +367,7 @@ class PnlReport
             $rows = collect($data[$part])->map(fn ($row) => $row + ['compare' => (float) ($other[$row['key']]['total'] ?? 0)]);
             foreach ($other as $key => $row) {
                 if (!$rows->firstWhere('key', $key)) {
-                    $rows->push(['key' => $key, 'label' => $row['label'], 'months' => $zero, 'total' => 0.0, 'sort' => $row['sort'] ?? '', 'compare' => (float) $row['total'],
-                        'prev_to_date' => 0.0]);
+                    $rows->push(['key' => $key, 'label' => $row['label'], 'months' => $zero, 'total' => 0.0, 'sort' => $row['sort'] ?? '', 'compare' => (float) $row['total']]);
                 }
             }
             $data[$part] = ($part === 'income' ? $rows->sortBy('sort') : $rows)->values()->all();
