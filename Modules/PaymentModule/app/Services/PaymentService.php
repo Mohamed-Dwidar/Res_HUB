@@ -217,7 +217,7 @@ class PaymentService
 
         $amount = $this->assertAmount($data['amount'] ?? 0);
         if ($type === 'payment') {
-            $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
+            $this->assertMethod($accountId, $data['payment_method_id'] ?? 0, $system);
         }
 
         $paidAt = $this->recordDate($accountId, $data['paid_at'] ?? null, $creator);
@@ -271,7 +271,7 @@ class PaymentService
     {
         // a Cash In made by HR (an advance repayment, H4): changed / cancelled from the advance only
         if ($this->isSystem($payment)) {
-            return self::SYSTEM_LOCKED;
+            return $this->lockedMessage($payment);
         }
         if ($this->isOwner($user)) {
             return null;
@@ -316,7 +316,7 @@ class PaymentService
         }
         // withholding: no money received, no method
         if ($payment->type !== 'withholding') {
-            $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
+            $this->assertMethod($accountId, $data['payment_method_id'] ?? 0, false, (int) $payment->payment_method_id);
         }
         if (!$target) {
             $this->assertCategory($accountId, $data['income_category_id'] ?? 0, false, (int) $payment->income_category_id);
@@ -393,7 +393,7 @@ class PaymentService
         }
         $payment = $this->findOne($accountId, $id);
         if (!$system && $this->isSystem($payment)) {
-            throw ValidationException::withMessages(['delete_reason' => self::SYSTEM_LOCKED]);
+            throw ValidationException::withMessages(['delete_reason' => $this->lockedMessage($payment)]);
         }
         $reason = $this->assertReason($reason, 'delete_reason', 'Write why this payment is deleted.');
         $closing = $this->closedShiftOf($payment);
@@ -424,7 +424,7 @@ class PaymentService
             throw ValidationException::withMessages(['amount' => 'Only a payment can be refunded (not a refund or a withholding).']);
         }
         if ($this->isSystem($payment)) {
-            throw ValidationException::withMessages(['amount' => self::SYSTEM_LOCKED]);
+            throw ValidationException::withMessages(['amount' => $this->lockedMessage($payment)]);
         }
 
         $amount = $this->assertAmount($data['amount'] ?? 0);
@@ -631,13 +631,18 @@ class PaymentService
         }
     }
 
-    private function assertMethod($accountId, $methodId): void
+    private function assertMethod($accountId, $methodId, bool $system = false, int $currentId = 0): void
     {
         if (empty($methodId)) {
             throw ValidationException::withMessages(['payment_method_id' => 'Choose the payment method.']);
         }
-        if (!PaymentMethod::where('account_id', $accountId)->whereKey((int) $methodId)->exists()) {
+        $method = PaymentMethod::where('account_id', $accountId)->find((int) $methodId);
+        if (!$method) {
             throw ValidationException::withMessages(['payment_method_id' => 'This payment method is not one of yours.']);
+        }
+        // a system method (Offset, 2026-11-12) only for the system (OffsetService) or kept by an edit
+        if ($method->isGenerated() && !$system && $method->id !== $currentId) {
+            throw ValidationException::withMessages(['payment_method_id' => '"' . $method->name . '" is used by the system only, choose another method.']);
         }
     }
 
@@ -659,8 +664,20 @@ class PaymentService
     // a Cash In made by the system (its other-income category has a generated_key: an advance repayment)
     public function isSystem(Payment $payment): bool
     {
+        // the Cash In of a settled Cash Out (2026-11-12, OffsetService): changed / deleted with its Cash Out only
+        if ((int) $payment->offset_expense_id) {
+            return true;
+        }
         // the list rows load incomeCategory (no extra query); else one
         return !$payment->payable_id && $payment->income_category_id && $payment->incomeCategory?->generated_key !== null;
+    }
+
+    // why a system Cash In is locked
+    public function lockedMessage(Payment $payment): string
+    {
+        return (int) $payment->offset_expense_id
+            ? 'This Cash In settles a Cash Out (Offset): change or delete it from that Cash Out (#' . (\Modules\PaymentModule\app\Models\Expense::withTrashed()->find($payment->offset_expense_id)?->expense_no ?? $payment->offset_expense_id) . ').'
+            : self::SYSTEM_LOCKED;
     }
 
     private function assertRefundable(Payment $payment, float $amount, ?Payment $except = null): void

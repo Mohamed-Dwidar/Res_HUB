@@ -20,6 +20,7 @@ class GeneralSettingRequest extends FormRequest
         return [
             'withholding_enabled' => 'required|boolean',
             'vat_enabled' => 'required|boolean',
+            'cash_out_offset_enabled' => 'required|boolean',
             'today_hours_from' => 'required|integer|min:0|max:23',
             'today_hours_to' => 'required|integer|gt:today_hours_from|max:30',
             'renewal_days' => 'required|integer|min:1|max:90',
@@ -39,7 +40,7 @@ class GeneralSettingRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'withholding_enabled' => 'withholding tax', 'vat_enabled' => 'VAT',
+            'withholding_enabled' => 'withholding tax', 'vat_enabled' => 'VAT', 'cash_out_offset_enabled' => 'settling a Cash Out against a reservation',
             'today_hours_from' => 'timeline from', 'today_hours_to' => 'timeline to', 'renewal_days' => 'renewals window',
             'late_entry_hours' => 'late entry hours', 'expense_review_amount' => 'expenses to review from',
             'vat_rate' => 'VAT rate', 'table_tax_rate' => 'table tax rate', 'tax_start_date' => 'tax start date',

@@ -8,6 +8,8 @@
 @section('modal-size', 'lg')
 
 @section('actions')
+    {{-- Back to the popup page it was opened from (the reservation / package / member view; custom.js [data-modal-back]: shown only then) --}}
+    <button type="button" class="btn btn-secondary" data-modal-back hidden><i data-lucide="arrow-left"></i> Back</button>
     @if ($hasAttachment)
         <a href="{{ route($area . '.expenses.attachment', $expense->id) }}" target="_blank" class="btn btn-secondary"><i data-lucide="paperclip"></i> Receipt</a>
     @endif
@@ -26,6 +28,11 @@
         <div><dt>Category</dt><dd>{{ $expense->expenseCategory?->name ?? '-' }}</dd></div>
         <div><dt>Amount</dt><dd>@include('paymentmodule::Expense.partials.row-amount')</dd></div>
         <div><dt>Paid By</dt><dd>{{ $expense->method_name }}</dd></div>
+        {{-- settled against a reservation / package (2026-11-12, OffsetService) --}}
+        @if ($expense->isOffset() && ($settledPayment = $expense->offsetPayment))
+            <div><dt>Settles</dt><dd>{{ app(\Modules\PaymentModule\app\Services\PaymentService::class)->payableName($settledPayment->payable) }}
+                · <a href="{{ route($area . '.payments.show', $settledPayment->id) }}" data-modal class="font-medium">Cash In #{{ $settledPayment->payment_no }}</a> (Offset)</dd></div>
+        @endif
         <div><dt>Date</dt><dd>{{ $expense->spent_at?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</dd></div>
         <div><dt>Shift</dt><dd>
             @if ($expense->is_company)

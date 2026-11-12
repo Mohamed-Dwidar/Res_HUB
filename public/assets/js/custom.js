@@ -156,6 +156,8 @@ var appModal = {
                 var size = content && content.dataset.modalSize ? content.dataset.modalSize : "md";
                 modal.querySelector(".app-modal__dialog").dataset.size = size;
                 createIcons({ icons: icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
+                // a Back button ([data-modal-back], e.g. a Cash In / Cash Out view): only when there is a page to go back to
+                body.querySelectorAll("[data-modal-back]").forEach(function (button) { button.hidden = !self.stack.length; });
                 initForms(body);
                 tailwind.Modal.getOrCreateInstance(modal).show();
                 setTimeout(function () {
@@ -2367,6 +2369,14 @@ function messageMarkSent(sent) {
         if (sub) sub.textContent = sent.title.replace(/^Last sent: /, "Sent: ");
     });
 }
+
+// a popup page's Back button ([data-modal-back], 2026-11-12: the Cash In / Cash Out views): the previous popup page
+document.addEventListener("click", function (e) {
+    var back = e.target.closest && e.target.closest("#app-modal [data-modal-back]");
+    if (!back) return;
+    e.preventDefault();
+    appModal.back();
+});
 
 // the popup's Back ([data-message-back], a link to the reservation view): the previous popup page when there is one (capture,
 // before the [data-modal] link handler), else the link opens the reservation view

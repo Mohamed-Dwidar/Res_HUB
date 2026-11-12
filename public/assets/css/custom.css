@@ -3926,6 +3926,27 @@ td.renewal-row__action > .wa-btn {
     visibility: visible;
     opacity: 1;
 }
+/* the tooltip to the left of the (i), vertically centred (a table's last column: the reservation / package Cash In list) */
+.info-tip--left {
+    vertical-align: middle;
+    margin-left: 0.25rem;
+}
+.info-tip--left::after {
+    top: 50%;
+    left: auto;
+    right: calc(100% + 0.4rem);
+    transform: translateY(-50%);
+    white-space: normal;
+    /* the theme colour, not the reports' dark grey (user 2026-11-12) */
+    background: rgb(var(--color-primary));
+}
+/* a table whose cells show tooltips: not clipped on computer screens (phones keep the side scroll) */
+@media (min-width: 768px) {
+    .table-wrap--tips {
+        overflow: visible;
+    }
+}
+
 /* rows of a report toolbar: the date row, then the filters row (with Clear) */
 .report-toolbar {
     display: flex;
@@ -4087,3 +4108,8 @@ tr.report-click:hover td {
 .filter-bar__group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
 .filter-bar__group[hidden] { display: none; }
 .member-wa-link { color: rgb(22 163 74); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+
+/* the popup's Back button stays hidden until custom.js finds a page to go back to (.btn would override [hidden]) */
+[data-modal-back][hidden] {
+    display: none;
+}

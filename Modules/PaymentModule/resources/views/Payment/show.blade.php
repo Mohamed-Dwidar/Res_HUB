@@ -9,6 +9,8 @@
 @section('modal-size', 'lg')
 
 @section('actions')
+    {{-- Back to the popup page it was opened from (the reservation / package / member view; custom.js [data-modal-back]: shown only then) --}}
+    <button type="button" class="btn btn-secondary" data-modal-back hidden><i data-lucide="arrow-left"></i> Back</button>
     <a href="{{ route($area . '.payments.receipt', $payment->id) }}" target="_blank" class="btn btn-secondary"><i data-lucide="printer"></i> Receipt</a>
     {{-- refund: the account and employees (into the refunder's shift); edit: the owner, or an employee for their own cash in
          while their shift is open (PaymentService::canEdit()); delete: the account owner only --}}
@@ -29,6 +31,11 @@
         <div><dt>Date</dt><dd>{{ $payment->paid_at?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</dd></div>
         <div><dt>Amount</dt><dd class="font-medium {{ $payment->type === 'refund' ? 'text-danger' : 'text-success' }}">{{ number_format($payment->signed_amount, 2) }}</dd></div>
         <div><dt>Payment Method</dt><dd>{{ $payment->paymentMethod?->name ?? '-' }}</dd></div>
+        {{-- the Cash In of a settled Cash Out (2026-11-12, OffsetService): changed / deleted from that Cash Out --}}
+        @if ($payment->offset_expense_id && ($settledBy = $payment->offsetExpense))
+            <div><dt>Settles Cash Out</dt><dd><a href="{{ route($area . '.expenses.show', $settledBy->id) }}" data-modal class="font-medium">#{{ $settledBy->expense_no }}</a> · {{ $settledBy->item }}
+                <div class="text-xs text-slate-500">Changed or deleted with that Cash Out.</div></dd></div>
+        @endif
         <div><dt>Reference</dt><dd>{{ $payment->reference ?: '-' }}</dd></div>
         @if ($payment->type === 'withholding')
             <div><dt>Certificate</dt><dd>

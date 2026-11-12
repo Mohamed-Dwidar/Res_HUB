@@ -93,20 +93,38 @@ class ExpenseService
      */
     public function create($accountId, array $data, Model $creator): Expense
     {
-        $values = $this->values($accountId, $data);
+        // settled against a reservation / package (2026-11-12, OffsetService): method = the system "Offset" + a matching Cash In
+        $settle = null;
+        if (!empty($data['settle_for'])) {
+            if (!$this->offsets()->enabled($accountId)) {
+                throw ValidationException::withMessages(['settle_for' => 'Settling a Cash Out against a reservation is turned off (Settings › General).']);
+            }
+            $settle = $this->offsets()->payable($accountId, (string) $data['settle_for']);
+            $data['payment_method_id'] = $this->offsets()->method($accountId)->id;
+        }
+        $values = $this->values($accountId, $data, null, false, (bool) $settle);
         // the date (2026-10-27): the business date of the recording time; only the account owner gives another one (reports only)
         $values['spent_at'] = app(PaymentService::class)->recordDate($accountId, $data['spent_at'] ?? null, $creator)->toDateString();
 
-        return DB::transaction(function () use ($accountId, $data, $creator, $values) {
+        return DB::transaction(function () use ($accountId, $data, $creator, $values, $settle) {
             // Reference no.: optional for every method, may repeat (2026-11-03, user; was required + unique for "Needs Reference No.")
             $number = $this->nextNumber($accountId);
             $expense = new Expense($values + ['account_id' => $accountId, 'expense_no' => $number]);
             $expense->creatable()->associate($creator);
             $expense->save();
             $this->storeAttachment($expense, $data['attachment'] ?? null);
+            if ($settle) {
+                $this->offsets()->attach($expense, $settle, $creator);
+            }
 
             return $expense;
         });
+    }
+
+    // the Cash Out ↔ reservation settling (resolved when used: it needs PaymentService / ShiftClosingService)
+    private function offsets(): OffsetService
+    {
+        return app(OffsetService::class);
     }
 
     /**
@@ -130,6 +148,10 @@ class ExpenseService
         }
         if (!$this->isOwner($user)) {
             $data['spent_at'] = $expense->spent_at;
+        }
+        // a settled Cash Out keeps its "Offset" method (its Cash In follows below)
+        if ($expense->isOffset()) {
+            $data['payment_method_id'] = $expense->payment_method_id;
         }
         $values = $this->values($accountId, $data, $expense);
         // the owner changes the date (2026-11-08): to the recorder's shift covering it (ShiftClosingService::planDateMove())
@@ -160,6 +182,10 @@ class ExpenseService
                 $closing ? $this->shiftService->paymentChanged($closing, 'expense_edit', $expense, $user, $reason, $changes)
                     : $this->shiftService->logOpenChange('expense_edit', $expense, $user, trim((string) ($data['change_reason'] ?? '')) ?: null, $changes);
             }
+            // its Cash In follows (amount, date, shift)
+            if ($expense->isOffset()) {
+                $this->offsets()->sync($expense->fresh(), $user, $reason ?? (trim((string) ($data['change_reason'] ?? '')) ?: null));
+            }
 
             return $expense;
         });
@@ -182,6 +208,10 @@ class ExpenseService
             $changes = ['before' => $this->snapshot($expense), 'after' => null];
             $closing ? $this->shiftService->paymentChanged($closing, 'expense_delete', $expense, $user, $reason, $changes)
                 : $this->shiftService->logOpenChange('expense_delete', $expense, $user, $reason, $changes);
+            // a settled Cash Out: its Cash In goes too
+            if ($expense->isOffset()) {
+                $this->offsets()->remove($expense, $reason, $user);
+            }
 
             return $expense;
         });
@@ -240,7 +270,8 @@ class ExpenseService
 
     // the checked values of the form (category / method of the account, amount > 0); the current ones stay valid when inactive;
     // a system category (generated_key: Advances, Salaries) only for createCompany() ($company)
-    private function values($accountId, array $data, ?Expense $expense = null, bool $company = false): array
+    // $offset: the system method "Offset" allowed (a new settled Cash Out); an edit keeps its own
+    private function values($accountId, array $data, ?Expense $expense = null, bool $company = false, bool $offset = false): array
     {
         $categoryId = (int) ($data['expense_category_id'] ?? 0);
         $category = ExpenseCategory::where('account_id', $accountId)->find($categoryId);
@@ -254,6 +285,9 @@ class ExpenseService
         $method = PaymentMethod::where('account_id', $accountId)->find($methodId);
         if (!$method || (!$method->is_active && $methodId !== (int) $expense?->payment_method_id)) {
             throw ValidationException::withMessages(['payment_method_id' => 'Choose how the money was paid.']);
+        }
+        if ($method->isGenerated() && !$offset && $methodId !== (int) $expense?->payment_method_id) {
+            throw ValidationException::withMessages(['payment_method_id' => '"' . $method->name . '" is used by the system only (Settle against reservation), choose another method.']);
         }
         $amount = round((float) ($data['amount'] ?? 0), 2);
         if ($amount <= 0) {

@@ -64,7 +64,9 @@ trait MemberActions
     private function table(array $filters, $id = null)
     {
         // + how many reservations (not deleted, counted: no cancelled / pending ..., user 2026-10-27), one subquery
-        $query = $this->memberService->listQuery($this->accountId())->withCount(['reservations' => fn ($query) => $query->counted()]);
+        $query = $this->memberService->listQuery($this->accountId())->withCount(['reservations' => fn ($query) => $query->counted()])
+            // + all of them (cancelled included): the commitment badge next to the phone (2026-11-12)
+            ->withCount('reservations as all_reservations_count');
         if ($id) {
             $query->whereKey($id);
         }
@@ -80,11 +82,17 @@ trait MemberActions
             ->addColumn('reservations_html', fn ($member) => $member->reservations_count
                 ? '<a href="' . route($this->area() . '.reservations.index', ['member_id' => $member->id]) . '" class="font-medium">' . $member->reservations_count . '</a>'
                 : '<span class="text-slate-400">0</span>')
+            // the commitment badge (2026-11-12, own column so it sorts): not cancelled ÷ all; no reservations = "-", sorted lowest
+            ->addColumn('commitment', fn ($member) => $member->all_reservations_count
+                ? view('membermodule::partials.commitment', ['total' => (int) $member->all_reservations_count,
+                    'cancelled' => (int) $member->all_reservations_count - (int) $member->reservations_count])->render()
+                : '<span class="text-slate-400">-</span>')
+            ->orderColumn('commitment', 'CASE WHEN all_reservations_count = 0 THEN -1 ELSE reservations_count / all_reservations_count END $1')
             ->editColumn('created_at', fn ($member) => $member->created_at->format('Y-m-d'))
             ->addColumn('actions', fn ($member) => view('membermodule::Account.partials.row-actions', compact('member'))->render())
-            ->rawColumns(['name_html', 'reservations_html', 'actions'])
+            ->rawColumns(['name_html', 'reservations_html', 'commitment', 'actions'])
             // send only the table columns (not all the member fields)
-            ->only(['DT_RowId', 'name_html', 'company', 'job', 'reservations_html', 'created_at', 'actions']);
+            ->only(['DT_RowId', 'name_html', 'company', 'job', 'reservations_html', 'commitment', 'created_at', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more

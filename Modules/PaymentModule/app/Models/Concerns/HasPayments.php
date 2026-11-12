@@ -41,7 +41,7 @@ trait HasPayments
     // its payments for the payments block of its view (oldest first)
     public function paymentsList(): Collection
     {
-        return $this->payments()->with('paymentMethod', 'creatable.userable')->orderBy('paid_at')->orderBy('payment_no')->get();
+        return $this->payments()->with('paymentMethod', 'creatable.userable', 'offsetExpense.expenseCategory')->orderBy('paid_at')->orderBy('payment_no')->get();
     }
 
     // paid now, from its payments: payments + withholding - refunds (the stored paid_amount is this value after a refresh)

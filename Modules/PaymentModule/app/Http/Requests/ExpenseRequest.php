@@ -21,7 +21,11 @@ class ExpenseRequest extends FormRequest
             'expense_category_id' => ['required', 'integer', $ownedBy('expense_categories', $expense?->expense_category_id)],
             'item' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0.01|max:99999999',
-            'payment_method_id' => ['required', 'integer', $ownedBy('payment_methods', $expense?->payment_method_id)],
+            // a settled Cash Out (2026-11-12): the system method "Offset" (ExpenseService), no method sent
+            'payment_method_id' => $this->filled('settle_for') && !$expense || $expense?->isOffset()
+                ? ['exclude'] : ['required', 'integer', $ownedBy('payment_methods', $expense?->payment_method_id)],
+            // "Settle against reservation" (add only; "reservation-12" / "package-5"), checked by OffsetService
+            'settle_for' => $expense ? ['exclude'] : ['nullable', 'string', 'max:30', 'regex:/^(reservation|package)-\d+$/'],
             // an employee's edit keeps the recorded date (ExpenseService::update())
             'spent_at' => $expense && $this->routeIs('employee.*') ? ['exclude'] : 'required|date',
             'reference' => 'nullable|string|max:255',
@@ -38,7 +42,7 @@ class ExpenseRequest extends FormRequest
 
     public function attributes(): array
     {
-        return ['expense_category_id' => 'category', 'payment_method_id' => 'payment method', 'spent_at' => 'date', 'change_reason' => 'reason', 'attachment' => 'receipt'];
+        return ['expense_category_id' => 'category', 'payment_method_id' => 'payment method', 'spent_at' => 'date', 'change_reason' => 'reason', 'attachment' => 'receipt', 'settle_for' => 'reservation to settle'];
     }
 
     public function messages(): array

@@ -72,6 +72,8 @@ class Payment extends Model
         'date_changed_at' => 'datetime',
         'shift_closing_id' => 'integer',
         'refund_of' => 'integer',
+        // the Cash Out it settles (2026-11-12, OffsetService; 0 = none)
+        'offset_expense_id' => 'integer',
     ];
 
     public function account(): BelongsTo
@@ -103,6 +105,12 @@ class Payment extends Model
     public function withholdingCertificate(): BelongsTo
     {
         return $this->belongsTo(WithholdingCertificate::class);
+    }
+
+    // the Cash Out a settling Cash In belongs to (OffsetService), deleted ones too
+    public function offsetExpense(): BelongsTo
+    {
+        return $this->belongsTo(Expense::class, 'offset_expense_id')->withTrashed();
     }
 
     // the collector's shift closing (not fillable: set by ShiftClosingService only; 0 = the collector's open shift)

@@ -51,7 +51,10 @@ class PaymentMethodAccountModuleController extends Controller
             ->setRowId(fn ($method) => 'row-' . $method->id)
             ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
             ->orderColumn('sort_order', fn ($query, $order) => $query->orderBy('sort_order', $order)->orderBy('id', $order))
-            ->addColumn('name_html', fn ($method) => '<a href="' . route('account.payment-methods.edit', $method->id) . '" data-modal class="font-medium">' . e($method->name) . '</a>')
+            ->addColumn('name_html', fn ($method) => $method->isGenerated()
+                // a system method (Offset, 2026-11-12): not edited / deleted
+                ? '<span class="font-medium">' . e($method->name) . '</span> <span class="badge badge-inactive">System</span>'
+                : '<a href="' . route('account.payment-methods.edit', $method->id) . '" data-modal class="font-medium">' . e($method->name) . '</a>')
             ->addColumn('status', fn ($method) => view('layoutmodule::partials.row-toggle', [
                 'url' => route('account.payment-methods.active', $method->id), 'row' => $method->id, 'name' => 'is_active', 'checked' => $method->is_active,
             ])->render())

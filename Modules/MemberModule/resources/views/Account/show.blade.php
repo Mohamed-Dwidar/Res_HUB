@@ -24,6 +24,11 @@
         <div>
             <div class="text-lg font-medium">{{ $member->name }}</div>
             <div class="mt-1 text-sm text-slate-500">{{ $member->phone }}</div>
+            {{-- the commitment under the phone (2026-11-12) --}}
+            @if ($confirmed + $cancelled > 0)
+                <div class="mt-1 text-sm text-slate-500">
+                    @include('membermodule::partials.commitment', ['total' => $confirmed + $cancelled, 'cancelled' => $cancelled, 'withText' => true])</div>
+            @endif
         </div>
         <div class="money-box money-box--center ml-auto">
             <div class="money-box__item money-box__item--paid" title="Reservations not cancelled">

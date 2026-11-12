@@ -23,6 +23,8 @@ class PaymentMethod extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'requires_reference' => 'boolean',
+        // a system method (2026-11-12: 'offset', OffsetService): never offered in the forms, not edited / deleted (not fillable)
+        'generated_key' => 'string',
         'sort_order' => 'integer',
     ];
 
@@ -54,5 +56,10 @@ class PaymentMethod extends Model
         }
 
         return $query;
+    }
+
+    public function isGenerated(): bool
+    {
+        return $this->generated_key !== null;
     }
 }

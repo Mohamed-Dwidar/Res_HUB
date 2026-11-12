@@ -1,6 +1,8 @@
 {{--
     The expense fields (add / edit): category, item, amount, method, date, notes, receipt (PDF / image, private).
     $expense, $categories, $methods; $closedShift (edit): an expense of a closed shift needs a reason (logged on the shift).
+    $settleOptions (add, only while Settings › General allows it, 2026-11-12): "Settle against reservation" — chosen = no method
+    (the system "Offset") + a matching Cash In on it (OffsetService); a settled one's edit shows it read only.
 --}}
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'expense_category_id', 'label' => 'Category', 'type' => 'select', 'required' => true, 'searchable' => true,
@@ -11,11 +13,27 @@
             'hint' => 'What was paid for, e.g. "Electricity bill October".'])
     </div>
 </div>
+@if (!empty($settleOptions))
+    <div class="grid grid-cols-1 gap-5 mt-5">
+        @include('layoutmodule::partials.field', ['name' => 'settle_for', 'label' => 'Settle Against Reservation', 'type' => 'select', 'searchable' => true, 'width' => 'long',
+            'options' => ['' => '- None (paid in money) -'] + $settleOptions, 'value' => old('settle_for', request('settle_for')),
+            'hint' => 'Optional: the member pays this from what they owe on a reservation / package (e.g. a buffet from the rent). A Cash In "Offset" is added on it; the amount can\'t be more than its remaining. Net 0 in your shift.'])
+    </div>
+@endif
+@if ($expense->isOffset())
+    @php($settledPayment = $expense->offsetPayment)
+    <dl class="detail-list mt-5"><div class="wide"><dt>Settles</dt><dd>{{ app(\Modules\PaymentModule\app\Services\PaymentService::class)->payableName($settledPayment?->payable) }}
+        · Cash In #{{ $settledPayment?->payment_no }} (Offset) <div class="text-xs text-slate-500">The Cash In follows this Cash Out's amount / date; deleting it deletes both.</div></dd></div></dl>
+@endif
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'value' => $expense->amount,
         'attrs' => 'min="0.01" step="0.01" max="99999999"'])
-    @include('layoutmodule::partials.field', ['name' => 'payment_method_id', 'label' => 'Paid By', 'type' => 'select', 'required' => true, 'searchable' => true,
-        'options' => ['' => '- Select -'] + $methods, 'value' => $expense->payment_method_id ?: null])
+    @unless ($expense->isOffset())
+        <div @if (!empty($settleOptions)) data-show-if="settle_for=" @endif>
+            @include('layoutmodule::partials.field', ['name' => 'payment_method_id', 'label' => 'Paid By', 'type' => 'select', 'required' => true, 'searchable' => true,
+                'options' => ['' => '- Select -'] + $methods, 'value' => $expense->payment_method_id ?: null])
+        </div>
+    @endunless
     {{-- add: the recording date (employees can't change it); edit: the saved date (the owner changes it, an employee's stays) --}}
     @if ($expense->exists && !(Auth::user()->userable instanceof \Modules\AccountModule\app\Models\Account))
         <dl class="detail-list"><div><dt>Date</dt><dd>{{ $expense->spent_at?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</dd></div></dl>

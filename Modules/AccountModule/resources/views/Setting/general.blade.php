@@ -18,6 +18,12 @@
         @csrf
         @method('PUT')
 
+        <div class="form-section">Cash Out</div>
+        <div class="mb-8">
+            @include('layoutmodule::partials.checkbox', ['name' => 'cash_out_offset_enabled', 'label' => 'Allow settling a Cash Out against a reservation', 'checked' => $account->cashOutOffsetEnabled(),
+                'hint' => 'On: Add Cash Out offers "Settle against reservation" (e.g. a member\'s buffet paid from their rent): the Cash Out + a matching Cash In "Offset" on that reservation / package, net 0 in the shift. Off: hidden everywhere (existing ones stay).'])
+        </div>
+
         <div class="form-section">Taxes</div>
         <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
             @include('layoutmodule::partials.checkbox', ['name' => 'withholding_enabled', 'label' => 'Withholding tax', 'checked' => $account->withholdingEnabled(),

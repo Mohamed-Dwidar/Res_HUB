@@ -157,24 +157,27 @@ trait ExpenseActions
             'categories' => $this->categoryService->options($accountId),
             'methods' => $this->methodService->options($accountId),
             'closedShift' => null,
+            // "Settle against reservation" (2026-11-12): only while Settings › General allows it
+            'settleOptions' => ($offsets = app(\Modules\PaymentModule\app\Services\OffsetService::class))->enabled($accountId) ? $offsets->options($accountId) : null,
         ]);
     }
 
     public function store(ExpenseRequest $request)
     {
         $expense = $this->expenseService->create($this->accountId(), $request->validated(), Auth::user());
+        $settled = $expense->isOffset() ? ' Settled against ' . app(\Modules\PaymentModule\app\Services\PaymentService::class)->payableName($expense->offsetPayment?->payable) . ' (Cash In #' . $expense->offsetPayment?->payment_no . ', Offset).' : '';
 
         // added from the Schedule page "New" menu: the Payments list (Cash Out tab)
         if ($request->boolean('back_to_list')) {
             return response()->json([
-                'message' => 'Cash Out #' . $expense->expense_no . ' has been added to your shift.',
+                'message' => 'Cash Out #' . $expense->expense_no . ' has been added to your shift.' . $settled,
                 'redirect' => route($this->area() . '.payments.index', ['type' => 'out']),
                 'go' => true,
             ]);
         }
 
         return response()->json([
-            'message' => 'Cash Out #' . $expense->expense_no . ' has been added to your shift.',
+            'message' => 'Cash Out #' . $expense->expense_no . ' has been added to your shift.' . $settled,
             'reload' => true,
             'redirect' => $this->route('show', $expense->id),
         ]);

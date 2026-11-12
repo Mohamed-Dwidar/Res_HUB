@@ -28,7 +28,26 @@ class PaymentMethodService
     {
         return $this->methodRepository->forAccount($accountId)
             ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $currentId))
+            // a system method (Offset) is never chosen by hand
+            ->whereNull('generated_key')
             ->ordered()->get()->pluck('name', 'id')->all();
+    }
+
+    // a system payment method (2026-11-12: 'offset' = a Cash Out settled against a reservation), made on first use
+    public function generated($accountId, string $key): \Modules\PaymentModule\app\Models\PaymentMethod
+    {
+        $names = ['offset' => ['مقاصة', 'Offset']][$key] ?? abort(500, 'Unknown system payment method.');
+        $method = PaymentMethod::withTrashed()->where('account_id', $accountId)->where('generated_key', $key)->first();
+        if ($method?->trashed()) {
+            $method->restore();
+        }
+        if (!$method) {
+            $method = new PaymentMethod(['account_id' => $accountId, 'name_ar' => $names[0], 'name_en' => $names[1], 'is_active' => true,
+                'requires_reference' => false, 'sort_order' => (int) $this->methodRepository->forAccount($accountId)->max('sort_order') + 1]);
+            $method->generated_key = $key;
+            $method->save();
+        }
+        return $method;
     }
 
     // the names of the methods that need a reference no. (the forms' Reference hint)
@@ -66,6 +85,7 @@ class PaymentMethodService
     public function update($accountId, $id, array $data)
     {
         $method = $this->findOne($accountId, $id);
+        abort_if($method->isGenerated(), 422, 'A system payment method can\'t be changed.');
         $method->update($this->methodData($data));
         return $method;
     }
@@ -74,6 +94,7 @@ class PaymentMethodService
     public function setActive($accountId, $id, bool $isActive)
     {
         $method = $this->findOne($accountId, $id);
+        abort_if($method->isGenerated(), 422, 'A system payment method stays active.');
         $method->update(['is_active' => $isActive]);
         return $method;
     }
@@ -82,6 +103,9 @@ class PaymentMethodService
     public function deleteOne($accountId, $id): ?string
     {
         $method = $this->findOne($accountId, $id);
+        if ($method->isGenerated()) {
+            return 'A system payment method (Offset) can\'t be deleted.';
+        }
         if ($method->payments_count > 0) {
             return 'This payment method is used by cash in, deactivate it instead.';
         }

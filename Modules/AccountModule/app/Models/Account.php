@@ -47,7 +47,7 @@ class Account extends Model implements Userable
 
     protected $fillable = [
         'name_ar', 'name_en', 'phone', 'address', 'description_ar', 'description_en', 'logo', 'status', 'approved_at',
-        'withholding_enabled', 'vat_enabled', 'today_hours_from', 'today_hours_to', 'renewal_days',
+        'withholding_enabled', 'vat_enabled', 'cash_out_offset_enabled', 'today_hours_from', 'today_hours_to', 'renewal_days',
         'late_entry_hours', 'expense_review_amount',
         'vat_rate', 'table_tax_rate', 'tax_start_date', 'tax_rounding', 'tax_report_basis', 'withholding_rate',
     ];
@@ -59,6 +59,7 @@ class Account extends Model implements Userable
     protected $casts = [
         'approved_at' => 'datetime',
         'withholding_enabled' => 'boolean',
+        'cash_out_offset_enabled' => 'boolean',
         'vat_enabled' => 'boolean',
         'today_hours_from' => 'integer',
         'today_hours_to' => 'integer',
@@ -94,6 +95,12 @@ class Account extends Model implements Userable
      * Withholding tax (Settings › General, default ON). OFF: no new withholding (payment type / method filter option,
      * certificates page + menu hidden); existing withholding records stay as they are and are still shown (docs/payments-plan.md).
      */
+    // Settings › General (2026-11-12): a Cash Out may settle a reservation / package (PaymentModule OffsetService); off by default
+    public function cashOutOffsetEnabled(): bool
+    {
+        return (bool) ($this->cash_out_offset_enabled ?? false);
+    }
+
     public function withholdingEnabled(): bool
     {
         return (bool) ($this->withholding_enabled ?? true);

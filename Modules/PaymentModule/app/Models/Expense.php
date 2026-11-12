@@ -45,6 +45,8 @@ class Expense extends Model
         'date_changed_at' => 'datetime',
         'shift_closing_id' => 'integer',
         'is_company' => 'boolean',
+        // a Cash Out settled against a reservation / package (2026-11-12, OffsetService): its matching Cash In (0 = none)
+        'offset_payment_id' => 'integer',
     ];
 
     public function account(): BelongsTo
@@ -60,6 +62,17 @@ class Expense extends Model
     public function paymentMethod(): BelongsTo
     {
         return $this->belongsTo(PaymentMethod::class)->withTrashed();
+    }
+
+    // the matching Cash In of a settled Cash Out (OffsetService), deleted ones too (the history)
+    public function offsetPayment(): BelongsTo
+    {
+        return $this->belongsTo(Payment::class, 'offset_payment_id')->withTrashed();
+    }
+
+    public function isOffset(): bool
+    {
+        return (int) $this->offset_payment_id > 0;
     }
 
     // the recorder's shift closing (not fillable: set by ShiftClosingService only; 0 = their open shift)

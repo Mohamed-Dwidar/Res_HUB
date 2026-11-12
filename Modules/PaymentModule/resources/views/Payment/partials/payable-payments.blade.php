@@ -54,7 +54,8 @@
 
     @php($payments = $payable->paymentsList())
     @if ($payments->isNotEmpty())
-        <div class="table-wrap mt-4">
+        {{-- table-wrap--tips: the (i) notes' tooltips are not clipped (computer screens) --}}
+        <div class="table-wrap table-wrap--tips mt-4">
             <table class="data-table">
                 <thead>
                     {{-- the order the desk reads them (user 2026-10-21): Amount, Date, No., Method, Type, Collected by, print / edit / delete;
@@ -72,12 +73,47 @@
                 <tbody>
                     @foreach ($payments as $payment)
                         @php($showUrl = route($area . '.payments.show', $payment->id))
+                        {{-- a settling Cash In (Offset, 2026-11-12): its Cash Out; opened when this login may see it (expenses.view + CashScope, as the reports) --}}
+                        @php($settledBy = $payment->offset_expense_id ? $payment->offsetExpense : null)
+                        @php($cashOutUrl = $settledBy && !$settledBy->trashed() && Gate::allows('expenses.view') && (app(\Modules\PaymentModule\app\Services\CashScope::class)->expensesCollector() === null || (int) $settledBy->creatable_id === (int) Auth::id()) ? route($area . '.expenses.show', $settledBy->id) : null)
                         <tr>
                             <td><a href="{{ $showUrl }}" data-modal class="font-medium {{ $payment->type === 'refund' ? 'text-danger' : '' }}">{{ number_format($payment->signed_amount, 2) }}</a></td>
                             <td class="whitespace-nowrap"><a href="{{ $showUrl }}" data-modal>@include('paymentmodule::Payment.partials.record-date', ['record' => $payment, 'time' => false])</a></td>
-                            <td><a href="{{ $showUrl }}" data-modal class="font-medium">#{{ $payment->payment_no }}</a></td>
+                            {{-- No. = the Cash Out's for a settling Cash In (user 2026-11-12) --}}
+                            <td>
+                                @if ($settledBy)
+                                    @if ($cashOutUrl)
+                                        <a href="{{ $cashOutUrl }}" data-modal class="font-medium" title="Cash Out">#{{ $settledBy->expense_no }}</a>
+                                    @else
+                                        <span class="font-medium" title="Cash Out">#{{ $settledBy->expense_no }}</span>
+                                    @endif
+                                @else
+                                    <a href="{{ $showUrl }}" data-modal class="font-medium">#{{ $payment->payment_no }}</a>
+                                @endif
+                            </td>
                             <td>{{ $payment->paymentMethod?->name ?? '-' }}</td>
-                            <td><span class="badge {{ $payment->type_badge_class }}">{{ $payment->type_label }}</span></td>
+                            {{-- (i) = its note on hover (2026-11-12, user); a settling Cash In (Offset): "Settles Cash Out" + the Cash Out's
+                                 category · item + its note --}}
+                            @php($tip = $settledBy
+                                ? trim(($settledBy->expenseCategory?->name ?? '-') . ': ' . $settledBy->item . ($settledBy->notes ? ' — ' . $settledBy->notes : ''))
+                                : trim(($payment->type === 'refund' && $payment->reason ? 'Reason: ' . $payment->reason . ($payment->notes ? ' — ' : '') : '') . (string) $payment->notes))
+                            <td class="whitespace-nowrap">
+                                <span class="badge {{ $payment->type_badge_class }}">{{ $payment->type_label }}</span>
+                                @if ($tip !== '')
+                                    <span class="info-tip info-tip--left" tabindex="0" data-tip="{{ $tip }}" aria-label="{{ $tip }}"><i data-lucide="info"></i></span>
+                                @endif
+                                {{-- under the type badge (user 2026-11-12) --}}
+                                {{-- + its number, opening the Cash Out when this login may see it --}}
+                                @if ($settledBy)
+                                    <div class="mt-1">
+                                        @if ($cashOutUrl)
+                                            <a href="{{ $cashOutUrl }}" data-modal class="badge badge-status-primary">Settles Cash Out #{{ $settledBy->expense_no }}</a>
+                                        @else
+                                            <span class="badge badge-status-primary">Settles Cash Out #{{ $settledBy->expense_no }}</span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </td>
                             <td>{{ $payment->creatable?->userable?->displayName() ?? $payment->creatable?->email ?? '-' }}</td>
                             {{-- the receipt (new tab); edit = the owner, or an employee for their own cash in of their open shift
                                  (PaymentService::canEdit()); delete = the account owner only (popups, then back to this view) --}}
