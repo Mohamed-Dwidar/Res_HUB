@@ -67,6 +67,10 @@
             <div class="mt-1 text-slate-500">{{ $reservation->plan?->name ?? '-' }}</div>
             {{-- the period (the status is in the header menu) --}}
             <div class="mt-2 text-slate-500">{{ $reservation->period }}</div>
+            {{-- the renewal increase (2026-11-12): the next renewal's price until it is renewed --}}
+            @if ($reservation->hasRenewalIncrease())
+                <div class="mt-1 renewal-next-price">{{ $reservation->renewedBy ? 'Renewal increase: ' . $reservation->renewalIncreaseLabel() : 'Next renewal: ' . $reservation->nextRenewalText() }}</div>
+            @endif
             {{-- a unit for 1 person (capacity 1, or 0 = not set): always 1, not shown (like the form) --}}
             @if ((int) $reservation->unit?->capacity > 1)
                 <div class="mt-1 text-slate-500">Number of People: <b>{{ $reservation->number_of_peoples }}</b></div>

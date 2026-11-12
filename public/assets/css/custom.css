@@ -2166,6 +2166,19 @@ a.today-summary__item:hover {
     font-variant-numeric: tabular-nums;
 }
 
+/* the renewal increase (2026-11-12): the next renewal's price (Schedule renewals, the list Renewal column, the view, the
+   Subscriptions report) and the Renew form's "Renewal price" line */
+.renewal-next-price {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: rgb(var(--color-primary));
+    white-space: nowrap;
+}
+
+.renewal-price-line {
+    margin-top: 0.35rem;
+}
+
 .renewal-row__action {
     text-align: center;
 }

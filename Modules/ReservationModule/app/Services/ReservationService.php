@@ -87,6 +87,8 @@ class ReservationService
             if ($renewalOf && ($error = $this->renewalError($accountId, $reservation, $renewalOf))) {
                 throw ValidationException::withMessages(['renewal_of' => $error]);
             }
+            // the renewal increase: the renewal's price + the setting (before the taxes below)
+            $this->applyIncrease($reservation, $data, $this->paymentService->isOwner($creator), $renewalOf ? ($period ?? null) : null);
             if ($unpaidNote) {
                 $reservation->notes = trim(($reservation->notes ? $reservation->notes . "\n" : '') . $unpaidNote);
             }
@@ -142,6 +144,8 @@ class ReservationService
             if (!$oldPackageId && $reservation->package_id && $reservation->extras()->exists()) {
                 throw ValidationException::withMessages(['package_id' => 'This reservation has extras: the account owner deletes them first (add them on the package instead).']);
             }
+            // the renewal increase setting: the owner's form, else kept (2026-11-12)
+            $this->applyIncrease($reservation, $data, $by && $this->paymentService->isOwner($by));
             // the stored tax type, the plan's current flags only when the plan changed
             $this->applyTax($reservation, $accountId, $data, (int) $reservation->plan_id !== $oldPlanId, null, $by);
             $reservation->save();
@@ -386,6 +390,11 @@ class ReservationService
             'notes' => null,
             'renewal_of' => $subscription->id,
         ]);
+        // the renewal increase (2026-11-12): the price before discount + the increase, the discount % kept; the setting is
+        // replicated (it compounds)
+        if ($next = $subscription->nextRenewalAmounts()) {
+            $renewal->forceFill($next);
+        }
 
         return $renewal;
     }
@@ -428,6 +437,9 @@ class ReservationService
                 // its taxes (docs/payments-plan.md §3): the form's breakdown once taxes start (Phase B)
                 'vatExempt' => (int) $plan->vat_exempt, 'tableTax' => (int) $plan->table_tax, 'inclusive' => (int) $plan->price_includes_tax,
                 'invoiceDefault' => (int) $plan->invoice_by_default,
+                // the default renewal increase of a period reservation (2026-11-12): the owner's form fills its fields from it
+                'increaseType' => Reservation::increaseSetting($plan->renewal_increase_type, $plan->renewal_increase_value)[0],
+                'increaseValue' => Reservation::increaseSetting($plan->renewal_increase_type, $plan->renewal_increase_value)[1],
             ])->values()->all();
         }
 
@@ -757,6 +769,47 @@ class ReservationService
         }
 
         return array_values($busiest);
+    }
+
+    /**
+     * The renewal increase (2026-11-12) of a period reservation; other types = none.
+     * A renewal of a period with an increase: its price = the renewed period's next price, its discount % kept
+     * (Reservation::nextRenewalAmounts()) — an employee can't change it; the owner's form amounts are kept (pre-filled with it;
+     * a time based plan is not recalculated by the plan then).
+     * The setting: the owner's form (the fields are sent only on the account's routes), else a renewal copies the renewed
+     * period's (it compounds), a new reservation takes its plan's default, an edit keeps it.
+     */
+    private function applyIncrease(Reservation $reservation, array $data, bool $owner, ?Reservation $renewed = null): void
+    {
+        if (!$reservation->isPeriod()) {
+            $reservation->forceFill(['renewal_increase_type' => 'none', 'renewal_increase_value' => 0]);
+            return;
+        }
+        if ($renewed && ($next = $renewed->nextRenewalAmounts())) {
+            if ($owner && isset($data['amount'])) {
+                [$value, $percentage, $net] = Reservation::calculate(
+                    (float) $data['amount'],
+                    isset($data['discount_percentage']) ? (float) $data['discount_percentage'] : null,
+                    isset($data['discount_value']) ? (float) $data['discount_value'] : null,
+                    $data['discount_type'] ?? 'percentage',
+                    isset($data['net_amount']) ? (float) $data['net_amount'] : null
+                );
+                $next = ['amount' => round((float) $data['amount'], 2), 'discount_value' => $value, 'discount_percentage' => $percentage, 'net_amount' => $net];
+            }
+            $reservation->forceFill($next);
+        }
+
+        if ($owner && array_key_exists('renewal_increase_type', $data)) {
+            $setting = Reservation::increaseSetting($data['renewal_increase_type'], $data['renewal_increase_value'] ?? 0);
+        } elseif ($renewed) {
+            $setting = Reservation::increaseSetting($renewed->renewal_increase_type, $renewed->renewal_increase_value);
+        } elseif (!$reservation->exists) {
+            $plan = Plan::find($reservation->plan_id);
+            $setting = Reservation::increaseSetting($plan?->renewal_increase_type, $plan?->renewal_increase_value);
+        } else {
+            return;
+        }
+        $reservation->forceFill(['renewal_increase_type' => $setting[0], 'renewal_increase_value' => $setting[1]]);
     }
 
     private function reservationData($accountId, array $data): array

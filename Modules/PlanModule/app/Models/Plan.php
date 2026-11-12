@@ -19,11 +19,14 @@ class Plan extends Model
     // lease_period values => labels (same as the units)
     const LEASE_PERIODS = Unit::LEASE_PERIODS;
 
-    protected $fillable = ['account_id', 'name', 'capacity', 'lease_period', 'facilities', 'amount', 'is_time_based', 'is_active'];
+    protected $fillable = ['account_id', 'name', 'capacity', 'lease_period', 'facilities', 'amount', 'is_time_based', 'is_active',
+        'renewal_increase_type', 'renewal_increase_value'];
 
     protected $casts = [
         'capacity' => 'integer',
         'amount' => 'float',
+        // the default renewal increase of its period reservations (2026-11-12, Reservation::RENEWAL_INCREASE_TYPES)
+        'renewal_increase_value' => 'float',
         // the reservations have a start / end time (not only dates)
         'is_time_based' => 'boolean',
         'is_active' => 'boolean',
@@ -43,6 +46,13 @@ class Plan extends Model
     public function amountBetween($start, $end): float
     {
         return round((float) $this->amount * $this->periodsBetween($start, $end), 2);
+    }
+
+    // "+10%" / "+500.00" / null
+    public function renewalIncreaseLabel(): ?string
+    {
+        [$type, $value] = \Modules\ReservationModule\app\Models\Reservation::increaseSetting($this->renewal_increase_type, $this->renewal_increase_value);
+        return \Modules\ReservationModule\app\Models\Reservation::increaseLabel($type, $value);
     }
 
     public function getLeasePeriodLabelAttribute(): ?string

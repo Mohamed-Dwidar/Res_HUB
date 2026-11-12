@@ -418,7 +418,9 @@ trait ReportActions
             ->addColumn('period', fn ($row) => e($row->start_at?->format($format) . ' → ' . ($row->realEnd()?->format($format) ?? '-')))
             ->addColumn('renewal', fn ($row) => view('reportmodule::Report.partials.subscription-renewal', ['view' => RenewalView::make($row, $kind, $today),
                 'relative' => in_array($filters['view'], ['not_renewed', 'ending'], true)])->render())
-            ->addColumn('amount', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->dueAmount(), 'class' => 'font-medium'])->render())
+            ->addColumn('amount', fn ($row) => view('reportmodule::Report.partials.money', ['value' => $row->dueAmount(), 'class' => 'font-medium'])->render()
+                // the next renewal's price while not renewed (the renewal increase, 2026-11-12)
+                . (!$row->renewedBy && ($next = $row->nextRenewalText()) ? '<div class="renewal-next-price">Renewal: ' . e($next) . '</div>' : ''))
             ->addColumn('state', fn ($row) => view('reservationmodule::Reservation.partials.renewal-payment', ['view' => RenewalView::make($row, $kind, $today), 'area' => $area])->render())
             ->rawColumns(['member_html', 'place', 'renewal', 'amount', 'state', 'DT_RowAttr.data-open-url'])
             ->only(['DT_RowId', 'DT_RowAttr', 'DT_RowClass', 'member_html', 'place', 'plan_name', 'period', 'renewal', 'amount', 'state'])

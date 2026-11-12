@@ -155,6 +155,9 @@ signature block (two columns: name, title, signature, date; kept on one page). F
    issued one; replacing the scan = the owner); delete a draft (owner any, employee own); PDF AR / EN (DRAFT / CANCELLED
    watermark); Contracts list (Management / Daily). Not in Phase 2: End / Cancel (Phase 3), contract_events.
 3. **Lifecycle**: signed scan / mark signed, end, cancel (reason), `contract_events`, renewal annex, "Covered by" in the
-   reservation view, "reservation changed after issue" warning.
+   reservation view, "reservation changed after issue" warning. The renewal annex uses the NEW price: the renewal reservation's
+   amounts, which already carry the renewal increase (2026-11-12: `reservations.renewal_increase_type / _value`, the previous
+   price before discount + the increase, discount % kept, `Reservation::nextRenewalAmounts()`); add `{renewal_increase}` /
+   previous price placeholders to the annex if the owner wants them printed.
 4. **Optional / cleanup**: Schedule badge, amount in Arabic words, `is_contract` → `booking_mode = period` + drop the column,
    the DMS import (`source = dms`).

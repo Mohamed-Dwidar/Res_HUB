@@ -296,6 +296,12 @@ class MessagingService
             $owing = (float) $periods->sum('remaining') + ($periods->contains('id', $reservation->id) ? 0 : $due);
         }
         $name = trim((string) $reservation->member?->name);
+        // the renewal increase (2026-11-12): the next period's price (the discount % kept, before taxes) + the increase; empty
+        // when the reservation has none
+        $next = $period ? $reservation->nextRenewalAmounts() : null;
+        $increase = $next ? ($reservation->renewal_increase_type === 'percent'
+            ? rtrim(rtrim(number_format((float) $reservation->renewal_increase_value, 2, '.', ''), '0'), '.') . '%'
+            : self::money((float) $reservation->renewal_increase_value)) : '';
 
         return [
             'member_name' => $name,
@@ -309,8 +315,11 @@ class MessagingService
             'end_time' => $timed ? (string) $reservation->realEnd()?->format(Reservation::TIME_FORMAT) : '',
             'period' => $reservation->period,
             'renewal_date' => (string) $renewsOn?->format($format),
-            'renewal_amount' => self::money($renewal ? $renewal->dueAmount() : $total),
+            // the renewal's due; before it exists: the next price with the increase (= {renewal_price}), else this period's (user 2026-11-12)
+            'renewal_amount' => self::money($renewal ? $renewal->dueAmount() : ($next ? $next['net_amount'] : $total)),
             'amount' => self::money($total),
+            'renewal_price' => $next ? self::money($next['net_amount']) : '',
+            'renewal_increase' => $increase,
             'due' => self::money($due),
             'owing_total' => self::money($owing),
             'days_left' => $renewsOn && $renewsOn->gte($date) ? (string) (int) round($date->diffInDays($renewsOn, true)) : '0',

@@ -18,6 +18,8 @@ class PlanRequest extends FormRequest
             'facilities' => 'nullable|string|max:5000',
             'is_time_based' => 'boolean',
             'is_active' => 'boolean',
+            'renewal_increase_type' => ['nullable', Rule::in(array_keys(\Modules\ReservationModule\app\Models\Reservation::RENEWAL_INCREASE_TYPES))],
+            'renewal_increase_value' => 'nullable|numeric|min:0|max:99999999',
         ];
     }
 

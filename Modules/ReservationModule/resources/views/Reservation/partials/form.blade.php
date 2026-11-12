@@ -15,7 +15,8 @@
     // data-time-based: the plan reservations have a start / end time (custom.js shows the time inputs)
     // + the plan's tax type / "Invoice by default" (custom.js reservationTax(), docs/payments-plan.md §3)
     $planOptions = collect($plans)->mapWithKeys(fn ($plan) => [$plan['id'] => ['name' => $plan['name'], 'data' => ['amount' => $plan['amount'], 'time-based' => $plan['timeBased'], 'period-hours' => $plan['periodHours'], 'lease-period' => $plan['leasePeriod'],
-        'vat-exempt' => $plan['vatExempt'], 'table-tax' => $plan['tableTax'], 'inclusive' => $plan['inclusive'], 'invoice-default' => $plan['invoiceDefault']]]])->all();
+        'vat-exempt' => $plan['vatExempt'], 'table-tax' => $plan['tableTax'], 'inclusive' => $plan['inclusive'], 'invoice-default' => $plan['invoiceDefault'],
+        'increase-type' => $plan['increaseType'] ?? 'none', 'increase-value' => $plan['increaseValue'] ?? 0]]])->all();
     $packageOptions = collect($packages)->map(fn ($package) => ['name' => $package['name'], 'data' => ['member-id' => $package['member_id'], 'member-text' => $package['member_text']]])->all();
     // the date / time inputs need Y-m-d / H:i values (the browser shows them in the user's format)
     // create: today, now -> in 1 hour (pre-filled from the Schedule page: its start -> in 1 hour); edit / renew: the saved values
@@ -56,6 +57,12 @@
     // an hourly reservation keeps its duration when the start / plan changes (custom.js reservationKeepDuration(), 2026-11-01):
     // edit, Renew and a Schedule slot (?start=) have one from the start; a fresh new form once its end is changed
     $keepDuration = $reservation?->exists || $renewing || ($prefilled && request()->filled('start'));
+    // the renewal increase (2026-11-12): the renewal's price = the renewed period's + its increase (the discount % kept); employees
+    // can't change it (amounts read only, the service enforces it), the owner can; data-renewal-price keeps it when custom.js
+    // reservationPlanAmount() would refill the amount from the plan
+    $renewalPrice = $renewed?->nextRenewalPrice();
+    $priceLocked = $renewalPrice !== null && $area !== 'account';
+    $amountAttrs = $renewalPrice !== null ? ' data-renewal-price="' . $renewalPrice . '" data-renewal-plan="' . $renewed->plan_id . '"' . ($priceLocked ? ' data-renewal-locked readonly' : '') : '';
 @endphp
 
 @if ($renewing)
@@ -66,6 +73,9 @@
     <div class="mb-5 text-primary">
         Renewal of <b>{{ $reservation->member?->name ?? '-' }}</b>{{ $renewed?->unit ? ' · ' . $renewed->unit->name : '' }}:
         the current period ends {{ $renewed?->realEnd()?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}, the new one starts the day after.
+        @if ($renewalPrice !== null)
+            <div class="renewal-price-line">Renewal price: <b>{{ number_format($renewalPrice, 2) }}</b> ({{ $renewed->renewalIncreaseLabel() }} on {{ number_format((float) $renewed->amount, 2) }})@if ((float) $renewed->discount_percentage > 0) · discount {{ rtrim(rtrim(number_format((float) $renewed->discount_percentage, 2, '.', ''), '0'), '.') }}% kept = {{ number_format((float) $reservation->net_amount, 2) }}@endif</div>
+        @endif
     </div>
     {{-- renewing a period that still owes (2026-10-29, owner AND employees): what the member will owe across their periods + a
          required reason (ReservationService::unpaidRenewalNote(): the new period's notes + reservation_events → Payment Exceptions) --}}
@@ -124,7 +134,7 @@
 {{-- every active space / unit / plan of the account by type (custom.js placeOptions()) --}}
 <script type="application/json" data-place-tree>@json($placeTree ?? ['spaces' => [], 'units' => [], 'plans' => []])</script>
 @if ($fixedType)
-    <input type="hidden" name="subscription_type_id" value="{{ $reservation->subscription_type_id }}" data-can-repeat="{{ $fixedType['data']['can-repeat'] }}" data-booking-mode="{{ $fixedType['data']['booking-mode'] }}">
+    <input type="hidden" name="subscription_type_id" value="{{ $reservation->subscription_type_id }}" data-can-repeat="{{ $fixedType['data']['can-repeat'] }}" data-booking-mode="{{ $fixedType['data']['booking-mode'] }}" data-period="{{ $fixedType['data']['period'] ?? 0 }}">
 @endif
 @unless ($renewing || $fixedType)
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -188,13 +198,36 @@
 <input type="hidden" name="discount_type" value="{{ old('discount_type', 'percentage') }}">
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'value' => $reservation?->amount ?? 0,
-        'attrs' => 'min="0" step="0.01" max="99999999"'])
+        'attrs' => 'min="0" step="0.01" max="99999999"' . $amountAttrs, 'hint' => $priceLocked ? 'The renewal price (the previous price + the increase).' : null])
     @include('layoutmodule::partials.field', ['name' => 'discount_percentage', 'label' => 'Discount %', 'type' => 'number', 'value' => $reservation?->discount_percentage ?? 0,
-        'attrs' => 'min="0" max="100" step="0.01"'])
+        'attrs' => 'min="0" max="100" step="0.01"' . ($priceLocked ? ' readonly' : '')])
     @include('layoutmodule::partials.field', ['name' => 'discount_value', 'label' => 'Discount Value', 'type' => 'number', 'value' => $reservation?->discount_value ?? 0,
-        'attrs' => 'min="0" step="0.01"'])
+        'attrs' => 'min="0" step="0.01"' . ($priceLocked ? ' readonly' : '')])
     @include('layoutmodule::partials.field', ['name' => 'net_amount', 'label' => 'Net Amount', 'type' => 'number', 'value' => $reservation?->net_amount ?? 0,
-        'attrs' => 'min="0" step="0.01" data-net', 'hint' => 'Change the discount % / value or the net, the others are calculated.'])
+        'attrs' => 'min="0" step="0.01" data-net' . ($priceLocked ? ' readonly' : ''), 'hint' => $priceLocked ? null : 'Change the discount % / value or the net, the others are calculated.'])
+</div>
+
+{{-- the renewal increase of a period (2026-11-12): the owner sets it (new = the plan's default, custom.js reservationIncreaseDefault(), not after it was changed;
+     Renew = the renewed period's, copied to the renewal); employees see it --}}
+<div @unless ($renewing) data-type-allows="period" @endunless>
+    @if ($area === 'account')
+        <div class="form-section mt-8">Renewal Increase</div>
+        <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
+            @include('layoutmodule::partials.field', ['name' => 'renewal_increase_type', 'label' => 'Increase on Renewal', 'type' => 'select',
+                'options' => \Modules\ReservationModule\app\Models\Reservation::RENEWAL_INCREASE_TYPES,
+                'value' => old('renewal_increase_type', $reservation?->renewal_increase_type ?: 'none'),
+                'attrs' => $reservation?->exists || $renewing ? 'data-increase-keep' : '',
+                'hint' => $renewing ? 'Copied to this renewal: its own renewal costs its price + this increase.' : 'The next renewal costs this price + the increase (the discount % is kept).'])
+            <div data-show-if="renewal_increase_type=percent fixed">
+                @include('layoutmodule::partials.field', ['name' => 'renewal_increase_value', 'label' => 'Increase Value', 'type' => 'number',
+                    'value' => old('renewal_increase_value', (float) $reservation?->renewal_increase_value ?: null), 'attrs' => 'min="0" step="0.01" max="99999999"',
+                    'hint' => 'A percent (10 = 10%) or an amount.'])
+            </div>
+        </div>
+    @elseif ($reservation && ($label = \Modules\ReservationModule\app\Models\Reservation::increaseLabel(...\Modules\ReservationModule\app\Models\Reservation::increaseSetting($reservation->renewal_increase_type, $reservation->renewal_increase_value))))
+        <div class="form-section mt-8">Renewal Increase</div>
+        <div class="text-slate-600">{{ $label }} on every renewal (set by the account owner).</div>
+    @endif
 </div>
 
 {{-- Taxes only when the customer requests an invoice (docs/payments-plan.md §3), once taxes apply to this reservation (the tax

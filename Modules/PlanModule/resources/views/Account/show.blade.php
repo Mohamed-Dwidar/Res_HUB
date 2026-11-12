@@ -22,6 +22,7 @@
         <div><dt>Amount</dt><dd>{{ number_format((float) $plan->amount, 2) }}</dd></div>
         <div><dt>Lease Period</dt><dd>{{ $plan->lease_period_label ?? '-' }}</dd></div>
         <div><dt>Capacity</dt><dd>{{ $plan->capacity ?: '-' }}</dd></div>
+        <div><dt>Renewal Increase</dt><dd>{{ $plan->renewalIncreaseLabel() ?? 'None' }}</dd></div>
         <div><dt>Time Based</dt><dd>{{ $plan->is_time_based ? 'Yes (start / end time)' : 'No' }}</dd></div>
         @if (($taxAccount = \Modules\AccountModule\app\Models\Account::current())?->vatEnabled())
             <div><dt>Taxes</dt><dd>{{ $plan->taxSummary($taxAccount) }}<div class="text-xs text-slate-500">{{ $plan->invoice_by_default ? 'Invoice by default' : 'No invoice by default' }} (taxes only with an invoice)</div></dd></div>

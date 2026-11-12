@@ -47,6 +47,7 @@ class Reservation extends Model implements Payable
         'account_id', 'member_id', 'space_id', 'unit_id', 'plan_id', 'package_id', 'subscription_type_id', 'reservation_status_id',
         'start_at', 'end_at', 'subscription_day', 'all_day', 'repeat_id', 'is_repeat', 'repeat_frequency', 'repeat_interval',
         'renewal_of', 'left_at', 'left_by', 'number_of_peoples', 'amount', 'discount_percentage', 'discount_value', 'net_amount', 'paid_amount', 'remaining', 'notes',
+        'renewal_increase_type', 'renewal_increase_value',
     ];
 
     protected $casts = [
@@ -59,6 +60,7 @@ class Reservation extends Model implements Payable
         'discount_percentage' => 'float',
         'discount_value' => 'float',
         'net_amount' => 'float',
+        'renewal_increase_value' => 'float',
         'paid_amount' => 'float',
         // the tax snapshot (docs/payments-plan.md §3, ReservationService via TaxSnapshot): set by the service, never mass assigned
         'invoice_requested' => 'boolean',
@@ -154,6 +156,77 @@ class Reservation extends Model implements Payable
     public function creatable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    // the renewal increase (2026-11-12): a period's next price = its price before discount + the increase (percent of it or a fixed
+    // amount), the discount % kept; copied to the renewal, so it compounds. Plans carry the default (PlanModule), the reservation
+    // its own; only period types use it (none on the others)
+    const RENEWAL_INCREASE_TYPES = ['none' => 'No increase', 'percent' => 'Percent', 'fixed' => 'Fixed amount'];
+
+    // [type, value] cleaned: an unknown type / a value <= 0 = none
+    public static function increaseSetting($type, $value): array
+    {
+        $type = array_key_exists((string) $type, self::RENEWAL_INCREASE_TYPES) ? (string) $type : 'none';
+        $value = round(max(0, (float) $value), 2);
+        return $type === 'none' || $value <= 0 ? ['none', 0.0] : [$type, $value];
+    }
+
+    // $amount + the increase
+    public static function increased(float $amount, string $type, float $value): float
+    {
+        return round($amount + match ($type) {
+            'percent' => $amount * $value / 100,
+            'fixed' => $value,
+            default => 0,
+        }, 2);
+    }
+
+    // "+10%" / "+500.00" (null = none)
+    public static function increaseLabel(string $type, float $value): ?string
+    {
+        return match ($type) {
+            'percent' => '+' . rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.') . '%',
+            'fixed' => '+' . number_format($value, 2),
+            default => null,
+        };
+    }
+
+    public function hasRenewalIncrease(): bool
+    {
+        [$type] = self::increaseSetting($this->renewal_increase_type, $this->renewal_increase_value);
+        return $type !== 'none' && $this->isPeriod();
+    }
+
+    public function renewalIncreaseLabel(): ?string
+    {
+        return $this->hasRenewalIncrease() ? self::increaseLabel($this->renewal_increase_type, (float) $this->renewal_increase_value) : null;
+    }
+
+    // the next period's price before discount (null = no increase: the Renew form copies the price as before)
+    public function nextRenewalPrice(): ?float
+    {
+        return $this->hasRenewalIncrease()
+            ? self::increased((float) $this->amount, $this->renewal_increase_type, (float) $this->renewal_increase_value) : null;
+    }
+
+    // [amount, discount value, discount %, net] of the next period: the discount % kept (null = no increase)
+    public function nextRenewalAmounts(): ?array
+    {
+        if (($price = $this->nextRenewalPrice()) === null) {
+            return null;
+        }
+        [$value, $percentage, $net] = self::calculate($price, (float) $this->discount_percentage, null);
+        return ['amount' => $price, 'discount_value' => $value, 'discount_percentage' => $percentage, 'net_amount' => $net];
+    }
+
+    // "7,700.00 (+10%)" [+ " · −5% = 7,315.00" with a discount]: the Schedule renewals, the view, the Subscriptions report
+    public function nextRenewalText(): ?string
+    {
+        if (!($next = $this->nextRenewalAmounts())) {
+            return null;
+        }
+        return number_format($next['amount'], 2) . ' (' . $this->renewalIncreaseLabel() . ')'
+            . ($next['discount_percentage'] > 0 ? ' · −' . rtrim(rtrim(number_format($next['discount_percentage'], 2, '.', ''), '0'), '.') . '% = ' . number_format($next['net_amount'], 2) : '');
     }
 
     // what it costs the member (taxes, docs/payments-plan.md §3): the tax total when an invoice is requested and it was taxed,

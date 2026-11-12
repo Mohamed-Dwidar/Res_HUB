@@ -68,7 +68,10 @@ class PlanService
 
     private function planData(array $data): array
     {
+        [$increaseType, $increaseValue] = \Modules\ReservationModule\app\Models\Reservation::increaseSetting($data['renewal_increase_type'] ?? 'none', $data['renewal_increase_value'] ?? 0);
         return [
+            'renewal_increase_type' => $increaseType,
+            'renewal_increase_value' => $increaseValue,
             'name' => $data['name'],
             'capacity' => $data['capacity'] ?? null,
             'lease_period' => $data['lease_period'] ?? null,

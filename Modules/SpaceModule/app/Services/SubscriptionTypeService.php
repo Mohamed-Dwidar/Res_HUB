@@ -40,7 +40,9 @@ class SubscriptionTypeService
         return $this->subscriptionTypeRepository->forAccount($accountId)->orderBy('name')->get()
             ->mapWithKeys(fn ($type) => [$type->id => [
                 'name' => $type->name,
-                'data' => ['can-repeat' => (int) $type->can_repeat, 'auto-renew' => (int) $type->auto_renew, 'booking-mode' => (string) $type->booking_mode],
+                'data' => ['can-repeat' => (int) $type->can_repeat, 'auto-renew' => (int) $type->auto_renew, 'booking-mode' => (string) $type->booking_mode,
+                    // the renewal increase fields of the reservation form (period types only, 2026-11-12)
+                    'period' => (int) ($type->booking_mode === 'period')],
             ]])->all();
     }
 

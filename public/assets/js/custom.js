@@ -1167,8 +1167,25 @@ function reservationPlanAmount(form) {
             amount = amount * round2(hours / (Number(option.dataset.periodHours) || 1));
         }
     }
+    // a renewal with an increase (2026-11-12): the renewal price, while its plan is kept (always when an employee renews: locked)
+    if (amountEl.dataset.renewalPrice !== undefined && (amountEl.hasAttribute("data-renewal-locked") || planEl.value === amountEl.dataset.renewalPlan)) {
+        amount = Number(amountEl.dataset.renewalPrice) || 0;
+    }
     amountEl.value = round2(amount);
     reservationCalculate(form, "amount");
+}
+
+// the renewal increase fields (the owner's form, 2026-11-12) follow the chosen plan's default (option data-increase-type / -value)
+// on a new reservation, until they are changed by hand (data-increase-keep; edit / Renew have it from the start)
+function reservationIncreaseDefault(form) {
+    var typeEl = formField(form, "renewal_increase_type");
+    var valueEl = formField(form, "renewal_increase_value");
+    var planEl = formField(form, "plan_id");
+    var option = planEl && planEl.selectedOptions[0];
+    if (!typeEl || !valueEl || typeEl.hasAttribute("data-increase-keep") || !option || option.dataset.increaseType === undefined) return;
+    typeEl.value = option.dataset.increaseType || "none";
+    valueEl.value = Number(option.dataset.increaseValue) > 0 ? option.dataset.increaseValue : "";
+    applyConditions(form);
 }
 
 // a time based plan (option data-time-based="1"): the start / end time inputs are shown ([data-time-fields])
@@ -1824,6 +1841,11 @@ document.addEventListener("change", function (e) {
         if (name === "subscription_type_id") reservationTypeOptions(form);
         if (name === "start_at") reservationEndAfterStart(form);
         if (name === "plan_id") reservationTimeBased(form);
+        if (name === "plan_id") reservationIncreaseDefault(form);
+        if (name === "renewal_increase_type" || name === "renewal_increase_value") {
+            var increaseType = formField(form, "renewal_increase_type");
+            if (increaseType) increaseType.setAttribute("data-increase-keep", "");
+        }
         // the end follows the plan's lease period (an end typed by hand is kept until the plan changes); an hourly type keeps
         // its current duration instead, once it has one (reservationKeepDuration())
         if (name === "end_at" || name === "end_time") form.dataset.endTouched = form.dataset.durationSet = "1";

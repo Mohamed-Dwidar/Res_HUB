@@ -44,6 +44,8 @@ class RenewalView
             'open' => $reservation, 'datePrefix' => null, 'date' => $renewsOn, 'dateTo' => null, 'when' => self::when($renewsOn, $date, $isToday), 'whenClass' => 'text-slate-500',
             'price' => $reservation->dueAmount(), 'label' => null, 'labelDates' => null, 'badge' => null, 'badges' => [], 'check' => null,
             'note' => null, 'due' => null, 'hints' => [], 'actions' => [],
+            // the next renewal's price while it is not renewed yet (the renewal increase, 2026-11-12)
+            'nextPrice' => !$renewal && in_array($kind, ['new', 'today', 'next', 'upcoming', 'owing'], true) ? $reservation->nextRenewalText() : null,
         ];
 
         switch ($kind) {

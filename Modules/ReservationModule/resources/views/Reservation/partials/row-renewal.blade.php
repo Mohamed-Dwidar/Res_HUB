@@ -10,6 +10,7 @@
         <div><span class="whitespace-nowrap">{{ $view['date']?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}</span>@if ($view['dateTo']) <span class="whitespace-nowrap">→ {{ $view['dateTo']->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</span>@endif</div>
         @if ($view['when'])<div class="text-xs whitespace-nowrap {{ $view['whenClass'] }}">{{ $view['when'] }}</div>@endif
         <div class="renewal-row__price">{{ number_format($view['price'], 2) }}</div>
+        @if ($view['nextPrice'])<div class="renewal-next-price">Renewal: {{ $view['nextPrice'] }}</div>@endif
     </div>
     <div>@include('reservationmodule::Reservation.partials.renewal-payment')</div>
     @if ($view['actions'])

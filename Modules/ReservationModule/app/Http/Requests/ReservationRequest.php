@@ -78,6 +78,10 @@ class ReservationRequest extends FormRequest
             // the anchor day of a period ("Billing day", 2026-10-23): the account's edit form only; else set from the start day /
             // kept as saved (ReservationService)
             'subscription_day' => $this->route('id') && $this->routeIs('account.*') ? ['nullable', 'integer', 'between:1,31'] : ['exclude'],
+            // the renewal increase of a period (2026-11-12): the account's forms only (employees: the plan's default / the renewed
+            // period's / kept, ReservationService::applyIncrease())
+            'renewal_increase_type' => $this->routeIs('account.*') ? ['nullable', Rule::in(array_keys(\Modules\ReservationModule\app\Models\Reservation::RENEWAL_INCREASE_TYPES))] : ['exclude'],
+            'renewal_increase_value' => $this->routeIs('account.*') ? ['nullable', 'numeric', 'min:0', 'max:99999999'] : ['exclude'],
         ];
     }
 
@@ -159,6 +163,8 @@ class ReservationRequest extends FormRequest
             'end_time' => 'end time',
             'end_at' => 'end date',
             'renewal_of' => 'renewal of',
+            'renewal_increase_type' => 'increase on renewal',
+            'renewal_increase_value' => 'increase value',
             'subscription_day' => 'billing day',
             'number_of_peoples' => 'number of people',
             'discount_percentage' => 'discount %',
