@@ -33,7 +33,7 @@
 </div>
 
 @if ($extras->isNotEmpty())
-    <div class="table-wrap">
+    <div class="table-wrap table-wrap--tips">
         <table class="data-table">
             <thead>
                 {{-- user 2026-10-21: Amount, Date, Item, Qty × Price, Type --}}
@@ -58,7 +58,7 @@
                         <td class="whitespace-nowrap">{{ $extra->date?->format($dateFormat) }}</td>
                         <td>
                             {{ $extra->item }}
-                            @if ($extra->notes)<div class="text-xs text-slate-500">{{ $extra->notes }}</div>@endif
+                            @include('layoutmodule::partials.note-tip', ['note' => $extra->notes])
                         </td>
                         <td class="whitespace-nowrap">{{ rtrim(rtrim(number_format($extra->quantity, 2), '0'), '.') }} × {{ number_format($extra->unit_price, 2) }}</td>
                         {{-- one line: the type badge · its income category (extras) --}}
@@ -103,7 +103,7 @@
     <div class="form-section mt-8">Balance carried / adjustments ({{ $adjustments->count() }})
         <span class="text-xs font-normal text-slate-500">· added after tax, never taxed</span>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap table-wrap--tips">
         <table class="data-table">
             <thead>
                 <tr>
@@ -121,7 +121,7 @@
                         <td class="whitespace-nowrap">{{ $extra->date?->format($dateFormat) }}</td>
                         <td>
                             {{ $extra->item }}
-                            @if ($extra->notes)<div class="text-xs text-slate-500">{{ $extra->notes }}</div>@endif
+                            @include('layoutmodule::partials.note-tip', ['note' => $extra->notes])
                         </td>
                         <td class="whitespace-nowrap">{{ $extra->type === 'extra' ? ($extra->incomeCategory?->name ?? '-') : $extra->type_label }}</td>
                         @if ($area === 'account')

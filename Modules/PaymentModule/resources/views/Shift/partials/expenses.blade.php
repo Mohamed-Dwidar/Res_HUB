@@ -3,7 +3,7 @@
     cells as the Expenses list (Expense/partials/row-*): Expense | Category | Date (time) | Method | Amount | row menu.
 --}}
 
-<div class="table-wrap">
+<div class="table-wrap table-wrap--tips">
     <table class="data-table">
         <thead>
             <tr><th>Cash Out</th><th>Category</th><th>Date</th><th>Method</th><th>Amount</th><th></th></tr>

@@ -219,6 +219,7 @@
   - Drag and drop rows (2026-10-16): `partials/drag-handle` (grip) + a DataTables table with `data-reorder-url`; custom.js "Drag and drop rows" (native HTML drag and drop, handle only, drop on the upper / lower half = before / after) sends PATCH `{id, target_id, position}` (ids from `row-{id}`) then `dataTables.reload()` — the spaces list and the units of a space
   - Popup back history (2026-10-21): custom.js `appModal` keeps a stack of the popup pages opened from inside the popup (`[data-modal]` in `#app-modal` = push); a content Cancel (`[data-tw-dismiss="modal"]`, not `.app-modal__close`) goes back; a save without `modal` in a nested form (not DELETE) goes back too; `json.modal` cuts the history to that page; opening from the page / × = a new history; a `[data-modal-back] hidden` button (Cash In / Cash Out popups, 2026-11-12) is shown only while the stack has a page and calls `appModal.back()`
   - Date fields (2026-11-01, user): every `<input type="date">` (forms, popups, filters) shows dd/mm/yyyy — custom.js `dateFields()` in `initForms()` (flatpickr altInput `d/m/Y`, the field turns hidden and keeps Y-m-d; setting `.value` from the code updates the shown text; read only = no calendar; disabled / min / max followed); flatpickr css / js / ar now loaded once by `main` (removed from `partials/date-range-filter` and `Schedule/index`); `taxStartConfirm()` compares with `_initialValue`
+  - Note tips (2026-11-16): `partials/note-tip` (`$note`, `side` right | left; `.info-tip--right` in custom.css) = an (i) with the note on hover — Cash In list / My Shift / shift popup / income group popup (`Payment/partials/row-amount`, `Payment::note_tip`), All / Cash Out tabs (`cash-cell` type), member payments, Cash Out list (`Expense/partials/row-item`), extras (both blocks), Expenses report Details; tables with tips use `.table-wrap--tips`
   - Row menu (2026-10-31): `partials/row-menu` links take an optional `blank` (opens in a new tab, `rel="noopener"`): contract PDFs
   - Initial tab (2026-10-19): `partials/filter-tabs` optional `initial` → `data-initial-tab` on that tab button, datatables.js chooses it before the first load (Clear = the default tab); the reservations list from the Members count
   - List filter options (2026-10-14): `partials/filter-options` (`$options` = a service `filterOptions()` `[id => ['name', 'active']]`, inactive = `.option-inactive` + "(Inactive)", optional `prefix`)
@@ -479,6 +480,11 @@
 
 ## Session log
 
+### 2026-11-16 — Notes as (i) tooltips in every cash / extras list
+- **Changed:** `layoutmodule::partials.note-tip` (new), `Payment::note_tip`, `Payment/partials/{row-amount, cash-cell, member-payments}`, `Expense/partials/row-item`, `Shift/partials/{payments, expenses}`, `Extra/partials/extras`, `ReportActions` (Expenses Details item), custom.css `.info-tip--right`; CLAUDE.md convention
+- **Why:** user
+- **Commit:** uncommitted
+
 ### 2026-11-16 — Reservation / package views: one invoice-style amounts list
 - **Changed:** `InvoicePdfService::summary()` (new, the ONE source of the lines), `Payment/partials/invoice-summary` (new), `Reservation/show` + `Package/show` (info lines on top: period, reservations / hours, invoice badge + VAT rule, added at / by, notes; Package Data amounts and amount-lines removed there), `Payment/invoice-pdf` totals (same order; items = booking / package + sales extras), custom.css `.invoice-summary`
 - **Why:** user; layout only (484 rows checked: Total + adjustments + Rounding = Due, Due − Paid = Remaining)
@@ -534,9 +540,3 @@
 - **Why:** user (Amount didn't match Paid / Remaining)
 - **Affects:** packages list, reservations list, Schedule hourly / full day lists
 - **Commit:** `f737290`
-
-### 2026-11-11 — Schedule New menu: Cash In / Cash Out
-- **Changed:** `Schedule/index`, PaymentModule `Payment/partials/form`, `Expense/create`, `PaymentRequest`, `PaymentActions::store()`, `ExpenseActions::store()`, custom.js (`json.go`)
-- **Why:** user
-- **Affects:** Schedule page header
-- **Commit:** in `19dd3d8`

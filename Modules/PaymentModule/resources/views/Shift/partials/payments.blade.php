@@ -7,7 +7,7 @@
 @if (isset($closing) && $closing->count > $payments->count())
     <div class="mb-2 text-xs text-slate-500">The newest {{ $payments->count() }} of {{ number_format($closing->count) }} cash in entries.</div>
 @endif
-<div class="table-wrap">
+<div class="table-wrap table-wrap--tips">
     <table class="data-table">
         <thead>
             <tr><th>Member</th><th>For</th><th>Date</th><th>Method</th><th>Amount</th><th></th></tr>

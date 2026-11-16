@@ -20,6 +20,7 @@
         @else
             <a href="{{ $showUrl }}" data-modal class="badge badge-status-success">Cash In</a>
         @endif
+        @include('layoutmodule::partials.note-tip', ['note' => $isPayment ? $item->note_tip : $item->notes])
         <div class="text-xs text-slate-500">#{{ $isPayment ? $item->payment_no : $item->expense_no }}</div>
         @break
 

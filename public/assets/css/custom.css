@@ -3940,6 +3940,18 @@ td.renewal-row__action > .wa-btn {
     /* the theme colour, not the reports' dark grey (user 2026-11-12) */
     background: rgb(var(--color-primary));
 }
+/* the tooltip to the right of the (i), vertically centred (a note in an early column: layoutmodule::partials.note-tip, 2026-11-16) */
+.info-tip--right {
+    vertical-align: middle;
+    margin-left: 0.25rem;
+}
+.info-tip--right::after {
+    top: 50%;
+    left: calc(100% + 0.4rem);
+    transform: translateY(-50%);
+    white-space: normal;
+    background: rgb(var(--color-primary));
+}
 /* a table whose cells show tooltips: not clipped on computer screens (phones keep the side scroll) */
 @media (min-width: 768px) {
     .table-wrap--tips {

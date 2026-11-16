@@ -3,3 +3,4 @@
 @if ($payment->type === 'withholding')
     <span class="badge badge-status-info badge-small">Withholding</span>
 @endif
+@include('layoutmodule::partials.note-tip', ['note' => $payment->note_tip])

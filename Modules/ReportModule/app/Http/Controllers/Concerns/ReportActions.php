@@ -432,9 +432,10 @@ trait ReportActions
             ->addColumn('category', fn ($expense) => view('reportmodule::Report.partials.expense-category', ['expense' => $expense])->render())
             ->addColumn('method', fn ($expense) => e($expense->method_name))
             ->addColumn('by', fn ($expense) => e($expense->creatable?->userable?->name ?? '-'))
-            ->editColumn('item', fn ($expense) => e($expense->item))
+            // the note as an (i) on hover (2026-11-16, user)
+            ->editColumn('item', fn ($expense) => e($expense->item) . view('layoutmodule::partials.note-tip', ['note' => $expense->notes])->render())
             ->editColumn('amount', fn ($expense) => view('reportmodule::Report.partials.money', ['value' => $expense->amount, 'class' => 'money-out'])->render())
-            ->rawColumns(['category', 'amount', 'DT_RowAttr.data-open-url'])
+            ->rawColumns(['category', 'item', 'amount', 'DT_RowAttr.data-open-url'])
             ->only(['DT_RowId', 'expense_no', 'spent_at', 'category', 'item', 'method', 'by', 'amount'])
             ->toJson();
     }

@@ -143,6 +143,13 @@ class Payment extends Model
     }
 
     // + for payments / withholding, - for refunds
+    // the (i) note of a list row (layoutmodule::partials.note-tip, 2026-11-16): a refund's reason + the note
+    public function getNoteTipAttribute(): string
+    {
+        $reason = $this->type === 'refund' && $this->reason ? 'Reason: ' . $this->reason : '';
+        return trim($reason . ($reason && $this->notes ? ' — ' : '') . (string) $this->notes);
+    }
+
     public function getSignedAmountAttribute(): float
     {
         return $this->type === 'refund' ? -$this->amount : $this->amount;

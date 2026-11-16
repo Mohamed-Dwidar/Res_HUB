@@ -37,7 +37,7 @@
 </div>
 
 @if ($summary['payments']->isNotEmpty())
-    <div class="table-wrap mt-4">
+    <div class="table-wrap table-wrap--tips mt-4">
         <table class="data-table">
             <thead>
                 <tr>
@@ -60,7 +60,7 @@
                         <td><a href="{{ $showUrl }}" data-modal class="font-medium">#{{ $payment->payment_no }}</a></td>
                         <td>@include('paymentmodule::Payment.partials.row-source')</td>
                         <td>{{ $payment->paymentMethod?->name ?? '-' }}</td>
-                        <td><span class="badge {{ $payment->type_badge_class }}">{{ $payment->type_label }}</span></td>
+                        <td class="whitespace-nowrap"><span class="badge {{ $payment->type_badge_class }}">{{ $payment->type_label }}</span>@include('layoutmodule::partials.note-tip', ['note' => $payment->note_tip])</td>
                         <td>{{ $payment->creatable?->userable?->displayName() ?? $payment->creatable?->email ?? '-' }}</td>
                         <td class="whitespace-nowrap">
                             <span class="payments-block__icons">

@@ -56,6 +56,7 @@ Then suggest a commit message.
 - Layout: pages `@extends` their area layout (`layoutmodule::admin.main` / `account.main` / `employee.main`), never `main` directly; fill `title`, `actions`, `content`; page JS/CSS via `@push('scripts')` / `@push('styles')`
 - Layout: template markup + classes copied from `Template_Source/dagger-*.html`; custom styles = named classes in `custom.css` (no `style=""`, no `<style>`); template overrides in `custom.js`, never edit template files (`app.css`, `themes/dagger.js`, `vendors/*`)
 - PDF views (mpdf, e.g. `paymentmodule::Payment.receipt-pdf`, `packagemodule::Package.statement-pdf`): the ONE exception to the custom-CSS rule — styles in `public/assets/css/pdf.css`, linked with `public_path()` (mpdf can't read `custom.css`: CSS variables, flex / grid); still no `style=""` / `<style>`; plain CSS 2, tables for layout
+- Layout: a row's note in any list / table (cash in, cash out, refunds, extras …) = `layoutmodule::partials.note-tip` ((i) + the note on hover; payments: `$payment->note_tip` = a refund's reason + note), not a text line
 - Layout: every "Pay" button = `btn btn-pay` (green, custom.css), not `btn-primary`
 - Layout: icons = Lucide (`data-lucide="name"`); images in `public/assets/images` (only logo / favicon — template demo images not copied)
 - Layout: sidebar open by default, collapse toggle remembered (`localStorage.compactMenu`), no hover-expand; content full width (no `.container`)
