@@ -6,10 +6,16 @@
     summary), Type = the category name only; a package: Amount (net before tax; taxed: "incl. taxes" under it, Phase C) + type
     badge; inside a package / not counted =
     "Add it on the package" / no Add button (ExtraService::extrableError()).
+    2026-11-16 (user): two blocks — Extras (sales: taxed with the reservations while the invoice is requested) and, after it,
+    "Balance carried / adjustments" (adjustments + untaxed categories such as Rounding: added after tax,
+    ExtraService::afterTax()); display only, no calculation change.
 --}}
 @php
     $area = request()->routeIs('employee.*') ? 'employee' : 'account';
-    $extras = $extrable->extrasList();
+    $all = $extrable->extrasList();
+    $extraService = app(\Modules\PaymentModule\app\Services\ExtraService::class);
+    [$adjustments, $extras] = $all->partition(fn ($extra) => $extraService->afterTax($extra));
+    $taxed = $extrable->isTaxed();
     $addError = app(\Modules\PaymentModule\app\Services\ExtraService::class)->extrableError($extrable);
     $dateFormat = \Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT;
     $taxCols = $kind === 'reservation';
@@ -17,7 +23,9 @@
 @endphp
 
 <div class="form-section mt-8 payments-block__head">
-    <span>Extras ({{ $extras->count() }})</span>
+    <span>Extras ({{ $extras->count() }})
+        <span class="text-xs font-normal text-slate-500">· sales, {{ $taxed ? 'taxed with the ' . ($kind === 'package' ? 'reservations' : 'reservation') . ' (invoice requested)' : 'no invoice: no taxes' }}</span>
+    </span>
     {{-- the account and employees (employees: extras only, no edit / delete) --}}
     @if (!$addError && Gate::allows('extras.create'))
         <a href="{{ route($area . '.extras.create', [$kind . '_id' => $extrable->id]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Add Extra</a>
@@ -75,11 +83,12 @@
                 @endforeach
                 <tr class="font-medium">
                     <td>{{ number_format($extras->sum($lineNet), 2) }}
-                        @if (!$taxCols && abs($extrable->extrasTotal() - $extras->sum($lineNet)) >= 0.01)
-                            <div class="text-xs font-normal text-slate-500">incl. taxes {{ number_format($extrable->extrasTotal(), 2) }}</div>
+                        @php($salesDue = $extras->sum(fn ($extra) => (float) ($extra->tax_total ?? $extra->amount)))
+                        @if (!$taxCols && abs($salesDue - $extras->sum($lineNet)) >= 0.01)
+                            <div class="text-xs font-normal text-slate-500">incl. taxes {{ number_format($salesDue, 2) }}</div>
                         @endif
                     </td>
-                    <td colspan="4">Total extras</td>
+                    <td colspan="4">Total extras (sales)</td>
                     @if ($area === 'account')<td></td>@endif
                 </tr>
             </tbody>
@@ -87,4 +96,52 @@
     </div>
 @else
     <div class="text-slate-500">{{ $addError && $kind === 'reservation' && !$extrable->canTakePayments() ? $addError : 'No extras.' }}</div>
+@endif
+
+{{-- adjustments / Rounding: added AFTER tax (never taxed) --}}
+@if ($adjustments->isNotEmpty())
+    <div class="form-section mt-8">Balance carried / adjustments ({{ $adjustments->count() }})
+        <span class="text-xs font-normal text-slate-500">· added after tax, never taxed</span>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Amount</th>
+                    <th>Date</th>
+                    <th>Item</th>
+                    <th>Type</th>
+                    @if ($area === 'account')<th></th>@endif
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($adjustments as $extra)
+                    <tr>
+                        <td class="font-medium {{ $extra->amount < 0 ? 'text-danger' : '' }}">{{ number_format($extra->amount, 2) }}</td>
+                        <td class="whitespace-nowrap">{{ $extra->date?->format($dateFormat) }}</td>
+                        <td>
+                            {{ $extra->item }}
+                            @if ($extra->notes)<div class="text-xs text-slate-500">{{ $extra->notes }}</div>@endif
+                        </td>
+                        <td class="whitespace-nowrap">{{ $extra->type === 'extra' ? ($extra->incomeCategory?->name ?? '-') : $extra->type_label }}</td>
+                        @if ($area === 'account')
+                            <td class="whitespace-nowrap">
+                                <span class="payments-block__icons">
+                                    <a href="{{ route('account.extras.edit', $extra->id) }}" data-modal title="Edit"><i data-lucide="pencil" class="h-4 w-4"></i></a>
+                                    @include('paymentmodule::Extra.partials.delete-form')
+                                </span>
+                            </td>
+                        @endif
+                    </tr>
+                @endforeach
+                @if ($adjustments->count() > 1)
+                    <tr class="font-medium">
+                        <td>{{ number_format($adjustments->sum('amount'), 2) }}</td>
+                        <td colspan="3">Total adjustments</td>
+                        @if ($area === 'account')<td></td>@endif
+                    </tr>
+                @endif
+            </tbody>
+        </table>
+    </div>
 @endif

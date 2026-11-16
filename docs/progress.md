@@ -338,6 +338,7 @@
   - `app/Services/{PaymentService, PaymentMethodService, IncomeCategoryService}`, `app/Repositories/{PaymentMethod, IncomeCategory}Repository`
   - `app/Http/Controllers/Account/{PaymentMethod, IncomeCategory}AccountModuleController`, `app/Http/Requests/{PaymentMethod, IncomeCategory}Request`, `views/{Method, Category}/*`
   - Extras on reservations (2026-11-08): `ExtraService` (kinds reservation | package; `extrableError()`; `applyTax()` = the RESERVATION's tax snapshot while its invoice is requested, else none — packages untaxed until Phase C; `retax()` after every `ReservationService::update()`; `syncTotal()` → `reservations.extras_total` (Σ tax_total ?: amount) + `refresh()`; `amountsOf()` for the form's warning), shared view `Extra/partials/extras` (reservation: Amount (net) | Date | Item | Qty × Price | Type = category name; package: Amount + type badge), `ExtraActions::categoryOptions()` = `IncomeCategoryService::extraOptions()` (active, non-system, `default_price` → custom.js fills the price / item)
+  - Extras view (2026-11-16): two blocks — Extras (sales, taxed with the reservation(s) while invoiced) + "Balance carried / adjustments" (adjustments + untaxed categories e.g. Rounding, after tax; `ExtraService::afterTax()`)
   - Overpayments cleanup (2026-11-10): `Console/CleanOverpaymentsCommand` (`payments:clean-overpayments [--account=] [--run] [--url=]`, dry run = rolled back transaction; groups by rule: card surcharge → latest cash in reduced / deleted + `paymentChanged()` / `logOpenChange()`, a closing whose saved net ≠ its rows never recalculated; rounding → `ExtraService::create()` Rounding extra; the rest → `Exports/OverpaymentsExport` on the local disk `exports/`, links `--url` + `account.{reservations|packages}.show`); run `payments:refresh` before it
   - System income category flags (2026-11-10): config `generated_income_categories.<key>` `income` / `extra` / `untaxed` (Rounding has all three) → `IncomeCategory::{generatedFlag, generatedKeysWith}()`, `IncomeCategoryService::{extraOptions (makes + offers `extra` ones), generated (is_revenue from `income`), categoryData, deleteOne (system = never deleted)}`, `ExtraService::untaxed()` (no tax snapshot, left out of `amountsOf()`); category list: no Delete for system ones
   - Income categories (2026-11-08): form = name AR / EN, Active, Default Price only (no "Counts as income", no "Extra item", no Taxes — the tax flag columns kept, unused); `is_revenue` set by the rule = not a system category (`generated_key`: `advance_repayment`, `vat_manual` = VAT (manual) #6, locked like Advance repayment: not in Cash In / Add Extra, its cash ins no edit / delete / refund); list "System" badge + default price
@@ -476,6 +477,12 @@
 
 ## Session log
 
+### 2026-11-16 — Extras view: sales vs "Balance carried / adjustments"
+- **Changed:** `Extra/partials/extras` (two blocks), `ExtraService::afterTax()`
+- **Why:** user (make clear: sales taxed with the reservations, adjustments / Rounding after tax); display only
+- **Checked:** #22636 (invoiced, standalone): booking 2,300 + extra 720 → VAT 322 + 100.80 = 422.80, total 3,442.80 = view = invoice PDF = Income report (tax 422.80 over 3 payments)
+- **Commit:** "Extras view: …" (pushed)
+
 ### 2026-11-16 — Taxes Phase C: packages
 - **Changed:** PaymentModule (`Tax/PackageTax` new, `ExtraService`, `HasExtras`, `InvoicePdfService`, `PaymentService::refreshAll`, extras / amount-lines / Payment Exceptions views), PackageModule (`Package`, `PackageService`, `PackageActions`, `PackageRequest`, form / show / row-amount / statement PDF), ReservationModule `ReservationService` (plan default), ReportModule (`MemberStatementReport`, `OutstandingReport`), custom.js (`data-show-if="!x"`); docs
 - **Why:** user
@@ -531,9 +538,3 @@
 - **Why:** user (report 7; tested OK, R1 – R7 done)
 - **Affects:** Reports sidebar section
 - **Commit:** `19dd3d8`
-
-### 2026-11-10 — Overpayments cleanup command (card surcharge / rounding / Excel)
-- **Changed:** PaymentModule (`Console/CleanOverpaymentsCommand`, `Exports/OverpaymentsExport`, provider, config `generated_income_categories.rounding` + flags, `IncomeCategory::{generatedFlag, generatedKeysWith}`, `IncomeCategoryService` (Add Extra, income rule, no delete of system categories), `ExtraService` (untaxed), category views); run locally
-- **Why:** user (credit audit)
-- **Affects:** paid / remaining of 284 rows, 10 imported closings' totals, Payment Exceptions › Edited / Deleted, income (Rounding extras)
-- **Commit:** `2c99972` (code), `cbe26f0` (docs)

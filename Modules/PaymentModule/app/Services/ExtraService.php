@@ -192,6 +192,12 @@ class ExtraService
             ? $calculator->calculate((float) $extra->amount, 0, $rule)->total : (float) $extra->amount), 2);
     }
 
+    // an extra added AFTER tax (the views' "Balance carried / adjustments" block): an adjustment or an untaxed category (Rounding)
+    public function afterTax(Extra $extra): bool
+    {
+        return $extra->type !== 'extra' || $this->untaxed($extra);
+    }
+
     // an extra of a system category flagged `untaxed` (Rounding)
     private function untaxed(Extra $extra): bool
     {
