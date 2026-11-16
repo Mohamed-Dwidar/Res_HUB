@@ -2,14 +2,9 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    {{-- the member (name, phone under it) + the package badge (opens the package) --}}
+    {{-- reservation no. + the package badge (opens the package); the member is in the content header (2026-11-16) --}}
     <span class="reservation-title">
-        <div>
-            <div class="text-lg font-medium">@include('membermodule::partials.member-link', ['member' => $reservation->member])</div>
-            @if ($reservation->member?->phone)
-                <div class="text-xs text-slate-500">{{ $reservation->member->phone }}</div>
-            @endif
-        </div>
+        <div class="text-lg font-medium">Reservation #{{ $reservation->id }}</div>
         <div>
         @if ($reservation->package)
             <a href="{{ route($area . '.packages.show', $reservation->package_id) }}" data-modal class="badge badge-active mr-1" title="Package">
@@ -51,9 +46,18 @@
 @endsection
 
 @section('content')
-    {{-- the place, plan, period (+ people) on the left; Due | Paid | Remaining on the right like the package view (2026-11-01, user),
-         only when it is paid on its own (not inside a package / not counted) --}}
-    <div class="flex flex-wrap items-start gap-4">
+    {{-- info lines: place, plan, period (+ people), invoice, added by, notes (the amounts = the list below, 2026-11-16) --}}
+    {{-- header: member (opens the member) + phone left, Due | Paid | Remaining right (paid on its own only) --}}
+    <div class="flex flex-wrap items-center gap-4">
+        <div>
+            <div class="text-lg font-medium">@include('membermodule::partials.member-link', ['member' => $reservation->member])</div>
+            <div class="mt-1 text-sm text-slate-500">{{ $reservation->member?->phone ?: '-' }}</div>
+        </div>
+        @include('paymentmodule::Payment.partials.money-box', ['payable' => $reservation])
+    </div>
+
+    {{-- two columns on large screens (stacked on phones): left = info, right = the Amounts card (2026-11-16, user) --}}
+    <div class="view-columns mt-6">
         <div>
             <div class="flex flex-wrap items-center gap-3">
                 @if ($reservation->unit?->color)
@@ -75,27 +79,20 @@
             @if ((int) $reservation->unit?->capacity > 1)
                 <div class="mt-1 text-slate-500">Number of People: <b>{{ $reservation->number_of_peoples }}</b></div>
             @endif
+            {{-- 2026-11-16 (user): the invoice badge (+ its VAT rule), added at / by, notes on top --}}
+            @if ($reservation->invoice_requested && $reservation->isTaxed())
+                <div class="mt-2"><span class="badge badge-status-info">Invoice requested</span> <span class="text-xs text-slate-500">{{ \Modules\PaymentModule\app\Services\Tax\TaxRule::fromSnapshot($reservation)?->label() }}</span></div>
+            @elseif ($reservation->invoice_requested && $reservation->package_id)
+                <div class="mt-2"><span class="badge badge-status-info">Invoice requested</span> <span class="text-xs text-slate-500">through the package</span></div>
+            @endif
+            <div class="mt-2 text-sm text-slate-500">Added by <b>{{ $reservation->creatable?->userable?->displayName() ?? $reservation->creatable?->email ?? '-' }}</b> | At {{ $reservation->created_at->format('d-m-Y h:i A') }}</div>
+            @if ($reservation->notes)
+                <div class="mt-1 whitespace-pre-line text-sm text-slate-600">{{ $reservation->notes }}</div>
+            @endif
         </div>
-        @if ($reservation->canTakePayments())
-            @php($remaining = (float) $reservation->remaining)
-            <div class="money-box ml-auto">
-                <div class="money-box__item money-box__item--due" title="{{ ($reservation->isTaxed() ? 'Total incl. taxes' : 'Net amount') . ($reservation->extrasTotal() != 0 ? ' + extras' : '') }}">
-                    <span>Due</span><b>{{ number_format($reservation->payableAmount(), 2) }}</b>
-                </div>
-                <div class="money-box__item money-box__item--paid">
-                    <span>Paid</span><b>{{ number_format($reservation->paid_amount, 2) }}</b>
-                </div>
-                <div class="money-box__item {{ $remaining > 0 ? 'money-box__item--owed' : ($remaining < 0 ? 'money-box__item--credit' : 'money-box__item--paid') }}">
-                    <span>{{ $remaining < 0 ? 'Credit' : 'Remaining' }}</span><b>{{ number_format(abs($remaining), 2) }}</b>
-                </div>
-            </div>
-        @endif
+        {{-- ONE invoice-style list of the amounts (2026-11-16, user; the invoice PDF's order) --}}
+        @include('paymentmodule::Payment.partials.invoice-summary', ['payable' => $reservation])
     </div>
-
-   <div class="form-section">&nbsp;</div>
-
-    {{-- Amount - Discount - Net Amount (+ the taxes); Paid / Remaining are in the box at the top --}}
-    @include('paymentmodule::Payment.partials.amount-lines', ['payable' => $reservation, 'kind' => 'reservation', 'paidLine' => false])
 
     {{-- a subscription period: the period it renews, its renewal, left (+ undo) --}}
     @if ($reservation->isPeriod() && ($reservation->renewal_of || $reservation->renewedBy || $reservation->left_at))
@@ -131,18 +128,6 @@
     {{-- ContractModule (Phase 2): the contract covering this period, or Create / Renew Contract (only when its unit has a template on) --}}
     @include('contractmodule::Contract.partials.reservation-block')
 
-    <div class="form-section">&nbsp;</div>
-
-    <dl class="detail-list">
-        <div class="wide"><dt>Notes</dt><dd class="whitespace-pre-line">{{ $reservation->notes ?: '-' }}</dd></div>
-        <div class="wide">
-            <dd class="whitespace-pre-line">
-                Added by <b>{{ $reservation->creatable?->userable?->displayName() ?? $reservation->creatable?->email ?? '-' }}</b>
-                |
-                At {{ $reservation->created_at->format('d-m-Y h:i A') }}
-            </dd>
-        </div>
-    </dl>
 
     @unless (request()->ajax())
         <div class="form-actions">

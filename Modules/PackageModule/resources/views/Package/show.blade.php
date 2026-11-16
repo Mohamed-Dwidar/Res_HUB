@@ -18,128 +18,44 @@
 @endsection
 
 @section('content')
-    {{-- left: the member name + phone (smaller); right: Due | Paid | Remaining in one block, each in its color (2026-10-21) --}}
-    @php($due = $package->payableAmount())
-    @php($extras = $package->extrasTotal())
-    @php($remaining = (float) $package->remaining)
+    {{-- 2026-11-16 (user, layout only): the member + info lines on top, then ONE invoice-style list of the amounts
+         (Payment/partials/invoice-summary = InvoicePdfService::summary(), the invoice PDF's order) --}}
+    @php($hours = $package->reservationsHours())
+    @php($counted = $package->reservations->filter(fn ($reservation) => $reservation->isCounted())->count())
+    {{-- header: member + phone left, Due | Paid | Remaining right --}}
     <div class="flex flex-wrap items-center gap-4">
         <div>
-            <div class="text-lg font-medium">
-                {{ $package->member ? $package->member->name : '-' }}
-            </div>
-            <div class="mt-1 text-sm text-slate-500">
-                {{ $package->member ? $package->member->phone : '-' }}
-            </div>
+            <div class="text-lg font-medium">{{ $package->member ? $package->member->name : '-' }}</div>
+            <div class="mt-1 text-sm text-slate-500">{{ $package->member ? $package->member->phone : '-' }}</div>
         </div>
-        <div class="money-box ml-auto">
-            <div class="money-box__item money-box__item--due" title="{{ $package->isTaxed() ? 'Total incl. taxes + extras' : 'Net + extras' }}">
-                <span>Due</span><b>{{ number_format($due, 2) }}</b>
-            </div>
-            <div class="money-box__item money-box__item--paid">
-                <span>Paid</span><b>{{ number_format($package->paid_amount, 2) }}</b>
-            </div>
-            <div class="money-box__item {{ $remaining > 0 ? 'money-box__item--owed' : ($remaining < 0 ? 'money-box__item--credit' : 'money-box__item--paid') }}">
-                <span>{{ $remaining < 0 ? 'Credit' : 'Remaining' }}</span><b>{{ number_format(abs($remaining), 2) }}</b>
-            </div>
-        </div>
+        @include('paymentmodule::Payment.partials.money-box', ['payable' => $package])
     </div>
 
-    <div class="form-section mt-6">Package Data</div>
-    <dl class="detail-list">
-        <div>
-            <dt>Period</dt>
-            <dd>{{ $package->period }}</dd>
+    {{-- two columns on large screens (stacked on phones): left = info, right = the Amounts card (2026-11-16, user) --}}
+    <div class="view-columns mt-6">
+    <div>
+    <div class="space-y-1 text-slate-600">
+        <div><i data-lucide="calendar" class="inline h-4 w-4"></i> {{ $package->period }}</div>
+        <div><i data-lucide="clock" class="inline h-4 w-4"></i>
+            {{ $counted }} {{ $counted == 1 ? 'reservation' : 'reservations' }}
+            · {{ rtrim(rtrim(number_format($hours['hours'], 2), '0'), '.') }} {{ $hours['hours'] == 1 ? 'hour' : 'hours' }}
+            @if ($hours['open'])<span class="text-xs text-slate-500">(+ {{ $hours['open'] }} continuous, not counted)</span>@endif
         </div>
-        <div>
-            <dt>Price <span class="text-slate-400">(reservations net)</span></dt>
-            <dd class="font-medium">{{ number_format($package->amount, 2) }}</dd>
-        </div>
-        <div>
-            <dt>Discount</dt>
-            <dd>{{ rtrim(rtrim(number_format($package->discount_percentage, 2), '0'), '.') }}%</dd>
-        </div>
-        <div>
-            <dt>Net</dt>
-            <dd class="font-medium">{{ number_format($package->after_discount, 2) }}</dd>
-        </div>
-        {{-- taxes (Phase C): "Invoice requested" + the package part's Net before tax / VAT / Table tax / Total (the extras' own
-             taxes are in the Extras line, with them) and its tax groups when more than one --}}
         @if ($package->isTaxed())
+            {{-- the badge + its tax rule(s) only (the amounts are in the Amounts card) --}}
             <div>
-                <dt>Net before tax</dt>
-                <dd>{{ number_format($package->tax_net, 2) }}</dd>
-            </div>
-            <div>
-                <dt>VAT</dt>
-                <dd>{{ number_format($package->vat, 2) }}</dd>
-            </div>
-            @if ((float) $package->table_tax != 0)
-                <div>
-                    <dt>Table Tax</dt>
-                    <dd>{{ number_format($package->table_tax, 2) }}</dd>
-                </div>
-            @endif
-            @if ((float) $package->tax_extra_discount != 0)
-                <div>
-                    <dt>Extra Discount</dt>
-                    <dd>{{ number_format($package->tax_extra_discount, 2) }}</dd>
-                </div>
-            @endif
-            <div>
-                <dt>Total <span class="text-slate-400">(incl. taxes)</span></dt>
-                <dd class="font-medium">{{ number_format($package->tax_total, 2) }}</dd>
-            </div>
-            <div class="wide">
-                <dt>Invoice</dt>
-                <dd>
-                    <span class="badge badge-status-info">Invoice requested</span>
-                    @foreach ((array) $package->tax_groups as $group)
-                        <div class="mt-1 text-xs text-slate-500">{{ $group['label'] }} · {{ $group['count'] }} {{ $group['count'] == 1 ? 'reservation' : 'reservations' }} · net {{ number_format($group['net'], 2) }} → {{ number_format($group['total'], 2) }}</div>
-                    @endforeach
-                </dd>
+                <span class="badge badge-status-info">Invoice requested</span>
+                <span class="text-xs text-slate-500">{{ collect((array) $package->tax_groups)->pluck('label')->unique()->implode(' · ') }}</span>
             </div>
         @endif
-        {{-- every amount (2026-10-21): + extras = due, paid, remaining (or credit) + the payment status --}}
-        <div>
-            <dt>Extras</dt>
-            <dd>{{ number_format($extras, 2) }}</dd>
-        </div>
-        <div>
-            <dt>Due <span class="text-slate-400">({{ $package->isTaxed() ? 'total + extras' : 'net + extras' }})</span></dt>
-            <dd class="font-bold text-primary">{{ number_format($due, 2) }}</dd>
-        </div>
-        <div>
-            <dt>Paid</dt>
-            <dd class="font-bold text-success">{{ number_format($package->paid_amount, 2) }}</dd>
-        </div>
-        <div>
-            <dt>{{ $remaining < 0 ? 'Credit' : 'Remaining' }}</dt>
-            <dd class="font-bold {{ $remaining > 0 ? 'text-danger' : ($remaining < 0 ? 'text-info' : '') }}">
-                {{ number_format(abs($remaining), 2) }}
-                <span class="badge {{ $package->payment_status_badge_class }} ml-1">{{ $package->payment_status_label }}</span>
-            </dd>
-        </div>
-        @php($hours = $package->reservationsHours())
-        <div>
-            <dt>Total Hours</dt>
-            <dd>
-                {{ rtrim(rtrim(number_format($hours['hours'], 2), '0'), '.') }}
-                {{ $hours['hours'] == 1 ? 'hour' : 'hours' }}
-                @if ($hours['open'])
-                    <span class="text-xs text-slate-500">(+ {{ $hours['open'] }} continuous reservation(s), not
-                        counted)</span>
-                @endif
-            </dd>
-        </div>
-        <div>
-            <dt>Added At</dt>
-            <dd>{{ $package->created_at->format('Y-m-d H:i') }}</dd>
-        </div>
-        <div class="wide">
-            <dt>Notes</dt>
-            <dd>{{ $package->notes ?: '-' }}</dd>
-        </div>
-    </dl>
+        <div class="text-sm">Added by <b>{{ $package->creatable?->userable?->displayName() ?? $package->creatable?->email ?? '-' }}</b> | At {{ $package->created_at->format('d-m-Y h:i A') }}</div>
+        @if ($package->notes)
+            <div class="whitespace-pre-line text-sm">{{ $package->notes }}</div>
+        @endif
+    </div>
+    </div>
+    @include('paymentmodule::Payment.partials.invoice-summary', ['payable' => $package])
+    </div>
 
     {{-- sales / adjustments added to what it owes, then its payments --}}
     @include('paymentmodule::Extra.partials.package-extras', ['package' => $package])

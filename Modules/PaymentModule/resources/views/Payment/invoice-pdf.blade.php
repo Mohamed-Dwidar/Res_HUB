@@ -10,7 +10,7 @@
     $t = $ar ? [
         'title' => 'فاتورة', 'date' => 'التاريخ', 'member' => 'العميل', 'phone' => 'الهاتف', 'company' => 'الشركة',
         'item' => 'البند', 'qty' => 'الكمية × السعر', 'amount' => 'المبلغ', 'lines' => 'البنود', 'subtotal' => 'الإجمالي الفرعي', 'totalTax' => 'الإجمالي (شامل الضرائب)', 'booking' => 'حجز',
-        'package' => 'باقة', 'period' => 'الفترة', 'sessions' => 'حجوزات', 'hours' => 'ساعة', 'carried' => 'رصيد مرحل',
+        'package' => 'باقة', 'period' => 'الفترة', 'sessions' => 'حجوزات', 'hours' => 'ساعة', 'carried' => 'رصيد مرحل / تسويات', 'price' => 'السعر', 'extras' => 'إضافات (مبيعات)', 'rounding' => 'تقريب', 'due' => 'المستحق',
         'before' => 'المبلغ قبل الخصم', 'discount' => 'الخصم', 'net' => 'الصافي قبل الضريبة', 'vat' => 'ضريبة القيمة المضافة',
         'exempt' => 'معفى', 'table' => 'ضريبة الجدول', 'extraDiscount' => 'خصم إضافي', 'total' => 'الإجمالي',
         'payments' => 'المدفوعات', 'receipt' => 'رقم الإيصال', 'method' => 'طريقة الدفع', 'refund' => 'استرداد',
@@ -20,7 +20,7 @@
     ] : [
         'title' => 'Invoice', 'date' => 'Date', 'member' => 'Customer', 'phone' => 'Phone', 'company' => 'Company',
         'item' => 'Item', 'qty' => 'Qty × Price', 'amount' => 'Amount', 'lines' => 'Items', 'subtotal' => 'Subtotal', 'totalTax' => 'Total (incl. taxes)', 'booking' => 'Reservation',
-        'package' => 'Package', 'period' => 'Period', 'sessions' => 'reservations', 'hours' => 'h', 'carried' => 'Balance carried over',
+        'package' => 'Package', 'period' => 'Period', 'sessions' => 'reservations', 'hours' => 'h', 'carried' => 'Balance carried / adjustments', 'price' => 'Price', 'extras' => 'Extras (sales)', 'rounding' => 'Rounding', 'due' => 'Due',
         'before' => 'Amount before discount', 'discount' => 'Discount', 'net' => 'Net before tax', 'vat' => 'VAT',
         'exempt' => 'Exempt', 'table' => 'Table tax', 'extraDiscount' => 'Extra discount', 'total' => 'Total',
         'payments' => 'Payments', 'receipt' => 'Receipt No.', 'method' => 'Method', 'refund' => 'Refund',
@@ -124,36 +124,47 @@
                     <td class="num">{{ $money($extra->amount) }}</td>
                 </tr>
             @endforeach
-            @if ($adjustments != 0)
-                <tr><td></td><td>{{ $t['carried'] }}</td><td></td><td class="num">{{ $money($adjustments) }}</td></tr>
-            @endif
         </tbody>
     </table>
 
-    {{-- 4. totals: Subtotal, Discount (only when there is one), Net before tax, VAT / Table tax (each only > 0), Total --}}
+    {{-- 4. totals (2026-11-16, user: the views' order, InvoicePdfService::summary()): Price → Discount → Extras (sales) → Net before
+         tax → VAT → Table tax → Total → Balance carried / adjustments → Rounding → Due; lines of 0 hidden except the totals;
+         without an invoice no tax lines and Total = the net. Paid / Remaining under the payments. --}}
+    @php($s = $summary)
     <table class="invoice-totals">
         <tr>
             <td class="invoice-totals-space"></td>
             <td class="invoice-totals-col">
                 <table class="statement-summary-table">
-                    <tr><th>{{ $t['subtotal'] }}</th><td>{{ $money($subtotal) }}</td></tr>
-                    @if ($discount > 0)
-                        <tr><th>{{ $t['discount'] }}</th><td>{{ $money($discount) }} ({{ $discountPercent }}%)</td></tr>
+                    <tr><th>{{ $t['price'] }}</th><td>{{ $money($s['price']) }}</td></tr>
+                    @if ($s['discount'] != 0)
+                        <tr><th>{{ $t['discount'] }}</th><td>{{ $money(-$s['discount']) }} ({{ $discountPercent }}%)</td></tr>
                     @endif
-                    @if ($tax)
-                        {{-- only with taxes (user 2026-11-08): without them it equals the Total --}}
-                        <tr><th>{{ $t['net'] }}</th><td>{{ $money($netBeforeTax) }}</td></tr>
-                        @if ($tax['vat'] > 0)
-                            <tr><th>{{ $t['vat'] }}</th><td>{{ $money($tax['vat']) }}</td></tr>
+                    @if ($s['sales'] != 0)
+                        <tr><th>{{ $t['extras'] }}</th><td>{{ $money($s['sales']) }}</td></tr>
+                    @endif
+                    @if ($s['taxed'])
+                        <tr><th>{{ $t['net'] }}</th><td class="statement-strong">{{ $money($s['netBeforeTax']) }}</td></tr>
+                        @if ($s['exempt'])
+                            <tr><th>{{ $t['vat'] }}</th><td>{{ $t['exempt'] }}</td></tr>
+                        @elseif ($s['vat'] != 0)
+                            <tr><th>{{ $t['vat'] }}</th><td>{{ $money($s['vat']) }}</td></tr>
                         @endif
-                        @if ($tax['table'] > 0)
-                            <tr><th>{{ $t['table'] }}</th><td>{{ $money($tax['table']) }}</td></tr>
+                        @if ($s['table'] != 0)
+                            <tr><th>{{ $t['table'] }}</th><td>{{ $money($s['table']) }}</td></tr>
                         @endif
-                        @if ($tax['discount'] != 0)
-                            <tr><th>{{ $t['extraDiscount'] }}</th><td>{{ $money($tax['discount']) }}</td></tr>
+                        @if ($s['extraDiscount'] != 0)
+                            <tr><th>{{ $t['extraDiscount'] }}</th><td>{{ $money($s['extraDiscount']) }}</td></tr>
                         @endif
                     @endif
-                    <tr class="invoice-total-row"><th>{{ $tax ? $t['totalTax'] : $t['total'] }}</th><td>{{ $money($total) }}</td></tr>
+                    <tr class="invoice-total-row"><th>{{ $s['taxed'] ? $t['totalTax'] : $t['total'] }}</th><td>{{ $money($s['total']) }}</td></tr>
+                    @if ($s['adjustments'] != 0)
+                        <tr><th>{{ $t['carried'] }}</th><td>{{ $money($s['adjustments']) }}</td></tr>
+                    @endif
+                    @if ($s['rounding'] != 0)
+                        <tr><th>{{ $t['rounding'] }}</th><td>{{ $money($s['rounding']) }}</td></tr>
+                    @endif
+                    <tr class="invoice-total-row"><th>{{ $t['due'] }}</th><td>{{ $money($s['due']) }}</td></tr>
                 </table>
             </td>
         </tr>

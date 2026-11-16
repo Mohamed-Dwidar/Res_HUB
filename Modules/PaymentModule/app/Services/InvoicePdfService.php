@@ -98,7 +98,10 @@ class InvoicePdfService
             'account' => $payable->account,
             'member' => $payable->member,
             'main' => $main,
-            'extras' => $lines,
+            // 2026-11-16 (user): the item lines = the booking / package + the SALES extras; the totals = summary() (adjustments /
+            // Rounding there, after tax — the views' order)
+            'extras' => ($summary = $this->summary($payable))['salesLines'],
+            'summary' => $summary,
             'lineNet' => $lineNet,
             'adjustments' => $adjustments,
             'price' => $price,
@@ -113,6 +116,53 @@ class InvoicePdfService
             'total' => round($total, 2),
             'invoiceRequested' => (bool) $payable->invoice_requested,
             'payments' => $payable->payments()->with('paymentMethod')->orderBy('paid_at')->orderBy('payment_no')->get(),
+            'paid' => (float) $payable->paid_amount,
+            'remaining' => (float) $payable->remaining,
+        ];
+    }
+
+    /**
+     * The invoice-style amounts of a reservation / package (2026-11-16, user; display only — every figure is a stored one):
+     * Price → Discount (%) → Extras (sales) → Net before tax → VAT → Table tax → [Extra discount] → Total (incl. taxes) →
+     * Balance carried / adjustments → Rounding → Due → Paid → Remaining. Without an invoice: no tax lines, Total = the net.
+     * Used by the reservation / package views (Payment/partials/invoice-summary) and the invoice PDF totals (same order).
+     * Sales = extras taxed with the booking (ExtraService::afterTax() false); adjustments / untaxed categories (Rounding) after tax.
+     */
+    public function summary(Model $payable): array
+    {
+        $extras = $payable->relationLoaded('extras') ? $payable->extras : $payable->extrasList();
+        [$after, $sales] = $extras->partition(fn ($extra) => $this->extraService->afterTax($extra));
+        $isReservation = $payable instanceof Reservation;
+        $net = (float) ($isReservation ? $payable->net_amount : $payable->after_discount);
+        $taxed = $payable->invoice_requested && $payable->isTaxed();
+        $salesNet = (float) $sales->sum(fn ($extra) => (float) ($extra->tax_net ?? $extra->amount));
+        $salesSum = fn ($column) => (float) $sales->sum(fn ($extra) => (float) ($extra->{$column} ?? 0));
+
+        if ($isReservation) {
+            $exempt = $taxed && $payable->tax_vat_exempt;
+        } else {
+            $groups = collect((array) $payable->tax_groups)->where('untaxed', false);
+            $exempt = $taxed && $groups->isNotEmpty() && $groups->every(fn ($group) => !empty($group['vat_exempt']));
+        }
+
+        return [
+            'taxed' => $taxed,
+            'price' => (float) $payable->amount,
+            'discount' => round((float) $payable->amount - $net, 2),
+            'discountPercent' => rtrim(rtrim(number_format((float) $payable->discount_percentage, 2), '0'), '.'),
+            'sales' => round($salesNet, 2),
+            'salesLines' => $sales->values(),
+            'netBeforeTax' => round(($taxed ? (float) $payable->tax_net : $net) + $salesNet, 2),
+            'vat' => $taxed ? round((float) $payable->vat + $salesSum('vat'), 2) : 0.0,
+            'exempt' => $exempt,
+            'table' => $taxed ? round((float) $payable->table_tax + $salesSum('table_tax'), 2) : 0.0,
+            'extraDiscount' => $taxed ? round((float) $payable->tax_extra_discount + $salesSum('tax_extra_discount'), 2) : 0.0,
+            'total' => round(($taxed ? (float) $payable->tax_total : $net)
+                + (float) $sales->sum(fn ($extra) => (float) ($taxed ? ($extra->tax_total ?? $extra->amount) : ($extra->tax_net ?? $extra->amount))), 2),
+            'adjustments' => round((float) $after->where('type', '!=', 'extra')->sum('amount'), 2),
+            'rounding' => round((float) $after->where('type', 'extra')->sum('amount'), 2),
+            'due' => round($isReservation ? $payable->totalDue() : $payable->payableAmount(), 2),
+            'paysHere' => $isReservation ? $payable->canTakePayments() : true,
             'paid' => (float) $payable->paid_amount,
             'remaining' => (float) $payable->remaining,
         ];

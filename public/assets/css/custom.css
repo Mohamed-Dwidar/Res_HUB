@@ -4231,3 +4231,49 @@ a.dash-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1); }
 @media (max-width: 1023px) {
     .dash-charts { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* the amounts of a reservation / package view as one invoice-style list (Payment/partials/invoice-summary, 2026-11-16) */
+.invoice-summary {
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+}
+.invoice-summary > div {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.3rem 0;
+}
+.invoice-summary dt {
+    flex: 1 1 auto;
+    color: rgb(71 85 105);
+}
+.invoice-summary dd {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.invoice-summary__strong dt,
+.invoice-summary__strong dd {
+    font-weight: 700;
+}
+.invoice-summary__strong dt {
+    color: rgb(30 41 59);
+}
+.invoice-summary__total {
+    border-top: 1px solid rgb(226 232 240);
+    font-size: 1.05rem;
+}
+
+/* reservation / package view: info left, Amounts card right on large screens, stacked on phones (2026-11-16) */
+.view-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+@media (min-width: 1024px) {
+    .view-columns {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+}
