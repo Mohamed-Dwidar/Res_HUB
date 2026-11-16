@@ -562,7 +562,11 @@ Per month: net, table tax, VAT of the rows with invoice requested; taxable vs ex
 - **B — reservations: built 2026-10-28 (uncommitted, tested HTTP kernel + headless Chrome, not by the user):** migrations; "Invoice by default" on plans; the reservation snapshot (create / edit / renew / repeat, the
   toggle); `payableAmount()`; form toggle + live breakdown; view; list / Schedule amounts; `invoice_request_logs` + the Payment
   Exceptions "Invoice toggled" tab.
-- **C — packages, extras, other income:** package toggle (reservations follow), groups + discount, extras by category type,
+- **C — packages: built 2026-11-16 (committed; no migration; `Services/Tax/PackageTax`).** The switch is on Edit Package only
+  (Add has no reservations); a package's first reservation gives it the plan's "Invoice by default"; package extras = the
+  package's main (biggest taxed) group, adjustments / Rounding never. **Other-income cash in toggle: dropped (user 2026-11-16).**
+  Still open from C: the withholding hint, the "VAT (manual)" refusal after the start date.
+- (original C scope) **packages, extras, other income:** package toggle (reservations follow), groups + discount, extras by category type,
   "Invoice by default" on categories, the other-income toggle in Cash In, package view / statement PDF, the withholding hint, the
   "VAT (manual)" refusal after the start date.
 - **D:** ETA to-do + `eta_documents` + the owner-only lock. **E:** tax report + Excel.

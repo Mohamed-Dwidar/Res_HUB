@@ -13,7 +13,7 @@ use Modules\ReservationModule\app\Models\Reservation;
 /**
  * Report 2 — Member statement (docs/reports-plan.md §2): one member's charges and payments in date order with a running balance.
  * Charges: his reservations paid on their own (package_id 0; what it costs = Reservation::DUE_SQL, a not counted status = 0 with
- * its status name), dated by the START; his packages (after_discount, dated by date_from, else the day it was made); their extras + his own reservations' extras (2026-11-08, with their taxes)
+ * its status name), dated by the START; his packages (Package::DUE_SQL: with their taxes when invoiced, Phase C, dated by date_from, else the day it was made); their extras + his own reservations' extras (2026-11-08, with their taxes)
  * (dated by the extra's date; an adjustment = a balance move, may be negative). Payments of those reservations / packages:
  * cash in + / withholding + / refunds − (paid_at). Reservations inside a package = information lines at 0 (optional).
  * Balance > 0 = the member owes, < 0 = credit. "All dates" (no end) = up to the business date unless "Include future" (2026-11-11,
@@ -57,9 +57,9 @@ class MemberStatementReport
             ->selectRaw("'reservation' as kind, reservations.id, DATE(reservations.start_at) as day, 1 as sort,
                 IF(reservation_statuses.is_counted = 1, " . Reservation::DUE_SQL . ", 0) as charge, 0 as payment")
             ->unionAll(DB::table('packages')->where('account_id', $accountId)->where('member_id', $memberId)->whereNull('deleted_at')
-                ->selectRaw("'package', id, COALESCE(date_from, DATE(created_at)), 2, after_discount, 0"))
+                ->selectRaw("'package', id, COALESCE(date_from, DATE(created_at)), 2, " . str_replace('packages.', '', Package::DUE_SQL) . ", 0"))
             ->unionAll(DB::table('extras')->where('extrable_type', $packageType)->whereIn('extrable_id', $packages)->whereNull('deleted_at')
-                ->selectRaw("IF(type = 'adjustment', 'adjustment', 'extra'), id, COALESCE(date, DATE(created_at)), 3, amount, 0"))
+                ->selectRaw("IF(type = 'adjustment', 'adjustment', 'extra'), id, COALESCE(date, DATE(created_at)), 3, COALESCE(tax_total, amount), 0"))
             // the extras of his own reservations (2026-11-08): with their taxes when the invoice is requested (= extras_total)
             ->unionAll(DB::table('extras')->where('extrable_type', $reservationType)->whereIn('extrable_id', $ownReservations)->whereNull('deleted_at')
                 ->selectRaw("'extra', id, COALESCE(date, DATE(created_at)), 3, COALESCE(tax_total, amount), 0"))
@@ -153,9 +153,9 @@ class MemberStatementReport
         $lines = $own()->join('reservation_statuses as s', 's.id', '=', 'r.reservation_status_id')
             ->whereRaw('DATE(r.start_at) <= ?', [$end])
             ->selectRaw("r.member_id, IF(s.is_counted = 1, $due, 0) as amount")
-            ->unionAll($packages()->whereRaw('COALESCE(p.date_from, DATE(p.created_at)) <= ?', [$end])->selectRaw('p.member_id, p.after_discount'))
+            ->unionAll($packages()->whereRaw('COALESCE(p.date_from, DATE(p.created_at)) <= ?', [$end])->selectRaw('p.member_id, ' . str_replace('packages.', 'p.', Package::DUE_SQL)))
             ->unionAll($packages()->join('extras as e', fn ($join) => $join->on('e.extrable_id', '=', 'p.id')->where('e.extrable_type', $packageType))
-                ->whereNull('e.deleted_at')->whereRaw('COALESCE(e.date, DATE(e.created_at)) <= ?', [$end])->selectRaw('p.member_id, e.amount'))
+                ->whereNull('e.deleted_at')->whereRaw('COALESCE(e.date, DATE(e.created_at)) <= ?', [$end])->selectRaw('p.member_id, COALESCE(e.tax_total, e.amount)'))
             ->unionAll($own()->join('extras as e', fn ($join) => $join->on('e.extrable_id', '=', 'r.id')->where('e.extrable_type', $reservationType))
                 ->whereNull('e.deleted_at')->whereRaw('COALESCE(e.date, DATE(e.created_at)) <= ?', [$end])->selectRaw('r.member_id, COALESCE(e.tax_total, e.amount)'))
             ->unionAll($own()->join('payments as pm', fn ($join) => $join->on('pm.payable_id', '=', 'r.id')->where('pm.payable_type', $reservationType))

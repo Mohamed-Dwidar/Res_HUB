@@ -32,7 +32,7 @@
             </div>
         </div>
         <div class="money-box ml-auto">
-            <div class="money-box__item money-box__item--due" title="Net + extras">
+            <div class="money-box__item money-box__item--due" title="{{ $package->isTaxed() ? 'Total incl. taxes + extras' : 'Net + extras' }}">
                 <span>Due</span><b>{{ number_format($due, 2) }}</b>
             </div>
             <div class="money-box__item money-box__item--paid">
@@ -62,13 +62,50 @@
             <dt>Net</dt>
             <dd class="font-medium">{{ number_format($package->after_discount, 2) }}</dd>
         </div>
+        {{-- taxes (Phase C): "Invoice requested" + the package part's Net before tax / VAT / Table tax / Total (the extras' own
+             taxes are in the Extras line, with them) and its tax groups when more than one --}}
+        @if ($package->isTaxed())
+            <div>
+                <dt>Net before tax</dt>
+                <dd>{{ number_format($package->tax_net, 2) }}</dd>
+            </div>
+            <div>
+                <dt>VAT</dt>
+                <dd>{{ number_format($package->vat, 2) }}</dd>
+            </div>
+            @if ((float) $package->table_tax != 0)
+                <div>
+                    <dt>Table Tax</dt>
+                    <dd>{{ number_format($package->table_tax, 2) }}</dd>
+                </div>
+            @endif
+            @if ((float) $package->tax_extra_discount != 0)
+                <div>
+                    <dt>Extra Discount</dt>
+                    <dd>{{ number_format($package->tax_extra_discount, 2) }}</dd>
+                </div>
+            @endif
+            <div>
+                <dt>Total <span class="text-slate-400">(incl. taxes)</span></dt>
+                <dd class="font-medium">{{ number_format($package->tax_total, 2) }}</dd>
+            </div>
+            <div class="wide">
+                <dt>Invoice</dt>
+                <dd>
+                    <span class="badge badge-status-info">Invoice requested</span>
+                    @foreach ((array) $package->tax_groups as $group)
+                        <div class="mt-1 text-xs text-slate-500">{{ $group['label'] }} · {{ $group['count'] }} {{ $group['count'] == 1 ? 'reservation' : 'reservations' }} · net {{ number_format($group['net'], 2) }} → {{ number_format($group['total'], 2) }}</div>
+                    @endforeach
+                </dd>
+            </div>
+        @endif
         {{-- every amount (2026-10-21): + extras = due, paid, remaining (or credit) + the payment status --}}
         <div>
             <dt>Extras</dt>
             <dd>{{ number_format($extras, 2) }}</dd>
         </div>
         <div>
-            <dt>Due <span class="text-slate-400">(net + extras)</span></dt>
+            <dt>Due <span class="text-slate-400">({{ $package->isTaxed() ? 'total + extras' : 'net + extras' }})</span></dt>
             <dd class="font-bold text-primary">{{ number_format($due, 2) }}</dd>
         </div>
         <div>

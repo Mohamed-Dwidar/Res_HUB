@@ -84,6 +84,17 @@
                     @if ($adjustments->isNotEmpty())
                         <tr><th>Balance carried over</th><td>{{ $money($adjustmentsTotal) }}</td></tr>
                     @endif
+                    {{-- invoice requested (taxes Phase C): the net before tax of the package + extras, then the taxes --}}
+                    @if ($tax)
+                        <tr><th>Net before tax</th><td>{{ $money($tax['net']) }}</td></tr>
+                        <tr><th>VAT</th><td>{{ $money($tax['vat']) }}</td></tr>
+                        @if ($tax['table'] != 0)
+                            <tr><th>Table tax</th><td>{{ $money($tax['table']) }}</td></tr>
+                        @endif
+                        @if ($tax['discount'] != 0)
+                            <tr><th>Extra discount</th><td>{{ $money($tax['discount']) }}</td></tr>
+                        @endif
+                    @endif
                     <tr><th>Total due</th><td class="statement-strong">{{ $money($due) }}</td></tr>
                     <tr><th>Total paid</th><td class="statement-strong">{{ $money($paid) }}</td></tr>
                     <tr>

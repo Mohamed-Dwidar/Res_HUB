@@ -3,7 +3,14 @@
 namespace Modules\PackageModule\app\Services;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Modules\AccountModule\app\Models\Account;
 use Modules\PackageModule\app\Models\Package;
+use Modules\PaymentModule\app\Models\InvoiceRequestLog;
+use Modules\PaymentModule\app\Services\PaymentService;
+use Modules\PaymentModule\app\Services\Tax\PackageTax;
+use Modules\PlanModule\app\Models\Plan;
+use Modules\ReservationModule\app\Models\ReservationStatus;
 use Modules\PackageModule\app\Repositories\PackageRepository;
 
 /**
@@ -77,6 +84,13 @@ class PackageService
             'adjustmentsTotal' => round((float) $extras->where('type', 'adjustment')->sum('amount'), 2),
             'payments' => $package->payments()->with('paymentMethod')->orderBy('paid_at')->orderBy('payment_no')->get(),
             'due' => round($package->payableAmount(), 2),
+            // taxes (Phase C): the package part + its taxed extras; null without an invoice
+            'tax' => $package->isTaxed() ? [
+                'net' => round((float) $package->tax_net + (float) $extras->sum(fn ($extra) => (float) ($extra->tax_net ?? $extra->amount)), 2),
+                'vat' => round((float) $package->vat + (float) $extras->sum(fn ($extra) => (float) $extra->vat), 2),
+                'table' => round((float) $package->table_tax + (float) $extras->sum(fn ($extra) => (float) $extra->table_tax), 2),
+                'discount' => round((float) $package->tax_extra_discount + (float) $extras->sum(fn ($extra) => (float) $extra->tax_extra_discount), 2),
+            ] : null,
         ];
     }
 
@@ -125,12 +139,79 @@ class PackageService
         return $package;
     }
 
-    public function update($accountId, $id, array $data)
+    // $by: the logged in user ("Invoice requested": the back-dated rule + the log)
+    public function update($accountId, $id, array $data, ?Model $by = null)
     {
         $package = $this->findOne($accountId, $id);
-        $package->fill($this->packageData($package, $data));
-        $package->recalculate();
-        return $package;
+
+        return DB::transaction(function () use ($package, $data, $by) {
+            $package->fill($this->packageData($package, $data));
+            $wasInvoice = (bool) $package->invoice_requested;
+            if ($this->canSetInvoice($package, $by) && array_key_exists('invoice_requested', $data)) {
+                $package->invoice_requested = !empty($data['invoice_requested']);
+            }
+            // the taxes (PackageTax), the extras re-snapshotted, paid / remaining
+            $package->recalculate();
+            if ($wasInvoice !== (bool) $package->invoice_requested) {
+                $this->followInvoice($package);
+                $this->logInvoiceChange($package, $wasInvoice, $by);
+            }
+            return $package;
+        });
+    }
+
+    /**
+     * May $by change the package's "Invoice requested" (Phase C, docs/payments-plan.md §3)? Only while taxes apply to it
+     * (PackageTax::applies()); a back-dated package (made before the tax start date was set) = the owner only.
+     */
+    public function canSetInvoice(Package $package, ?Model $by): bool
+    {
+        $account = Account::settingsOf($package->account_id);
+        if (!PackageTax::applies($account, $package)) {
+            return false;
+        }
+        return !($package->exists && $account?->isBackdated($package->created_at)) || ($by && app(PaymentService::class)->isOwner($by));
+    }
+
+    /**
+     * The plan's "Invoice by default" (user 2026-11-16): a package gets it from its FIRST reservation's plan — while it has no
+     * counted reservation yet, was never switched by hand (no invoice_request_logs row), taxes apply and it is not back-dated.
+     * Called by ReservationService before the reservation's own snapshot (it follows the package).
+     */
+    public function applyPlanDefault($packageId, $planId): void
+    {
+        $package = $packageId ? Package::find($packageId) : null;
+        if (!$package || $package->invoice_requested || !Plan::whereKey($planId)->value('invoice_by_default')) {
+            return;
+        }
+        $account = Account::settingsOf($package->account_id);
+        if (!PackageTax::applies($account, $package) || $account?->isBackdated($package->created_at)
+            || $package->reservations()->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds())->exists()
+            || InvoiceRequestLog::where('loggable_type', $package->getMorphClass())->where('loggable_id', $package->id)->exists()) {
+            return;
+        }
+        // recalculate() (after the reservation is saved) fills the taxes
+        $package->newQueryWithoutScopes()->whereKey($package->id)->toBase()->update(['invoice_requested' => true]);
+    }
+
+    // its reservations follow the switch (their own amounts stay empty: the package carries the taxes)
+    private function followInvoice(Package $package): void
+    {
+        $package->reservations()->toBase()->update(['invoice_requested' => (bool) $package->invoice_requested]);
+    }
+
+    // a change of "Invoice requested" (Payment Exceptions › Invoice Toggled = changed after a payment)
+    private function logInvoiceChange(Package $package, bool $from, ?Model $by): void
+    {
+        $log = new InvoiceRequestLog([
+            'account_id' => $package->account_id, 'from_value' => $from, 'to_value' => (bool) $package->invoice_requested,
+            'paid_amount' => (float) $package->paid_amount,
+        ]);
+        $log->loggable()->associate($package);
+        if ($by) {
+            $log->creatable()->associate($by);
+        }
+        $log->save();
     }
 
     // soft delete; the reason when it can not be deleted (it has reservations / payments), null when deleted

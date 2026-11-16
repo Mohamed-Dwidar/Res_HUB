@@ -18,6 +18,8 @@ class PackageRequest extends FormRequest
             // the package net (more than the price is lowered to the price)
             'after_discount' => 'nullable|numeric|min:0|max:99999999',
             'notes' => 'nullable|string|max:255',
+            // Phase C taxes: sent only by the Edit form while taxes apply (PackageService::canSetInvoice() decides)
+            'invoice_requested' => 'nullable|boolean',
         ];
     }
 

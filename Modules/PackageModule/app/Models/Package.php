@@ -13,7 +13,9 @@ use Modules\MemberModule\app\Models\Member;
 use Modules\PaymentModule\app\Contracts\Payable;
 use Modules\PaymentModule\app\Models\Concerns\HasExtras;
 use Modules\PaymentModule\app\Models\Concerns\HasPayments;
+use Modules\PaymentModule\app\Services\ExtraService;
 use Modules\PaymentModule\app\Services\PaymentService;
+use Modules\PaymentModule\app\Services\Tax\PackageTax;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Models\ReservationStatus;
 use Modules\SpaceModule\app\Models\SubscriptionType;
@@ -41,7 +43,29 @@ class Package extends Model implements Payable
         'after_discount' => 'float',
         'paid_amount' => 'float',
         'remaining' => 'float',
+        // taxes (Phase C, PaymentModule Services/Tax/PackageTax): NULL = none
+        'invoice_requested' => 'boolean',
+        'tax_groups' => 'array',
+        'tax_net' => 'float',
+        'table_tax' => 'float',
+        'vat' => 'float',
+        'tax_extra_discount' => 'float',
+        'tax_total' => 'float',
     ];
+
+    // what the package part costs: tax_total while an invoice is requested and taxed (Phase C), else the net after discount;
+    // DUE_SQL = the same in SQL (its extras are added apart: COALESCE(extras.tax_total, extras.amount))
+    const DUE_SQL = 'CASE WHEN packages.invoice_requested = 1 AND packages.tax_total IS NOT NULL THEN packages.tax_total ELSE packages.after_discount END';
+
+    public function isTaxed(): bool
+    {
+        return $this->invoice_requested && $this->tax_total !== null;
+    }
+
+    public function dueAmount(): float
+    {
+        return $this->isTaxed() ? (float) $this->tax_total : (float) $this->after_discount;
+    }
 
     public function account(): BelongsTo
     {
@@ -64,10 +88,11 @@ class Package extends Model implements Payable
         return $this->morphTo();
     }
 
-    // Payable: the package net (after its discount) + its extras (sales and balance adjustments, see HasExtras)
+    // Payable: the package net (after its discount; with its taxes when invoiced: dueAmount()) + its extras (sales — with
+    // their taxes when invoiced — and balance adjustments, see HasExtras)
     public function payableAmount(): float
     {
-        return round((float) $this->after_discount + $this->extrasTotal(), 2);
+        return round($this->dueAmount() + $this->extrasTotal(), 2);
     }
 
     public function payableMemberId(): int
@@ -113,7 +138,10 @@ class Package extends Model implements Payable
         $this->amount = $sum;
         $this->total_amount = $sum;
         $this->after_discount = $afterDiscount;
+        // the taxes (invoice requested: per tax group, the discount before tax), then the extras follow its main group
+        app(PackageTax::class)->fill($this, Account::settingsOf($this->account_id));
         $this->save();
+        app(ExtraService::class)->retax($this, false);
 
         app(PaymentService::class)->refresh($this);
     }

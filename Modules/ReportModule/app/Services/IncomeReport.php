@@ -13,7 +13,8 @@ use Modules\ReservationModule\app\Models\Reservation;
  * Advance repayment). Grouped in SQL by ONE of: Space › Unit | Subscription type | Plan (package payments = one "Packages" row,
  * other income = a row per category) | Payment method | Month.
  * Tax = the VAT + table tax part of each amount, from the stored split of a taxed row: a reservation / package with an invoice →
- * amount × (vat + table_tax) / tax_total; an other income payment → its own vat + table_tax (Phase C; NULL today).
+ * amount × (vat + table_tax + its extras' vat + table_tax) / (tax_total + its extras' due) (2026-11-16: the extras' taxes
+ * included); an other income payment → its own vat + table_tax (Phase C; NULL today).
  * Net = Total − Tax (before tax). A type / space / unit / plan filter keeps reservation payments only.
  */
 class IncomeReport
@@ -64,6 +65,9 @@ class IncomeReport
         $query = DB::table('payments as p')
             ->leftJoin('reservations as r', fn ($join) => $join->on('r.id', '=', 'p.payable_id')->where('p.payable_type', '=', $reservation))
             ->leftJoin('packages as k', fn ($join) => $join->on('k.id', '=', 'p.payable_id')->where('p.payable_type', '=', $package))
+            // their extras' taxes + due (2026-11-16): the tax share of a payment = (row taxes + extras' taxes) ÷ (row total + extras)
+            ->leftJoinSub($this->extrasTaxes($accountId), 'xr', fn ($join) => $join->on('xr.extrable_id', '=', 'r.id')->where('xr.extrable_type', '=', $reservation))
+            ->leftJoinSub($this->extrasTaxes($accountId), 'xk', fn ($join) => $join->on('xk.extrable_id', '=', 'k.id')->where('xk.extrable_type', '=', $package))
             ->leftJoin('income_categories as c', 'c.id', '=', 'p.income_category_id')
             ->where('p.account_id', $accountId)
             ->whereNull('p.deleted_at')
@@ -120,10 +124,20 @@ class IncomeReport
 
         return $query->selectRaw("p.id as payment_id, p.paid_at, {$groupKey} as group_key, {$groupSort} as group_sort, {$groupLabel} as group_label, p.type, p.amount,
             CASE
-                WHEN r.id IS NOT NULL AND r.invoice_requested = 1 AND r.tax_total > 0 THEN (COALESCE(r.vat, 0) + COALESCE(r.table_tax, 0)) / r.tax_total
-                WHEN k.id IS NOT NULL AND k.invoice_requested = 1 AND k.tax_total > 0 THEN (COALESCE(k.vat, 0) + COALESCE(k.table_tax, 0)) / k.tax_total
+                WHEN r.id IS NOT NULL AND r.invoice_requested = 1 AND r.tax_total IS NOT NULL AND r.tax_total + COALESCE(xr.due, 0) > 0
+                    THEN (COALESCE(r.vat, 0) + COALESCE(r.table_tax, 0) + COALESCE(xr.tax, 0)) / (r.tax_total + COALESCE(xr.due, 0))
+                WHEN k.id IS NOT NULL AND k.invoice_requested = 1 AND k.tax_total IS NOT NULL AND k.tax_total + COALESCE(xk.due, 0) > 0
+                    THEN (COALESCE(k.vat, 0) + COALESCE(k.table_tax, 0) + COALESCE(xk.tax, 0)) / (k.tax_total + COALESCE(xk.due, 0))
                 ELSE 0 END as tax_factor,
             CASE WHEN p.payable_type IS NULL THEN COALESCE(p.vat, 0) + COALESCE(p.table_tax, 0) ELSE 0 END as own_tax");
+    }
+
+    // per reservation / package: Σ its extras' taxes (vat + table tax) and Σ what they add to its due (COALESCE(tax_total, amount))
+    private function extrasTaxes($accountId)
+    {
+        return DB::table('extras')->where('account_id', $accountId)->whereNull('deleted_at')
+            ->groupBy('extrable_type', 'extrable_id')
+            ->selectRaw('extrable_type, extrable_id, SUM(COALESCE(vat, 0) + COALESCE(table_tax, 0)) as tax, SUM(COALESCE(tax_total, amount)) as due');
     }
 
     // the money columns of a set of rows (shared by the grouped rows and the totals)

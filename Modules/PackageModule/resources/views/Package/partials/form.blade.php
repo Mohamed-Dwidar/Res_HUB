@@ -23,6 +23,37 @@
     @include('layoutmodule::partials.field', ['name' => 'after_discount', 'label' => 'Net', 'type' => 'number',
         'value' => $package?->after_discount ?? 0, 'attrs' => 'min="0" step="0.01" max="99999999" data-calc="result"', 'hint' => 'The price - the discount. Change it to calculate the discount %.'])
 </div>
+
+{{-- "Invoice requested" (taxes Phase C, docs/payments-plan.md §3): ONE switch for the package — its reservations and extras
+     follow it; only while taxes apply to it (PackageService::canSetInvoice(): back-dated = the owner only). The amounts with /
+     without an invoice at the saved discount (PackageTax::preview()); the server recalculates on save. --}}
+@php($packageService = app(\Modules\PackageModule\app\Services\PackageService::class))
+@if ($packageService->canSetInvoice($package, Auth::user()))
+    @php($taxAccount = \Modules\AccountModule\app\Models\Account::settingsOf($package->account_id))
+    @php($preview = app(\Modules\PaymentModule\app\Services\Tax\PackageTax::class)->preview($package, $taxAccount))
+    @php($current = $package->payableAmount())
+    <div class="form-section mt-8">Invoice</div>
+    <div class="tax-box">
+        @include('layoutmodule::partials.checkbox', ['name' => 'invoice_requested', 'label' => 'Invoice requested',
+            'checked' => (bool) $package->invoice_requested,
+            'hint' => 'Taxes are added only when the customer asks for an invoice. Its reservations and extras follow this switch; the discount is applied before tax.'])
+        @if ($taxAccount?->isBackdated($package->created_at))
+            <div class="{{ config('layoutmodule.form.hint') }}">Made before taxes were set up (back-dated start date): tick it only if the customer asks for an invoice. Only you (the owner) see it.</div>
+        @endif
+        <div class="tax-breakdown" data-show-if="invoice_requested">
+            With an invoice: Net before tax {{ number_format($preview['net'], 2) }}
+            · VAT {{ number_format($preview['vat'], 2) }}
+            @if ($preview['table_tax'] > 0) · Table tax {{ number_format($preview['table_tax'], 2) }} @endif
+            · <b>Total due {{ number_format($preview['with'], 2) }}</b> (extras included, at the saved discount)
+        </div>
+        @if ((float) $package->paid_amount > 0 && abs($preview['with'] - $current) >= 0.01 && !$package->invoice_requested)
+            <div class="tax-warning" data-show-if="invoice_requested">The customer will owe {{ number_format($preview['with'] - $current, 2) }} more (taxes).</div>
+        @endif
+        @if ((float) $package->paid_amount > 0 && abs($current - $preview['without']) >= 0.01 && $package->invoice_requested)
+            <div class="tax-warning" data-show-if="!invoice_requested">The customer will owe {{ number_format($current - $preview['without'], 2) }} less (no taxes).</div>
+        @endif
+    </div>
+@endif
 @endif
 
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-2">

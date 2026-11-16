@@ -182,7 +182,7 @@ class OutstandingReport
             ->with(['space', 'unit.color', 'plan', 'status'])
             ->orderBy('start_at')->get();
 
-        $packages = $this->packages($accountId, $filters, $memberId)?->withSum('extras', 'amount')->orderBy('date_from')->get() ?? collect();
+        $packages = $this->packages($accountId, $filters, $memberId)?->withExtrasDue()->orderBy('date_from')->get() ?? collect();
 
         return ['reservations' => $reservations, 'packages' => $packages];
     }

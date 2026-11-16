@@ -72,6 +72,12 @@
                 <span class="block text-xs font-normal text-slate-500">+ extras {{ number_format($extras, 2) }} = due {{ number_format($payable->payableAmount(), 2) }}</span>
             @endif
         </dd></div>
+        {{-- a package with "Invoice requested" (taxes Phase C): its total incl. taxes and extras --}}
+        @if ($payable->isTaxed())
+            <div><dt>Total <span class="badge badge-status-info badge-small">Invoice</span></dt><dd class="amount-total">{{ number_format($payable->payableAmount(), 2) }}
+                <span class="block text-xs font-normal text-slate-500">VAT {{ number_format((float) $payable->vat, 2) }}@if ((float) $payable->table_tax) · table tax {{ number_format((float) $payable->table_tax, 2) }}@endif, extras incl.</span>
+            </dd></div>
+        @endif
     </dl>
 @endif
 @if ($paidLine ?? true)

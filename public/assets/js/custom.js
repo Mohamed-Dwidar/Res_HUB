@@ -622,7 +622,7 @@ document.addEventListener("click", function (e) {
 
 // ------------------------------------------------------------------
 // Dynamic forms (run on page load and when the popup content is loaded: initForms(root))
-//  - [data-show-if="checkbox name"]: shown only while the checkbox is checked
+//  - [data-show-if="checkbox name"]: shown only while the checkbox is checked ("!checkbox name" = while it is not)
 //    [data-show-if="field=value other"]: shown only while the field (a select) has one of the values ("field=" = empty)
 //  - [data-disable-if="checkbox name"]: disabled (and emptied) while the checkbox is checked,
 //    data-default-from="field": its value when enabled again and empty
@@ -642,10 +642,12 @@ function formField(form, name) {
 function applyConditions(form) {
     form.querySelectorAll("[data-show-if]").forEach(function (el) {
         var rule = el.dataset.showIf.split("=");
-        var field = formField(form, rule[0]);
+        // "!checkbox" = shown while it is NOT checked (2026-11-16, the package invoice warning)
+        var not = rule.length === 1 && rule[0].charAt(0) === "!";
+        var field = formField(form, not ? rule[0].slice(1) : rule[0]);
         el.hidden = rule.length > 1
             ? !(field && rule[1].split(" ").indexOf(field.value) >= 0)
-            : !(field && field.checked);
+            : not ? !(field && !field.checked) : !(field && field.checked);
     });
     form.querySelectorAll("[data-disable-if]").forEach(function (el) {
         var checkbox = formField(form, el.dataset.disableIf);
@@ -1819,7 +1821,7 @@ document.addEventListener("change", function (e) {
     if (!form || !e.target.name) return;
     var name = e.target.name;
 
-    if (form.querySelector('[data-show-if="' + name + '"], [data-show-if^="' + name + '="], [data-disable-if="' + name + '"]')) {
+    if (form.querySelector('[data-show-if="' + name + '"], [data-show-if="!' + name + '"], [data-show-if^="' + name + '="], [data-disable-if="' + name + '"]')) {
         applyConditions(form);
     }
     form.querySelectorAll('select[data-options-url][data-parent="' + name + '"], select[data-place][data-parent="' + name + '"]').forEach(loadOptions);

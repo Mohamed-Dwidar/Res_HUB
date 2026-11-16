@@ -92,6 +92,8 @@ class ReservationService
             if ($unpaidNote) {
                 $reservation->notes = trim(($reservation->notes ? $reservation->notes . "\n" : '') . $unpaidNote);
             }
+            // a package's first reservation: the package takes the plan's "Invoice by default" (Phase C), then this one follows it
+            $this->packageService->applyPlanDefault($reservation->package_id, $reservation->plan_id);
             // "Invoice requested" + the tax snapshot from the plan's current flags (the repeat copies replicate it)
             $this->applyTax($reservation, $accountId, $data, true, $renewalOf ? ($period ?? null) : null);
             $reservation->creatable()->associate($creator);
@@ -146,6 +148,9 @@ class ReservationService
             }
             // the renewal increase setting: the owner's form, else kept (2026-11-12)
             $this->applyIncrease($reservation, $data, $by && $this->paymentService->isOwner($by));
+            if ($reservation->package_id && $reservation->package_id != $oldPackageId) {
+                $this->packageService->applyPlanDefault($reservation->package_id, $reservation->plan_id);
+            }
             // the stored tax type, the plan's current flags only when the plan changed
             $this->applyTax($reservation, $accountId, $data, (int) $reservation->plan_id !== $oldPlanId, null, $by);
             $reservation->save();

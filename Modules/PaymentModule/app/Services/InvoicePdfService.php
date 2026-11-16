@@ -76,12 +76,15 @@ class InvoicePdfService
             ];
             $tax = $taxed ? ['vat' => (float) $payable->vat, 'table' => (float) $payable->table_tax, 'discount' => (float) $payable->tax_extra_discount] : null;
             $total = $payable->payableAmount();
-            $exempt = false;
+            // every taxed group VAT exempt (Phase C) = "Exempt" on the VAT line
+            $taxedGroups = collect((array) $payable->tax_groups)->where('untaxed', false);
+            $exempt = $taxed && $taxedGroups->isNotEmpty() && $taxedGroups->every(fn ($group) => !empty($group['vat_exempt']));
         }
 
         // extras: sales one line each (net before tax = tax_net while taxed); a package's adjustments = one "balance carried over"
         $lines = $extras->where('type', 'extra')->values();
         $adjustments = round((float) $extras->where('type', 'adjustment')->sum('amount'), 2);
+        // (a package's taxed extras carry their own vat / table tax, added to the package's below — Phase C)
         $lineNet = fn ($extra) => (float) ($extra->tax_net ?? $extra->amount);
         if ($tax) {
             foreach (['vat' => 'vat', 'table' => 'table_tax', 'discount' => 'tax_extra_discount'] as $key => $column) {

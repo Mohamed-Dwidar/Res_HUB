@@ -549,7 +549,7 @@ class PaymentService
             $class::query()->when($accountId, fn ($query) => $query->where('account_id', $accountId))
                 // the reservation status / the package extras give their due (payableAmount())
                 ->when($class === Reservation::class, fn ($query) => $query->with('status'))
-                ->when($class === Package::class, fn ($query) => $query->withSum('extras', 'amount'))
+                ->when($class === Package::class, fn ($query) => $query->withExtrasDue())
                 ->chunkById(500, function ($payables) use ($paid, &$changed) {
                     foreach ($payables as $payable) {
                         $before = [$payable->paid_amount, $payable->remaining];

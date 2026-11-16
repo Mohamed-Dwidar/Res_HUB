@@ -3,7 +3,8 @@
     @include('paymentmodule::Extra.partials.extras', ['extrable' => $package, 'kind' => 'package'])
     The account adds / edits / deletes them; employees add extras (sales) and see them (2026-10-21; permission extras.create).
     A reservation (2026-11-08): Amount = the line's net before tax (its taxes = the reservation's, shown once in the view's
-    summary), Type = the category name only; a package: Amount + type badge (untaxed until Phase C); inside a package / not counted =
+    summary), Type = the category name only; a package: Amount (net before tax; taxed: "incl. taxes" under it, Phase C) + type
+    badge; inside a package / not counted =
     "Add it on the package" / no Add button (ExtraService::extrableError()).
 --}}
 @php
@@ -40,7 +41,12 @@
             <tbody>
                 @foreach ($extras as $extra)
                     <tr>
-                        <td class="font-medium {{ $extra->amount < 0 ? 'text-danger' : '' }}">{{ number_format($taxCols ? $lineNet($extra) : $extra->amount, 2) }}</td>
+                        <td class="font-medium {{ $extra->amount < 0 ? 'text-danger' : '' }}">{{ number_format($lineNet($extra), 2) }}
+                            {{-- a package's taxed extra (Phase C): its total incl. taxes under the net --}}
+                            @if (!$taxCols && $extra->tax_total !== null && (float) $extra->tax_total != (float) $extra->tax_net)
+                                <div class="text-xs font-normal text-slate-500">incl. taxes {{ number_format($extra->tax_total, 2) }}</div>
+                            @endif
+                        </td>
                         <td class="whitespace-nowrap">{{ $extra->date?->format($dateFormat) }}</td>
                         <td>
                             {{ $extra->item }}
@@ -68,7 +74,11 @@
                     </tr>
                 @endforeach
                 <tr class="font-medium">
-                    <td>{{ number_format($taxCols ? $extras->sum($lineNet) : $extrable->extrasTotal(), 2) }}</td>
+                    <td>{{ number_format($extras->sum($lineNet), 2) }}
+                        @if (!$taxCols && abs($extrable->extrasTotal() - $extras->sum($lineNet)) >= 0.01)
+                            <div class="text-xs font-normal text-slate-500">incl. taxes {{ number_format($extrable->extrasTotal(), 2) }}</div>
+                        @endif
+                    </td>
                     <td colspan="4">Total extras</td>
                     @if ($area === 'account')<td></td>@endif
                 </tr>

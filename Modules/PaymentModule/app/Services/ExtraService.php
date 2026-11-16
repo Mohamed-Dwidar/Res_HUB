@@ -9,6 +9,7 @@ use Illuminate\Validation\ValidationException;
 use Modules\PackageModule\app\Models\Package;
 use Modules\PaymentModule\app\Models\Extra;
 use Modules\PaymentModule\app\Models\IncomeCategory;
+use Modules\PaymentModule\app\Services\Tax\PackageTax;
 use Modules\PaymentModule\app\Services\Tax\TaxCalculator;
 use Modules\PaymentModule\app\Services\Tax\TaxRule;
 use Modules\PaymentModule\app\Services\Tax\TaxSnapshot;
@@ -19,8 +20,8 @@ use Modules\ReservationModule\app\Models\Reservation;
  * Employees add (ExtraRequest: a sale, positive price); edit / delete = the account.
  * A reservation's extra: only on a counted reservation paid on its own (inside a package → add it on the package); its taxes
  * follow the reservation (applyTax(): its tax snapshot, amounts only while its invoice is requested) and the stored
- * reservations.extras_total (Σ tax_total ?: amount) is part of what it owes (Reservation::payableAmount()). A package's extras:
- * untaxed for now (Phase C).
+ * reservations.extras_total (Σ tax_total ?: amount) is part of what it owes (Reservation::payableAmount()). A package's extras
+ * (Phase C): the package's main tax group while its invoice is requested (Σ COALESCE(tax_total, amount) = HasExtras::extrasTotal()).
  * extra = a sale: needs an income category (revenue, invoiceable in phase 2); adjustment = a balance move: no category, any sign.
  * amount = quantity × unit_price; after every change the package paid / remaining are refreshed (due = net + Σ extras).
  * Rule errors = ValidationException (also safe for imports / commands).
@@ -120,34 +121,47 @@ class ExtraService
     }
 
     /**
-     * A reservation saved (ReservationService::update()): its invoice / tax type may have changed → every extra re-snapshotted
-     * from the reservation (2026-11-08 rule) + extras_total. No extras = nothing.
+     * A reservation saved (ReservationService::update()) / a package recalculated (Package::recalculate(), Phase C): its invoice /
+     * tax type may have changed → every extra re-snapshotted from it; a reservation: + extras_total + refresh(); a package:
+     * refresh() only with $refresh (recalculate() refreshes after). No extras = nothing.
      */
-    public function retax(Reservation $reservation): void
+    public function retax(Model $extrable, bool $refresh = true): void
     {
-        $extras = $reservation->extras()->get();
+        $extras = $extrable->extras()->with('incomeCategory')->get();
         if ($extras->isEmpty()) {
             return;
         }
+        $changed = false;
         foreach ($extras as $extra) {
-            $this->applyTax($extra, $reservation);
+            $this->applyTax($extra, $extrable);
             if ($extra->isDirty()) {
                 $extra->save();
+                $changed = true;
             }
         }
-        $this->syncTotal($reservation);
+        if ($extrable instanceof Reservation) {
+            $this->syncTotal($extrable);
+        } elseif ($changed && $refresh) {
+            $this->paymentService->refresh($extrable);
+        }
     }
 
     /**
      * The taxes of an extra (user 2026-11-08: extras follow their parent, income categories carry no taxes): a reservation's
      * extra copies the reservation's tax snapshot (VAT rate / exempt, table tax, price includes tax, rounding) and gets the
-     * amounts only while the reservation's invoice is requested; no invoice / no tax type = no taxes. Package extras: none yet
-     * (Phase C = the same rule with the package's snapshot).
+     * amounts only while the reservation's invoice is requested; no invoice / no tax type = no taxes. A package's extra (Phase C,
+     * user 2026-11-16): the tax type of the package's main group (PackageTax::mainRule()) while its invoice is requested;
+     * adjustments (balance moves) never.
      */
     private function applyTax(Extra $extra, Model $extrable): void
     {
-        // a category flagged `untaxed` (Rounding, 2026-11-10): never taxes
-        $rule = $extrable instanceof Reservation && $extrable->invoice_requested && !$this->untaxed($extra) ? TaxRule::fromSnapshot($extrable) : null;
+        // a category flagged `untaxed` (Rounding, 2026-11-10) / an adjustment: never taxes
+        $rule = null;
+        if ($extrable->invoice_requested && $extra->type === 'extra' && !$this->untaxed($extra)) {
+            $rule = $extrable instanceof Reservation
+                ? TaxRule::fromSnapshot($extrable)
+                : app(PackageTax::class)->mainRule($extrable, null);
+        }
         if (!$rule) {
             $extra->forceFill(array_fill_keys(array_merge(TaxSnapshot::TYPE, TaxSnapshot::AMOUNTS), null));
             return;
@@ -167,6 +181,15 @@ class ExtraService
     {
         return $reservation->extras()->with('incomeCategory')->get()->reject(fn ($extra) => $this->untaxed($extra))
             ->map(fn ($extra) => (float) $extra->amount)->values()->all();
+    }
+
+    // Σ of a package's extras as they would be with $rule (null = no invoice): sales taxed by it, adjustments / untaxed as typed
+    // (the Edit Package form's "will owe X more / less", PackageTax::preview())
+    public function totalWith(Model $extrable, ?TaxRule $rule): float
+    {
+        $calculator = app(TaxCalculator::class);
+        return round((float) $extrable->extras()->with('incomeCategory')->get()->sum(fn ($extra) => $rule && $extra->type === 'extra' && !$this->untaxed($extra)
+            ? $calculator->calculate((float) $extra->amount, 0, $rule)->total : (float) $extra->amount), 2);
     }
 
     // an extra of a system category flagged `untaxed` (Rounding)

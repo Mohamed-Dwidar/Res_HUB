@@ -167,7 +167,7 @@
                 </tbody>
             @elseif ($tab === 'invoice')
                 <thead>
-                    <tr><th>Changed</th><th>Reservation</th><th>Member</th><th>Invoice</th><th class="text-right">Paid Then</th><th class="text-right">Costs Now</th><th>Changed By</th></tr>
+                    <tr><th>Changed</th><th>Reservation / Package</th><th>Member</th><th>Invoice</th><th class="text-right">Paid Then</th><th class="text-right">Costs Now</th><th>Changed By</th></tr>
                 </thead>
                 <tbody>
                     @forelse ($rows as $log)
@@ -176,7 +176,13 @@
                             <td class="whitespace-nowrap">{{ $log->created_at->format($dateFormat) }}<div class="text-xs text-slate-500">{{ $log->created_at->format($timeFormat) }}</div></td>
                             <td class="whitespace-nowrap">
                                 @if ($record)
-                                    <a href="{{ route('account.reservations.show', $record->id) }}" data-modal class="font-medium">Reservation #{{ $record->id }}</a>
+                                    {{-- a package (Phase C, 2026-11-16) or a reservation --}}
+                                    @if ($record instanceof \Modules\PackageModule\app\Models\Package)
+                                        <a href="{{ route('account.packages.show', $record->id) }}" data-modal class="font-medium">Package #{{ $record->id }}</a>
+                                        <div class="text-xs text-slate-500">{{ $record->name }}</div>
+                                    @else
+                                        <a href="{{ route('account.reservations.show', $record->id) }}" data-modal class="font-medium">Reservation #{{ $record->id }}</a>
+                                    @endif
                                 @else
                                     #{{ $log->loggable_id }} <span class="badge badge-status-danger">Deleted</span>
                                 @endif

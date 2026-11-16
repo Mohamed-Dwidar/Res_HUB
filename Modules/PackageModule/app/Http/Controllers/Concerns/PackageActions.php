@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\PackageModule\app\Http\Requests\PackageRequest;
+use Modules\PackageModule\app\Models\Package;
 use Modules\PackageModule\app\Services\PackageService;
 use niklasravnsborg\LaravelPdf\Facades\Pdf;
 use Yajra\DataTables\Facades\DataTables;
@@ -70,7 +71,7 @@ trait PackageActions
         // + counted_reservations / booked_minutes, + who added it (By)
         $query = $this->packageService->listQuery($this->accountId())->withReservationStats()->with('creatable.userable')
             // Σ extras in the same query (HasExtras::extrasTotal() reads extras_sum_amount): the Amount column = due
-            ->withSum('extras', 'amount');
+            ->withExtrasDue();
         if ($id) {
             $query->whereKey($id);
         }
@@ -84,7 +85,7 @@ trait PackageActions
             ->addColumn('reservations', fn ($package) => view('packagemodule::Package.partials.row-reservations', compact('package'))->render())
             ->addColumn('status', fn ($package) => view('packagemodule::Package.partials.row-status', compact('package'))->render())
             // sorted by the due (net + extras), what the cell shows
-            ->orderColumn('after_discount', fn ($query, $order) => $query->orderByRaw('packages.after_discount + COALESCE(extras_sum_amount, 0) ' . ($order === 'asc' ? 'asc' : 'desc')))
+            ->orderColumn('after_discount', fn ($query, $order) => $query->orderByRaw(Package::DUE_SQL . ' + COALESCE(extras_sum_amount, 0) ' . ($order === 'asc' ? 'asc' : 'desc')))
             ->editColumn('after_discount', fn ($package) => view('packagemodule::Package.partials.row-amount', compact('package'))->render())
             // black, bold (custom.css .amount-paid)
             ->editColumn('paid_amount', fn ($package) => '<span class="amount-paid">' . number_format($package->paid_amount, 2) . '</span>')
@@ -169,7 +170,7 @@ trait PackageActions
 
     public function update(PackageRequest $request, $id)
     {
-        $this->packageService->update($this->accountId(), $id, $request->validated());
+        $this->packageService->update($this->accountId(), $id, $request->validated(), Auth::user());
 
         return response()->json([
             'message' => 'The package has been updated successfully.',
