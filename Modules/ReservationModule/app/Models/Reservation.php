@@ -24,7 +24,8 @@ use Modules\UnitModule\app\Models\Unit;
 
 /**
  * A reservation of a unit (of a space) with a plan for a member, made by the account or one of its employees.
- * net_amount = amount - discount_value (discount_percentage is the same discount in %).
+ * net_amount = amount - discount_value (discount_percentage is the same discount in %) - discount_fixed (2026-11-17: the form's
+ * Discount Type = Percentage or Fixed amount, one of them; before tax; copied to a renewal only with discount_fixed_repeat).
  * repeat_id: the reservation this one repeats (repeat()), repeats(): the reservations made from this one.
  * renewal_of: the period this one renews (period types: Renew, repeat copies; renewedBy() = its counted renewal, at most one);
  * left_at / left_by: a period marked "left" (not renewed on purpose; left_by 0 = auto-marked by to_run STEP 5b).
@@ -46,7 +47,7 @@ class Reservation extends Model implements Payable
     protected $fillable = [
         'account_id', 'member_id', 'space_id', 'unit_id', 'plan_id', 'package_id', 'subscription_type_id', 'reservation_status_id',
         'start_at', 'end_at', 'subscription_day', 'all_day', 'repeat_id', 'is_repeat', 'repeat_frequency', 'repeat_interval',
-        'renewal_of', 'left_at', 'left_by', 'number_of_peoples', 'amount', 'discount_percentage', 'discount_value', 'net_amount', 'paid_amount', 'remaining', 'notes',
+        'renewal_of', 'left_at', 'left_by', 'number_of_peoples', 'amount', 'discount_percentage', 'discount_value', 'discount_fixed', 'discount_fixed_repeat', 'net_amount', 'paid_amount', 'remaining', 'notes',
         'renewal_increase_type', 'renewal_increase_value',
     ];
 
@@ -59,6 +60,8 @@ class Reservation extends Model implements Payable
         'amount' => 'float',
         'discount_percentage' => 'float',
         'discount_value' => 'float',
+        'discount_fixed' => 'float',
+        'discount_fixed_repeat' => 'boolean',
         'net_amount' => 'float',
         'renewal_increase_value' => 'float',
         'paid_amount' => 'float',
@@ -215,8 +218,9 @@ class Reservation extends Model implements Payable
         if (($price = $this->nextRenewalPrice()) === null) {
             return null;
         }
-        [$value, $percentage, $net] = self::calculate($price, (float) $this->discount_percentage, null);
-        return ['amount' => $price, 'discount_value' => $value, 'discount_percentage' => $percentage, 'net_amount' => $net];
+        // the fixed discount (2026-11-17) only when "Repeat on renewal" is ticked
+        [$value, $percentage, $net, $fixed] = self::calculate($price, (float) $this->discount_percentage, null, 'percentage', null, $this->renewalFixed());
+        return ['amount' => $price, 'discount_value' => $value, 'discount_percentage' => $percentage, 'net_amount' => $net, 'discount_fixed' => $fixed];
     }
 
     // "7,700.00 (+10%)" [+ " · −5% = 7,315.00" with a discount]: the Schedule renewals, the view, the Subscriptions report
@@ -226,7 +230,16 @@ class Reservation extends Model implements Payable
             return null;
         }
         return number_format($next['amount'], 2) . ' (' . $this->renewalIncreaseLabel() . ')'
-            . ($next['discount_percentage'] > 0 ? ' · −' . rtrim(rtrim(number_format($next['discount_percentage'], 2, '.', ''), '0'), '.') . '% = ' . number_format($next['net_amount'], 2) : '');
+            . ($next['discount_percentage'] > 0 || $next['discount_fixed'] > 0
+                ? ' · ' . trim(($next['discount_percentage'] > 0 ? '−' . rtrim(rtrim(number_format($next['discount_percentage'], 2, '.', ''), '0'), '.') . '% ' : '')
+                    . ($next['discount_fixed'] > 0 ? '−' . number_format($next['discount_fixed'], 2) : '')) . ' = ' . number_format($next['net_amount'], 2)
+                : '');
+    }
+
+    // the fixed discount a renewal / repeat copy takes: this one's when "Repeat on renewal" is ticked, else none (one-off)
+    public function renewalFixed(): float
+    {
+        return $this->discount_fixed_repeat ? (float) $this->discount_fixed : 0.0;
     }
 
     // what it costs the member (taxes, docs/payments-plan.md §3): the tax total when an invoice is requested and it was taxed,
@@ -348,11 +361,14 @@ class Reservation extends Model implements Payable
     }
 
     // [discount_value, discount_percentage, net_amount] from the amount and the one the user typed ($type: percentage | value | net)
-    public static function calculate(float $amount, ?float $percentage, ?float $value, string $type = 'percentage', ?float $net = null): array
+    // + the fixed discount (2026-11-17): after the %, never more than what is left; [.., .., net, the fixed discount kept]
+    public static function calculate(float $amount, ?float $percentage, ?float $value, string $type = 'percentage', ?float $net = null, float $fixed = 0): array
     {
         $amount = max(0, $amount);
+        $fixed = round(min(max(0, $fixed), $amount), 2);
         if ($type === 'net') {
-            $value = $amount - min(max(0, (float) $net), $amount);
+            // the net typed = after both discounts: the % part is what is left
+            $value = max(0, $amount - $fixed - min(max(0, (float) $net), $amount));
             $percentage = $amount > 0 ? $value / $amount * 100 : 0;
         } elseif ($type === 'value') {
             $value = min(max(0, (float) $value), $amount);
@@ -362,7 +378,10 @@ class Reservation extends Model implements Payable
             $value = $amount * $percentage / 100;
         }
 
-        return [round($value, 2), round($percentage, 2), round($amount - $value, 2)];
+        $value = round($value, 2);
+        $fixed = round(min($fixed, $amount - $value), 2);
+
+        return [$value, round($percentage, 2), round($amount - $value - $fixed, 2), $fixed];
     }
 
     // the counted reservations of the unit that overlap start -> end (no end = it continues): they start before the end

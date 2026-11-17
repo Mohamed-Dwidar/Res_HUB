@@ -10,6 +10,7 @@ use Illuminate\Validation\ValidationException;
 use Modules\PackageModule\app\Models\Package;
 use Modules\AccountModule\app\Models\Account;
 use Modules\PackageModule\app\Services\PackageService;
+use Modules\PaymentModule\app\Models\DiscountLog;
 use Modules\PaymentModule\app\Models\InvoiceRequestLog;
 use Modules\PaymentModule\app\Services\PaymentService;
 use Modules\PaymentModule\app\Services\Tax\TaxSnapshot;
@@ -98,6 +99,12 @@ class ReservationService
             $this->applyTax($reservation, $accountId, $data, true, $renewalOf ? ($period ?? null) : null);
             $reservation->creatable()->associate($creator);
             $reservation->save();
+            // a discount typed by hand (not the renewed period's, copied as it is) → Payment Exceptions › Discounts (2026-11-17)
+            $copied = isset($period) && $renewalOf && (float) $period->discount_percentage == (float) $reservation->discount_percentage
+                && $period->renewalFixed() == (float) $reservation->discount_fixed;
+            if (!$copied && ((float) $reservation->discount_percentage > 0 || (float) $reservation->discount_fixed > 0)) {
+                DiscountLog::record($reservation, [0, 0, null], $creator);
+            }
             // the owner's override, for Payment Exceptions › Unpaid Renewals (2026-10-29)
             if ($unpaidNote) {
                 $this->recordEvent($reservation, 'renewed_unpaid', trim((string) $data['unpaid_renewal_reason']), $unpaidDebt,
@@ -127,6 +134,7 @@ class ReservationService
             $oldPackageId = $reservation->package_id;
             $oldPlanId = (int) $reservation->plan_id;
             $wasInvoice = (bool) $reservation->invoice_requested;
+            $oldDiscount = [(float) $reservation->discount_percentage, (float) $reservation->discount_fixed];
             // the repeat is chosen on create only, it is kept as it is; the anchor day (subscription_day) is kept as saved, the
             // account's edit form may change it ("Billing day", sent only then; 2026-10-23)
             $reservation->fill(Arr::except($this->reservationData($accountId, $data), ['is_repeat', 'repeat_frequency', 'repeat_interval', 'subscription_day']));
@@ -157,6 +165,7 @@ class ReservationService
             if ($wasInvoice !== (bool) $reservation->invoice_requested) {
                 $this->logInvoiceChange($reservation, $wasInvoice, $by);
             }
+            DiscountLog::recordChange($reservation, $oldDiscount, $by);
             // its extras' taxes follow "Invoice requested" (+ extras_total); before refresh() below
             app(\Modules\PaymentModule\app\Services\ExtraService::class)->retax($reservation);
 
@@ -285,7 +294,7 @@ class ReservationService
 
         if ($account && $plan) {
             app(TaxSnapshot::class)->fill($reservation, $account, $plan, $freshType, (float) $reservation->amount,
-                (float) $reservation->discount_value, !$reservation->package_id);
+                (float) $reservation->discount_value + (float) $reservation->discount_fixed, !$reservation->package_id);
         }
     }
 
@@ -395,6 +404,11 @@ class ReservationService
             'notes' => null,
             'renewal_of' => $subscription->id,
         ]);
+        // the fixed discount is one-off (2026-11-17): copied only with "Repeat on renewal"
+        if (!$subscription->discount_fixed_repeat) {
+            $renewal->forceFill(['discount_fixed' => 0, 'discount_fixed_repeat' => false,
+                'net_amount' => round((float) $subscription->amount - (float) $subscription->discount_value, 2)]);
+        }
         // the renewal increase (2026-11-12): the price before discount + the increase, the discount % kept; the setting is
         // replicated (it compounds)
         if ($next = $subscription->nextRenewalAmounts()) {
@@ -792,14 +806,14 @@ class ReservationService
         }
         if ($renewed && ($next = $renewed->nextRenewalAmounts())) {
             if ($owner && isset($data['amount'])) {
-                [$value, $percentage, $net] = Reservation::calculate(
-                    (float) $data['amount'],
-                    isset($data['discount_percentage']) ? (float) $data['discount_percentage'] : null,
-                    isset($data['discount_value']) ? (float) $data['discount_value'] : null,
-                    $data['discount_type'] ?? 'percentage',
-                    isset($data['net_amount']) ? (float) $data['net_amount'] : null
-                );
-                $next = ['amount' => round((float) $data['amount'], 2), 'discount_value' => $value, 'discount_percentage' => $percentage, 'net_amount' => $net];
+                [$value, $percentage, $net, $fixed] = $this->discountAmounts((float) $data['amount'], $data);
+                $next = ['amount' => round((float) $data['amount'], 2), 'discount_value' => $value, 'discount_percentage' => $percentage, 'net_amount' => $net, 'discount_fixed' => $fixed];
+            } else {
+                // an employee: the renewed period's fixed discount only with "Repeat on renewal" (2026-11-17)
+                $next['discount_fixed_repeat'] = $next['discount_fixed'] > 0;
+            }
+            if ($next['discount_fixed'] <= 0) {
+                $next['discount_fixed_repeat'] = false;
             }
             $reservation->forceFill($next);
         }
@@ -837,13 +851,9 @@ class ReservationService
             $memberId = Package::where('account_id', $accountId)->findOrFail($packageId)->member_id;
         }
 
-        [$discountValue, $discountPercentage, $netAmount] = Reservation::calculate(
-            (float) $data['amount'],
-            isset($data['discount_percentage']) ? (float) $data['discount_percentage'] : null,
-            isset($data['discount_value']) ? (float) $data['discount_value'] : null,
-            $data['discount_type'] ?? 'percentage',
-            isset($data['net_amount']) ? (float) $data['net_amount'] : null
-        );
+        // the discount (2026-11-17): the form's Discount Type = a % or a fixed amount (the other one = 0), before tax;
+        // "Repeat on renewal" only with a fixed amount
+        [$discountValue, $discountPercentage, $netAmount, $discountFixed] = $this->discountAmounts((float) $data['amount'], $data);
 
         return [
             'subscription_type_id' => $data['subscription_type_id'],
@@ -865,8 +875,25 @@ class ReservationService
             'amount' => round((float) $data['amount'], 2),
             'discount_percentage' => $discountPercentage,
             'discount_value' => $discountValue,
+            'discount_fixed' => $discountFixed,
+            'discount_fixed_repeat' => $discountFixed > 0 && !empty($data['discount_fixed_repeat']),
             'net_amount' => $netAmount,
             'notes' => $data['notes'] ?? null,
         ];
+    }
+
+    /**
+     * [discount_value, discount_percentage, net_amount, discount_fixed] of the form (2026-11-17): Discount Type "fixed" = the fixed
+     * amount only, else the % only; the net typed (net_typed = 1, a %) = the % worked out from it, that exact net kept.
+     */
+    private function discountAmounts(float $amount, array $data): array
+    {
+        if (($data['discount_type'] ?? 'percentage') === 'fixed') {
+            return Reservation::calculate($amount, 0, null, 'percentage', null, (float) ($data['discount_fixed'] ?? 0));
+        }
+        if (!empty($data['net_typed']) && isset($data['net_amount'])) {
+            return Reservation::calculate($amount, null, null, 'net', (float) $data['net_amount']);
+        }
+        return Reservation::calculate($amount, (float) ($data['discount_percentage'] ?? 0), null);
     }
 }

@@ -43,8 +43,10 @@ class PackageTax
         }
 
         $groups = [];
-        foreach ($this->reservationGroups($package) as $group) {
-            $groups[] = $this->groupResult($group['rule'], $group['amount'], $group['count'], (float) $package->discount_percentage);
+        $source = $this->reservationGroups($package);
+        $shares = $this->fixedShares($source, (float) $package->discount_percentage, (float) $package->discount_fixed);
+        foreach ($source as $i => $group) {
+            $groups[] = $this->groupResult($group['rule'], $group['amount'], $group['count'], (float) $package->discount_percentage, $shares[$i]);
         }
         // the biggest first (mainRule() reads the first taxed one)
         usort($groups, fn ($a, $b) => abs($b['net']) <=> abs($a['net']));
@@ -112,11 +114,36 @@ class PackageTax
         return array_values($groups);
     }
 
-    // one group: the discount % before tax, then its taxes (untaxed: the discounted amount, no taxes)
-    private function groupResult(?TaxRule $rule, float $amount, int $count, float $percentage): array
+    /**
+     * The package's fixed discount (2026-11-17) shared across the groups by their amount after the %, in cents, the rest to the
+     * biggest; never more than what is left (Package::calculate()). [group index => share]
+     */
+    private function fixedShares(array $groups, float $percentage, float $fixed): array
+    {
+        $after = array_map(fn ($group) => round(round($group['amount'], 2) * (100 - $percentage) / 100, 2), $groups);
+        $total = array_sum($after);
+        $fixed = min(max(0, $fixed), $total);
+        $shares = array_fill(0, count($groups), 0.0);
+        if ($fixed <= 0 || $total <= 0) {
+            return $shares;
+        }
+        $cents = (int) round($fixed * 100);
+        $given = 0;
+        foreach ($after as $i => $amount) {
+            $shares[$i] = (int) floor($cents * $amount / $total);
+            $given += $shares[$i];
+        }
+        $biggest = array_keys($after, max($after))[0];
+        $shares[$biggest] += $cents - $given;
+
+        return array_map(fn ($share) => $share / 100, $shares);
+    }
+
+    // one group: the discount % then its share of the fixed discount, before tax, then its taxes (untaxed: the discounted amount)
+    private function groupResult(?TaxRule $rule, float $amount, int $count, float $percentage, float $fixedShare = 0): array
     {
         $amount = round($amount, 2);
-        $discount = round($amount - round($amount * (100 - $percentage) / 100, 2), 2);
+        $discount = round($amount - round($amount * (100 - $percentage) / 100, 2) + $fixedShare, 2);
         if (!$rule) {
             $net = round($amount - $discount, 2);
             return ['untaxed' => true, 'count' => $count, 'sales' => $amount, 'discount' => $discount, 'net' => $net,

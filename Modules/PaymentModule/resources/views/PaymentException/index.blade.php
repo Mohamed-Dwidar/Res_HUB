@@ -81,6 +81,7 @@
             @case('expenses') Cash outs recorded by employees from {{ number_format($reviewAmount, 2) }} (Settings › General). @break
             @case('invoice') "Invoice requested" ticked / unticked on a reservation that was already paid (part or all): what the customer owes changed with its taxes. @break
             @case('unpaid_renewals') Periods renewed before the previous period was paid — by the owner or an employee (By), with the reason and what the member owed across their periods. @break
+            @case('discounts') Discounts typed or changed on a reservation / package (a % or a fixed amount; a renewal copying the previous discount is not listed). @break
             @case('cancelled_paid') Reservations cancelled by the owner while they had payments (with the reason; the payments stay until refunded). @break
         @endswitch
         @if ($rows->count() >= \Modules\PaymentModule\app\Services\PaymentExceptionService::LIMIT)
@@ -163,6 +164,38 @@
                         </tr>
                     @empty
                         <tr><td colspan="9" class="text-slate-500">Nothing in this range.</td></tr>
+                    @endforelse
+                </tbody>
+            @elseif ($tab === 'discounts')
+                <thead>
+                    <tr><th>Changed</th><th>Reservation / Package</th><th>Member</th><th>Discount</th><th class="text-right">Paid Then</th><th class="text-right">Costs Now</th><th>Changed By</th></tr>
+                </thead>
+                <tbody>
+                    @forelse ($rows as $log)
+                        @php($record = $log->loggable)
+                        <tr>
+                            <td class="whitespace-nowrap">{{ $log->created_at->format($dateFormat) }}<div class="text-xs text-slate-500">{{ $log->created_at->format($timeFormat) }}</div></td>
+                            <td class="whitespace-nowrap">
+                                @if ($record instanceof \Modules\PackageModule\app\Models\Package)
+                                    <a href="{{ route('account.packages.show', $record->id) }}" data-modal class="font-medium">Package #{{ $record->id }}</a>
+                                    <div class="text-xs text-slate-500">{{ $record->name }}</div>
+                                @elseif ($record)
+                                    <a href="{{ route('account.reservations.show', $record->id) }}" data-modal class="font-medium">Reservation #{{ $record->id }}</a>
+                                @else
+                                    #{{ $log->loggable_id }} <span class="badge badge-status-danger">Deleted</span>
+                                @endif
+                            </td>
+                            <td>{{ $record?->member?->name ?? '-' }}</td>
+                            <td>
+                                <span class="text-slate-500">{{ \Modules\PaymentModule\app\Models\DiscountLog::text($log->from_percentage, $log->from_fixed) }}</span>
+                                → <span class="font-medium">{{ \Modules\PaymentModule\app\Models\DiscountLog::text($log->to_percentage, $log->to_fixed) }}</span>
+                            </td>
+                            <td class="whitespace-nowrap text-right">{{ number_format($log->paid_amount, 2) }}</td>
+                            <td class="whitespace-nowrap text-right font-medium">{{ $record ? number_format($record instanceof \Modules\PackageModule\app\Models\Package ? $record->payableAmount() : $record->totalDue(), 2) : '-' }}</td>
+                            <td>{{ $log->recorder_name }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="7" class="text-slate-500">Nothing in this range.</td></tr>
                     @endforelse
                 </tbody>
             @elseif ($tab === 'invoice')

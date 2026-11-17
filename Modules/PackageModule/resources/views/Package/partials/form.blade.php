@@ -12,16 +12,18 @@
 {{-- Price / discount / net: edit only (a new package has no reservations yet, user 2026-10-21) --}}
 @if ($package)
 <div class="form-section mt-8">Price</div>
-{{-- the price = the net amounts of the package reservations (calculated, not typed);
-     the discount % and the net calculate each other, discount_type = the one typed last (saved as a %) --}}
-<div class="grid grid-cols-1 gap-5 md:grid-cols-3" data-package-price>
-    <input type="hidden" name="discount_type" value="{{ old('discount_type', 'percentage') }}" data-calc="type">
-    @include('layoutmodule::partials.field', ['name' => 'amount_display', 'label' => 'Price', 'type' => 'number', 'value' => $package?->reservationsTotal() ?? 0,
-        'attrs' => 'readonly tabindex="-1" data-calc="amount"', 'hint' => $package ? 'The net amounts of its reservations.' : 'The net amounts of its reservations (0 until reservations are added).'])
-    @include('layoutmodule::partials.field', ['name' => 'discount_percentage', 'label' => 'Discount %', 'type' => 'number', 'value' => $package?->discount_percentage ?? 0,
-        'attrs' => 'min="0" max="100" step="0.01" data-calc="discount"'])
+{{-- the price = the net amounts of the package reservations (calculated, not typed); the discount (2026-11-17, user): Discount Type
+     = Percentage or Fixed amount, only its input is shown; the discount and the net change each other (custom.js packageCalculate()) --}}
+@php($discountType = old('discount_type', (float) $package->discount_fixed > 0 ? 'fixed' : 'percentage'))
+{{-- one per line (user 2026-11-17): Price, Discount, Net — the discount and the net change each other (custom.js packageCalculate()) --}}
+<div class="grid grid-cols-1 gap-5" data-package-price>
+    <input type="hidden" name="net_typed" value="0" data-calc="net-typed">
+    @include('layoutmodule::partials.field', ['name' => 'amount_display', 'label' => 'Price', 'type' => 'number', 'value' => $package->reservationsTotal(),
+        'attrs' => 'readonly tabindex="-1" data-calc="amount"', 'hint' => 'The net amounts of its reservations.'])
+    @include('layoutmodule::partials.discount-field', ['type' => $discountType, 'percentage' => $package->discount_percentage ?? 0,
+        'fixed' => $package->discount_fixed ?? 0, 'calc' => true])
     @include('layoutmodule::partials.field', ['name' => 'after_discount', 'label' => 'Net', 'type' => 'number',
-        'value' => $package?->after_discount ?? 0, 'attrs' => 'min="0" step="0.01" max="99999999" data-calc="result"', 'hint' => 'The price - the discount. Change it to calculate the discount %.'])
+        'value' => $package->after_discount ?? 0, 'attrs' => 'min="0" step="0.01" max="99999999" data-calc="result"', 'hint' => 'Change the discount or the net: the other follows.'])
 </div>
 
 {{-- "Invoice requested" (taxes Phase C, docs/payments-plan.md §3): ONE switch for the package — its reservations and extras

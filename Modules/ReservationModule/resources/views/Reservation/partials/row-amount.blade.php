@@ -2,7 +2,12 @@
      dueAmount(): with its taxes when an invoice is requested, docs/payments-plan.md §3 — + its extras), so the Paid / Remaining
      columns add up; with extras a small line "<booking> · extras ±X"; + an "Invoice" badge --}}
 @php($extras = $reservation->extrasTotal())
+@php($fixed = (float) $reservation->discount_fixed)
 <span class="font-bold text-success">{{ number_format($reservation->totalDue(), 2) }}</span>
+{{-- a fixed-amount discount (2026-11-17): "<price> · −300.00" --}}
+@if ($fixed > 0)
+    <div class="text-xs text-slate-500">{{ number_format((float) $reservation->amount, 2) }}· −{{ number_format($fixed, 2) }}</div>
+@endif
 @if ($extras != 0)
     <div class="text-xs text-slate-500">{{ number_format($reservation->dueAmount(), 2) }} · extras {{ $extras < 0 ? '−' : '+' }}{{ number_format(abs($extras), 2) }}</div>
 @endif

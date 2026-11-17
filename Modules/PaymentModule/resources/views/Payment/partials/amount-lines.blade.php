@@ -11,6 +11,9 @@
     $net = $kind === 'reservation' ? (float) $payable->net_amount : (float) $payable->after_discount;
     $discount = round($price - $net, 2);
     $percentage = rtrim(rtrim(number_format((float) $payable->discount_percentage, 2), '0'), '.');
+    // a fixed-amount discount (2026-11-17): "(fixed)"
+    $fixedOff = round($discount - ($kind === 'reservation' ? (float) $payable->discount_value : $price * (float) $payable->discount_percentage / 100), 2);
+    $discountText = $fixedOff > 0 ? 'fixed' : $percentage . '%';
     $extras = method_exists($payable, 'extrasTotal') ? $payable->extrasTotal() : 0;
     // with taxes (2026-11-01, user): "Net (after discount)" + a larger bold "Total (incl. taxes)" = what the customer owes
     $taxed = $kind === 'reservation' && $payable->invoice_requested && $payable->isTaxed();
@@ -31,7 +34,7 @@
     @if ($discount > 0)
         <dl class="detail-list amount-lines">
             <div><dt>Amount before discount</dt><dd>{{ number_format($price, 2) }}</dd></div>
-            <div><dt>Discount</dt><dd>{{ number_format($discount, 2) }} ({{ $percentage }}%)</dd></div>
+            <div><dt>Discount</dt><dd>{{ number_format($discount, 2) }} ({{ $discountText }})</dd></div>
         </dl>
     @endif
     <dl class="detail-list amount-lines {{ $discount > 0 ? 'mt-4' : '' }}">
@@ -65,7 +68,7 @@
     <dl class="detail-list amount-lines">
         <div><dt>Amount</dt><dd>{{ number_format($price, 2) }}</dd></div>
         @if ($discount > 0)
-            <div><dt>Discount</dt><dd>{{ number_format($discount, 2) }} ({{ $percentage }}%)</dd></div>
+            <div><dt>Discount</dt><dd>{{ number_format($discount, 2) }} ({{ $discountText }})</dd></div>
         @endif
         <div><dt>Net Amount</dt><dd class="font-bold">{{ number_format($net, 2) }}
             @if ($extras != 0)

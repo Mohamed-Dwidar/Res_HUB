@@ -4289,3 +4289,24 @@ a.dash-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1); }
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
 }
+/* no Amounts card (it would only repeat the header box, 2026-11-17): the info takes the whole width */
+.view-columns:not(:has(.invoice-summary)) {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+/* the Discount field (layoutmodule::partials.discount-field, 2026-11-17): the type select and the amount on one line */
+.discount-line {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+.discount-line__type {
+    flex: 0 0 9.5rem;
+}
+.discount-line__value {
+    flex: 0 0 8rem;
+    min-width: 0;
+}
+.discount-field {
+    max-width: 24rem;
+}

@@ -138,7 +138,11 @@
                 <table class="statement-summary-table">
                     <tr><th>{{ $t['price'] }}</th><td>{{ $money($s['price']) }}</td></tr>
                     @if ($s['discount'] != 0)
-                        <tr><th>{{ $t['discount'] }}</th><td>{{ $money(-$s['discount']) }} ({{ $discountPercent }}%)</td></tr>
+                        <tr><th>{{ $t['discount'] }} {{ $discountPercent }}%</th><td>{{ $money(-$s['discount']) }}</td></tr>
+                    @endif
+                    {{-- a fixed-amount discount (2026-11-17) --}}
+                    @if ($s['discountFixed'] != 0)
+                        <tr><th>{{ $t['discount'] }}</th><td>{{ $money(-$s['discountFixed']) }}</td></tr>
                     @endif
                     @if ($s['sales'] != 0)
                         <tr><th>{{ $t['extras'] }}</th><td>{{ $money($s['sales']) }}</td></tr>

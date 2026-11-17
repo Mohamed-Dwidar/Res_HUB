@@ -4,16 +4,25 @@
     Price → Discount (%) → Extras (sales) → Net before tax → VAT → Table tax → [Extra discount] → Total (incl. taxes) →
     Balance carried / adjustments → Rounding → Due → Paid → Remaining (+ status badge). Lines of 0 are hidden, the totals never;
     without an invoice no tax lines and Total = the net. A reservation paid elsewhere (in a package / not counted): no Due / Paid.
+    2026-11-17: a fixed-amount discount = "Discount −300.00"; the card is not shown when it would only repeat the
+    header box (no discount, extras, taxes, adjustments / Rounding — while the header box shows Due / Paid / Remaining).
     @include('paymentmodule::Payment.partials.invoice-summary', ['payable' => $reservation])
 --}}
 @php
     $s = app(\Modules\PaymentModule\app\Services\InvoicePdfService::class)->summary($payable);
     $money = fn ($value) => number_format((float) $value, 2);
+    // a reservation inside a package: its one "Amount" is in the header box (2026-11-17, user)
+    $plain = (!$s['paysHere'] && $payable->package_id && $payable->isCounted()) || $s['paysHere'] && !$s['taxed'] && $s['discount'] == 0 && $s['discountFixed'] == 0 && $s['sales'] == 0
+        && $s['adjustments'] == 0 && $s['rounding'] == 0;
 @endphp
+@unless ($plain)
 <dl class="invoice-summary">
     <div><dt>Price</dt><dd>{{ $money($s['price']) }}</dd></div>
     @if ($s['discount'] != 0)
-        <div><dt>Discount <span class="text-slate-400">({{ $s['discountPercent'] }}%)</span></dt><dd>{{ $money(-$s['discount']) }}</dd></div>
+        <div><dt>Discount {{ $s['discountPercent'] }}%</dt><dd>{{ $money(-$s['discount']) }}</dd></div>
+    @endif
+    @if ($s['discountFixed'] != 0)
+        <div><dt>Discount</dt><dd>{{ $money(-$s['discountFixed']) }}</dd></div>
     @endif
     @if ($s['sales'] != 0)
         <div><dt>Extras <span class="text-slate-400">(sales{{ $s['taxed'] ? ', taxed' : '' }})</span></dt><dd>{{ $money($s['sales']) }}</dd></div>
@@ -51,3 +60,4 @@
         </div>
     @endif
 </dl>
+@endunless

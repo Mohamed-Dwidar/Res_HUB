@@ -7,6 +7,7 @@ use Illuminate\Support\Collection;
 use Modules\AccountModule\app\Models\Account;
 use Modules\EmployeeModule\app\Models\Employee;
 use Modules\PaymentModule\app\Models\Expense;
+use Modules\PaymentModule\app\Models\DiscountLog;
 use Modules\PaymentModule\app\Models\InvoiceRequestLog;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Models\ShiftEvent;
@@ -26,12 +27,14 @@ use Modules\UserModule\app\Models\User;
  *   login = who changed it)
  * - unpaid_renewals / cancelled_paid (reservation_events, 2026-10-29): a period renewed before the previous (owner or employee)
  *   one was paid; a reservation with payments cancelled (the login = who did it)
+ * - discounts (discount_logs, 2026-11-17): a reservation / package discount (% or fixed amount) typed or changed (the login =
+ *   who changed it)
  * The user filter = the login who RECORDED the row (the one the exception is about); edits / deletes also show who changed it.
  */
 class PaymentExceptionService
 {
     const TABS = ['late' => 'Late Entries', 'edited' => 'Edited', 'deleted' => 'Deleted', 'expenses' => 'Expenses', 'invoice' => 'Invoice Toggled',
-        'unpaid_renewals' => 'Unpaid Renewals', 'cancelled_paid' => 'Paid Cancelled'];
+        'unpaid_renewals' => 'Unpaid Renewals', 'cancelled_paid' => 'Paid Cancelled', 'discounts' => 'Discounts'];
 
     // the most rows one tab shows (the counts above are complete)
     const LIMIT = 500;
@@ -69,6 +72,8 @@ class PaymentExceptionService
             ->groupBy('creatable_id')->selectRaw('creatable_id, COUNT(*) AS n')->pluck('n', 'creatable_id'));
         $add('invoice', $this->invoiceTogglesQuery($accountId, $from, $to)
             ->groupBy('creatable_id')->selectRaw('creatable_id, COUNT(*) AS n')->pluck('n', 'creatable_id'));
+        $add('discounts', $this->recorded(DiscountLog::query(), $accountId, $from, $to)
+            ->groupBy('creatable_id')->selectRaw('creatable_id, COUNT(*) AS n')->pluck('n', 'creatable_id'));
         foreach (['unpaid_renewals' => 'renewed_unpaid', 'cancelled_paid' => 'cancelled_paid'] as $tab => $type) {
             $add($tab, $this->eventsQuery($accountId, $type, $from, $to)
                 ->groupBy('creatable_id')->selectRaw('creatable_id, COUNT(*) AS n')->pluck('n', 'creatable_id'));
@@ -105,6 +110,8 @@ class PaymentExceptionService
             'unpaid_renewals', 'cancelled_paid' => $this->withRecorder($forUser($this->eventsQuery($accountId,
                     $tab === 'unpaid_renewals' ? 'renewed_unpaid' : 'cancelled_paid', $from, $to))
                 ->with('reservation.member', 'related')->latest()->limit(self::LIMIT)->get()),
+            'discounts' => $this->withRecorder($forUser($this->recorded(DiscountLog::query(), $accountId, $from, $to))
+                ->with('loggable.member')->latest()->limit(self::LIMIT)->get()),
         };
     }
 

@@ -62,10 +62,16 @@ class ReservationRequest extends FormRequest
 
             'amount' => 'required|numeric|min:0|max:99999999',
             // the one typed last, the others are calculated from it
-            'discount_type' => 'nullable|in:percentage,value,net',
+            // the discount (2026-11-17): a % or a fixed amount, chosen in the form
+            'discount_type' => 'nullable|in:percentage,fixed',
             'discount_percentage' => 'nullable|numeric|min:0|max:100',
             'discount_value' => 'nullable|numeric|min:0|lte:amount',
             'net_amount' => 'nullable|numeric|min:0|lte:amount',
+            // the fixed amount (Discount Type "fixed"), copied to the renewal only when ticked
+            'discount_fixed' => 'nullable|numeric|min:0|lte:amount',
+            'discount_fixed_repeat' => 'nullable|boolean',
+            // 1 = the net was typed: the % is worked out from it (ReservationService::discountAmounts())
+            'net_typed' => 'nullable|boolean',
             'notes' => 'nullable|string|max:5000',
             // taxes only with an invoice (docs/payments-plan.md §3): the checkbox is on the form only once taxes apply (absent =
             // kept / the plan's "Invoice by default"); account AND employees; inside a package the package's (ReservationService)
@@ -144,6 +150,7 @@ class ReservationRequest extends FormRequest
             'member_id.required_without' => 'Select a member or a package.',
             'package_id.required' => 'Choose the package.',
             'discount_value.lte' => 'The discount can not be more than the amount.',
+            'discount_fixed.lte' => 'The fixed discount can not be more than the amount.',
             'net_amount.lte' => 'The net amount can not be more than the amount.',
         ];
     }
@@ -169,6 +176,7 @@ class ReservationRequest extends FormRequest
             'number_of_peoples' => 'number of people',
             'discount_percentage' => 'discount %',
             'discount_value' => 'discount value',
+            'discount_fixed' => 'fixed discount',
         ];
     }
 

@@ -30,7 +30,7 @@ class Package extends Model implements Payable
 
     protected $fillable = [
         'account_id', 'member_id', 'name', 'date_from', 'date_to', 'is_active',
-        'discount_percentage', 'total_amount', 'amount', 'after_discount', 'paid_amount', 'remaining', 'notes',
+        'discount_percentage', 'discount_fixed', 'total_amount', 'amount', 'after_discount', 'paid_amount', 'remaining', 'notes',
     ];
 
     protected $casts = [
@@ -38,6 +38,7 @@ class Package extends Model implements Payable
         'date_to' => 'date',
         'is_active' => 'boolean',
         'discount_percentage' => 'float',
+        'discount_fixed' => 'float',
         'total_amount' => 'float',
         'amount' => 'float',
         'after_discount' => 'float',
@@ -105,19 +106,29 @@ class Package extends Model implements Payable
         return true;
     }
 
-    // [discount_percentage, after_discount] from the amount and the one typed ($type: percentage | after)
-    public static function calculate(float $amount, ?float $percentage, ?float $afterDiscount, string $type = 'percentage'): array
+    // [discount_percentage, after_discount, the fixed discount that applies] from the amount and the one typed ($type: percentage |
+    // after); the fixed discount (2026-11-17) comes after the %, never more than what is left (the stored one is kept as typed:
+    // a later price change applies it again)
+    public static function calculate(float $amount, ?float $percentage, ?float $afterDiscount, string $type = 'percentage', float $fixed = 0): array
     {
         $amount = max(0, $amount);
+        $fixed = min(max(0, $fixed), $amount);
         if ($type === 'after') {
-            $afterDiscount = min(max(0, (float) $afterDiscount), $amount);
-            $percentage = $amount > 0 ? ($amount - $afterDiscount) / $amount * 100 : 0;
+            $afterDiscount = min(max(0, (float) $afterDiscount), $amount - $fixed);
+            $percentage = $amount > 0 ? ($amount - $fixed - $afterDiscount) / $amount * 100 : 0;
         } else {
             $percentage = min(max(0, (float) $percentage), 100);
-            $afterDiscount = $amount - $amount * $percentage / 100;
         }
+        $percentValue = round($amount * $percentage / 100, 2);
+        $fixed = round(min($fixed, $amount - $percentValue), 2);
 
-        return [round($percentage, 2), round($afterDiscount, 2)];
+        return [round($percentage, 2), round($amount - $percentValue - $fixed, 2), $fixed];
+    }
+
+    // the fixed discount that applies now (≤ what is left after the %)
+    public function effectiveFixed(): float
+    {
+        return self::calculate((float) $this->amount, (float) $this->discount_percentage, null, 'percentage', (float) $this->discount_fixed)[2];
     }
 
     // total_amount / after_discount from its reservations (after a reservation is saved / deleted)
@@ -126,7 +137,7 @@ class Package extends Model implements Payable
     public function recalculate(): void
     {
         $sum = $this->reservationsTotal();
-        [, $afterDiscount] = self::calculate($sum, (float) $this->discount_percentage, null, 'percentage');
+        [, $afterDiscount] = self::calculate($sum, (float) $this->discount_percentage, null, 'percentage', (float) $this->discount_fixed);
 
         // the dates: the first start / the last end of its counted reservations (no end when one of them has none: fallback only)
         $counted = $this->reservations()->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds());

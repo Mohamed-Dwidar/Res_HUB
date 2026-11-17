@@ -145,6 +145,7 @@ class PackageService
         $package = $this->findOne($accountId, $id);
 
         return DB::transaction(function () use ($package, $data, $by) {
+            $oldDiscount = [(float) $package->discount_percentage, (float) $package->discount_fixed];
             $package->fill($this->packageData($package, $data));
             $wasInvoice = (bool) $package->invoice_requested;
             if ($this->canSetInvoice($package, $by) && array_key_exists('invoice_requested', $data)) {
@@ -156,6 +157,8 @@ class PackageService
                 $this->followInvoice($package);
                 $this->logInvoiceChange($package, $wasInvoice, $by);
             }
+            // Payment Exceptions › Discounts (2026-11-17)
+            \Modules\PaymentModule\app\Models\DiscountLog::recordChange($package, $oldDiscount, $by);
             return $package;
         });
     }
@@ -235,20 +238,26 @@ class PackageService
         Package::find($packageId)?->recalculate();
     }
 
-    // the price is the reservations total (not typed); the discount typed as % or as the net is saved as a %
+    // the price is the reservations total (not typed); the discount (2026-11-17, Edit only) = the form's Discount Type: a % or a
+    // fixed amount (the other one = 0), before tax; the Add form sends neither: kept (none)
     private function packageData(Package $package, array $data): array
     {
-        [$discount] = Package::calculate(
-            $package->reservationsTotal(),
-            isset($data['discount_percentage']) ? (float) $data['discount_percentage'] : null,
-            isset($data['after_discount']) ? (float) $data['after_discount'] : null,
-            $data['discount_type'] ?? 'percentage'
-        );
+        if (!array_key_exists('discount_type', $data)) {
+            [$percentage, $fixed] = [(float) $package->discount_percentage, (float) $package->discount_fixed];
+        } elseif ($data['discount_type'] === 'fixed') {
+            [$percentage, $fixed] = [0.0, round(max(0, (float) ($data['discount_fixed'] ?? 0)), 2)];
+        } elseif (!empty($data['net_typed']) && isset($data['after_discount'])) {
+            // the net typed (2026-11-17): the % worked out from it
+            [$percentage, $fixed] = [Package::calculate($package->reservationsTotal(), null, (float) $data['after_discount'], 'after')[0], 0.0];
+        } else {
+            [$percentage, $fixed] = [min(max(0, round((float) ($data['discount_percentage'] ?? 0), 2)), 100), 0.0];
+        }
 
         return [
             'name' => $data['name'],
             'member_id' => $data['member_id'],
-            'discount_percentage' => $discount,
+            'discount_percentage' => $percentage,
+            'discount_fixed' => $fixed,
             'notes' => $data['notes'] ?? null,
         ];
     }

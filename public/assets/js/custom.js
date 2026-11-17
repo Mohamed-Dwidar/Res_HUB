@@ -766,30 +766,42 @@ function round2(number) {
     return Math.round((Number(number) || 0) * 100) / 100;
 }
 
-// $source: the field the user changed (amount | percentage | value | net); discount % / discount value / net calculate each other,
-// discount_type keeps the one typed last (when the amount changes it stays and the others follow)
-function reservationCalculate(form, source) {
+// the discount (2026-11-17, user): Discount Type = percentage | fixed, only its input counts: [amount, the discount]
+// (Reservation::calculate() + ReservationService::discountAmounts())
+function reservationDiscount(form) {
     var amountEl = formField(form, "amount");
-    var percentageEl = formField(form, "discount_percentage");
-    var valueEl = formField(form, "discount_value");
-    var typeEl = form.querySelector('[name="discount_type"]');
-    var netEl = form.querySelector("[data-net]");
-    if (!amountEl || !percentageEl || !valueEl || !typeEl || !netEl) return;
+    var typeEl = formField(form, "discount_type");
+    var amount = Math.max(0, Number(amountEl && amountEl.value) || 0);
+    var number = function (name) {
+        var field = formField(form, name);
+        return Math.max(0, Number(field && field.value) || 0);
+    };
+    var off = typeEl && typeEl.value === "fixed" ? Math.min(number("discount_fixed"), amount) : round2(amount * Math.min(number("discount_percentage"), 100) / 100);
+    return [amount, off];
+}
 
-    if (source === "percentage" || source === "value" || source === "net") typeEl.value = source;
-    var amount = Math.max(0, Number(amountEl.value) || 0);
-    var value;
-    if (typeEl.value === "net") {
-        value = amount - Math.min(Math.max(0, Number(netEl.value) || 0), amount);
-    } else if (typeEl.value === "value") {
-        value = Math.min(Math.max(0, Number(valueEl.value) || 0), amount);
-    } else {
-        value = amount * Math.min(Math.max(0, Number(percentageEl.value) || 0), 100) / 100;
+// $source = the field changed: "net" = the discount is worked out from the net typed (in its type: the % or the fixed amount;
+// net_typed = 1 tells the server to keep that exact net), else the net follows the amount and the discount (user 2026-11-17)
+function reservationCalculate(form, source) {
+    var netEl = form.querySelector("[data-net]");
+    if (!netEl) return;
+    var typedEl = formField(form, "net_typed");
+    if (source === "net") {
+        var parts = reservationDiscount(form);
+        var amount = parts[0];
+        var off = amount - Math.min(Math.max(0, Number(netEl.value) || 0), amount);
+        var typeEl = formField(form, "discount_type");
+        if (typeEl && typeEl.value === "fixed") {
+            formField(form, "discount_fixed").value = round2(off);
+        } else {
+            formField(form, "discount_percentage").value = round2(amount > 0 ? off / amount * 100 : 0);
+        }
+        if (typedEl) typedEl.value = 1;
+        return;
     }
-    // the typed field is left as it is
-    if (source !== "percentage") percentageEl.value = round2(amount > 0 ? value / amount * 100 : 0);
-    if (source !== "value") valueEl.value = round2(value);
-    if (source !== "net") netEl.value = round2(amount - value);
+    if (typedEl) typedEl.value = 0;
+    var result = reservationDiscount(form);
+    netEl.value = round2(Math.max(0, result[0] - result[1]));
 }
 
 // ------------------------------------------------------------------
@@ -885,7 +897,7 @@ function reservationTax(form, planChanged) {
         return Math.round((Number(field && field.value) || 0) * 100);
     };
     var price = Math.max(0, cents("amount"));
-    var discount = Math.min(Math.max(0, cents("discount_value")), price);
+    var discount = Math.min(Math.round(reservationDiscount(form)[1] * 100), price);
     var bookFor = formField(form, "book_for");
     var inPackage = box.dataset.inPackage === "1" || (bookFor && bookFor.value === "package");
     var invoice = !!(check && check.checked);
@@ -1306,23 +1318,26 @@ function reservationCapacity(form) {
     if (hint) hint.textContent = capacity > 1 ? "Up to " + capacity + " persons." : "Not more than the unit capacity.";
 }
 
-// $source: the field the user changed (amount | discount | result); the discount % and the after discount calculate each other
+// the package discount (2026-11-17, user): Discount Type = percentage | fixed, only its input counts; the discount and the net
+// change each other (Package::calculate() + PackageService::packageData())
 function packageCalculate(box, source) {
-    var discountEl = box.querySelector('[data-calc="discount"]');
-    var resultEl = box.querySelector('[data-calc="result"]');
-    var typeEl = box.querySelector('[data-calc="type"]');
-    if (source === "discount") typeEl.value = "percentage";
-    if (source === "result") typeEl.value = "after";
-
-    var amount = Math.max(0, Number(box.querySelector('[data-calc="amount"]').value) || 0);
-    if (typeEl.value === "after") {
-        var after = Math.min(Math.max(0, Number(resultEl.value) || 0), amount);
-        discountEl.value = round2(amount > 0 ? (amount - after) / amount * 100 : 0);
-        if (source !== "result") resultEl.value = round2(after);
-    } else {
-        var discount = Math.min(Math.max(0, Number(discountEl.value) || 0), 100);
-        resultEl.value = round2(amount - amount * discount / 100);
+    var field = function (calc) { return box.querySelector('[data-calc="' + calc + '"]'); };
+    var value = function (calc) { return field(calc) ? field(calc).value : ""; };
+    var resultEl = field("result");
+    var amount = Math.max(0, Number(value("amount")) || 0);
+    // the net typed: the discount is worked out in its type (net-typed = 1: the server keeps the net), user 2026-11-17
+    if (source === "result") {
+        var off = amount - Math.min(Math.max(0, Number(resultEl.value) || 0), amount);
+        if (value("type") === "fixed") field("fixed").value = round2(off);
+        else field("discount").value = round2(amount > 0 ? off / amount * 100 : 0);
+        if (field("net-typed")) field("net-typed").value = 1;
+        return;
     }
+    if (field("net-typed")) field("net-typed").value = 0;
+    var off2 = value("type") === "fixed"
+        ? Math.min(Math.max(0, Number(value("fixed")) || 0), amount)
+        : round2(amount * Math.min(Math.max(0, Number(value("discount")) || 0), 100) / 100);
+    resultEl.value = round2(Math.max(0, amount - off2));
 }
 
 // select[data-searchable]: type to search the options; select[data-member-select]: the options come from the server (memberSelect)
@@ -1909,9 +1924,8 @@ document.addEventListener("input", function (e) {
     // a package name typed by hand: the member no longer changes it
     if (e.target.matches("[data-name-suggest]")) e.target.dataset.touched = e.target.value ? "1" : "";
     if (form.matches("[data-reservation-form]")) {
-        var sources = { amount: "amount", discount_percentage: "percentage", discount_value: "value", net_amount: "net" };
-        if (sources[e.target.name]) {
-            reservationCalculate(form, sources[e.target.name]);
+        if (["amount", "discount_type", "discount_percentage", "discount_fixed", "net_amount"].indexOf(e.target.name) >= 0) {
+            reservationCalculate(form, e.target.name === "net_amount" ? "net" : "amount");
             reservationTax(form, false);
         }
         if (e.target.name === "start_at") reservationEndAfterStart(form);

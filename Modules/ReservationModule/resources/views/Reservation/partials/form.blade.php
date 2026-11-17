@@ -4,7 +4,7 @@
     in [data-place-tree]) and filtered in the browser (custom.js select[data-place], no request); a list with only one (active)
     option selects it (data-auto-single), so its own list follows. Unit + dates + times = the live availability line
     ([data-availability], {area}.reservations.availability); saving checks it again.
-    The package locks the member, the plan fills the amount; discount % / discount value / net amount calculate each other
+    The package locks the member, the plan fills the amount; the discount type (% or fixed amount) gives the net amount
     (custom.js "Reservation form"), the server calculates them again (and the subscription day from the start date).
     The status is not chosen here (a new reservation gets the first active status, it is changed in another place).
 --}}
@@ -194,17 +194,28 @@
     @if ($reservation?->exists) data-ignore="{{ $reservation->id }}" @endif hidden></div>
 
 <div class="form-section mt-8">Amount</div>
-{{-- discount_type = the one typed last (percentage | value | net), the server keeps it and calculates the others --}}
-<input type="hidden" name="discount_type" value="{{ old('discount_type', 'percentage') }}">
-<div class="grid grid-cols-1 gap-5 md:grid-cols-3">
+{{-- the discount (2026-11-17, user): Discount Type = Percentage or Fixed amount, only its input is shown; the net is calculated
+     (custom.js reservationCalculate(), the server again: ReservationService::discountAmounts()); a fixed amount is one-off — copied
+     to the next renewal only with "Repeat on renewal" (period types) --}}
+@php
+    $discountType = old('discount_type', (float) ($reservation?->discount_fixed ?? 0) > 0 ? 'fixed' : 'percentage');
+@endphp
+{{-- one per line (user 2026-11-17): Amount, Discount, Net Amount — each one changes the others (custom.js reservationCalculate():
+     the net typed = the discount worked out in its type; net_typed tells the server to keep that exact net) --}}
+<input type="hidden" name="net_typed" value="0">
+<div class="grid grid-cols-1 gap-5">
     @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'value' => $reservation?->amount ?? 0,
         'attrs' => 'min="0" step="0.01" max="99999999"' . $amountAttrs, 'hint' => $priceLocked ? 'The renewal price (the previous price + the increase).' : null])
-    @include('layoutmodule::partials.field', ['name' => 'discount_percentage', 'label' => 'Discount %', 'type' => 'number', 'value' => $reservation?->discount_percentage ?? 0,
-        'attrs' => 'min="0" max="100" step="0.01"' . ($priceLocked ? ' readonly' : '')])
-    @include('layoutmodule::partials.field', ['name' => 'discount_value', 'label' => 'Discount Value', 'type' => 'number', 'value' => $reservation?->discount_value ?? 0,
-        'attrs' => 'min="0" step="0.01"' . ($priceLocked ? ' readonly' : '')])
+    @include('layoutmodule::partials.discount-field', ['type' => $discountType, 'percentage' => $reservation?->discount_percentage ?? 0,
+        'fixed' => $reservation?->discount_fixed ?? 0, 'locked' => $priceLocked])
     @include('layoutmodule::partials.field', ['name' => 'net_amount', 'label' => 'Net Amount', 'type' => 'number', 'value' => $reservation?->net_amount ?? 0,
-        'attrs' => 'min="0" step="0.01" data-net' . ($priceLocked ? ' readonly' : ''), 'hint' => $priceLocked ? null : 'Change the discount % / value or the net, the others are calculated.'])
+        'attrs' => 'min="0" step="0.01" data-net' . ($priceLocked ? ' readonly' : ''), 'hint' => $priceLocked ? null : 'Change the amount, the discount or the net: the others follow.'])
+</div>
+<div data-show-if="discount_type=fixed">
+    <div class="mt-4" @unless ($renewing) data-type-allows="period" @endunless>
+        @include('layoutmodule::partials.checkbox', ['name' => 'discount_fixed_repeat', 'label' => 'Repeat on renewal',
+            'checked' => (bool) $reservation?->discount_fixed_repeat, 'hint' => 'Unticked: the next renewal has no discount (the fixed amount is one-off).'])
+    </div>
 </div>
 
 {{-- the renewal increase of a period (2026-11-12): the owner sets it (new = the plan's default, custom.js reservationIncreaseDefault(), not after it was changed;

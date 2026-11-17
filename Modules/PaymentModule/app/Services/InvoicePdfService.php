@@ -148,8 +148,10 @@ class InvoicePdfService
         return [
             'taxed' => $taxed,
             'price' => (float) $payable->amount,
-            'discount' => round((float) $payable->amount - $net, 2),
+            // the discount: a % or a fixed amount (2026-11-17), before tax
+            'discount' => $percentOff = round($isReservation ? (float) $payable->discount_value : (float) $payable->amount * (float) $payable->discount_percentage / 100, 2),
             'discountPercent' => rtrim(rtrim(number_format((float) $payable->discount_percentage, 2), '0'), '.'),
+            'discountFixed' => round((float) $payable->amount - $net - $percentOff, 2),
             'sales' => round($salesNet, 2),
             'salesLines' => $sales->values(),
             'netBeforeTax' => round(($taxed ? (float) $payable->tax_net : $net) + $salesNet, 2),

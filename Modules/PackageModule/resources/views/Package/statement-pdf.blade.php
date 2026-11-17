@@ -74,7 +74,12 @@
                     <tr><th>Period</th><td class="nowrap">{{ $package->date_from?->format($dateFormat) ?? '-' }} <span class="pdf-arrow">→</span> {{ $package->date_to?->format($dateFormat) ?? ($package->date_from ? 'continues' : '-') }}</td></tr>
                     <tr><th>Reservations</th><td>{{ $reservations->count() }}@if ($hours > 0) ({{ $hoursText($hours * 60) }} h)@endif @if ($cancelledCount)<span class="receipt-muted">+ {{ $cancelledCount }} cancelled</span>@endif</td></tr>
                     <tr><th>Reservations total</th><td>{{ $money($reservationsTotal) }}</td></tr>
-                    <tr><th>Discount</th><td>{{ rtrim(rtrim(number_format((float) $package->discount_percentage, 2), '0'), '.') }}%</td></tr>
+                    {{-- the discount: a % or a fixed amount (2026-11-17) --}}
+                    @if (($fixed = $package->effectiveFixed()) > 0)
+                        <tr><th>Discount</th><td>−{{ $money($fixed) }}</td></tr>
+                    @else
+                        <tr><th>Discount</th><td>{{ rtrim(rtrim(number_format((float) $package->discount_percentage, 2), '0'), '.') }}%</td></tr>
+                    @endif
                     <tr><th>Net</th><td>{{ $money($package->after_discount) }}</td></tr>
                 </table>
             </td>

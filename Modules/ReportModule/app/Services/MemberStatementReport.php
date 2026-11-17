@@ -219,8 +219,11 @@ class MemberStatementReport
             case 'package':
                 if (!$model) return ['Package', '-'];
                 $discount = (float) $model->discount_percentage;
+                $fixed = $model->effectiveFixed();
                 return ['Package', '#' . $model->id . ' · ' . $model->name
-                    . ($discount > 0 ? ' · ' . number_format((float) $model->amount, 2) . ' − ' . rtrim(rtrim(number_format($discount, 2), '0'), '.') . '%' : '')];
+                    . ($discount > 0 || $fixed > 0 ? ' · ' . number_format((float) $model->amount, 2)
+                        . ($discount > 0 ? ' − ' . rtrim(rtrim(number_format($discount, 2), '0'), '.') . '%' : '')
+                        . ($fixed > 0 ? ' − ' . number_format($fixed, 2) : '') : '')];
             case 'extra':
             case 'adjustment':
                 if (!$model) return ['Extra', '-'];
