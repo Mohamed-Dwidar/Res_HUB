@@ -4310,3 +4310,40 @@ a.dash-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1); }
 .discount-field {
     max-width: 24rem;
 }
+
+/* a list inside a view popup (member / reservation / package Cash In, extras, 2026-11-17): tighter cells, long texts wrap */
+.data-table--fit th,
+.data-table--fit td {
+    padding: 0.6rem 0.5rem;
+}
+.data-table--fit td {
+    font-size: 0.8125rem;
+}
+.data-table--fit td.cell-wrap,
+.data-table--fit td.cell-wrap * {
+    white-space: normal;
+}
+.data-table--fit td.cell-wrap {
+    min-width: 8rem;
+}
+/* inside the popup a list never goes past its edges: still too wide = it scrolls sideways (beats .table-wrap--tips) */
+#app-modal .table-wrap {
+    overflow-x: auto;
+}
+/* a small line under a money box figure ("of which upcoming: X", member view) */
+.money-box__note {
+    margin-top: 0.15rem;
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: rgb(100 116 139);
+    white-space: nowrap;
+}
+/* a detail list in exactly 2 columns (1 on phones): the member view's Member Data (2026-11-17) */
+.detail-list--two {
+    grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 640px) {
+    .detail-list--two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

@@ -34,7 +34,7 @@
 
 @if ($extras->isNotEmpty())
     <div class="table-wrap table-wrap--tips">
-        <table class="data-table">
+        <table class="data-table data-table--fit">
             <thead>
                 {{-- user 2026-10-21: Amount, Date, Item, Qty × Price, Type --}}
                 <tr>
@@ -104,7 +104,7 @@
         <span class="text-xs font-normal text-slate-500">· added after tax, never taxed</span>
     </div>
     <div class="table-wrap table-wrap--tips">
-        <table class="data-table">
+        <table class="data-table data-table--fit">
             <thead>
                 <tr>
                     <th>Amount</th>

@@ -56,7 +56,7 @@
     @if ($payments->isNotEmpty())
         {{-- table-wrap--tips: the (i) notes' tooltips are not clipped (computer screens) --}}
         <div class="table-wrap table-wrap--tips mt-4">
-            <table class="data-table">
+            <table class="data-table data-table--fit">
                 <thead>
                     {{-- the order the desk reads them (user 2026-10-21): Amount, Date, No., Method, Type, Collected by, print / edit / delete;
                          Amount, Date and No. open the payment (2026-10-28) --}}
@@ -114,7 +114,7 @@
                                     </div>
                                 @endif
                             </td>
-                            <td>{{ $payment->creatable?->userable?->displayName() ?? $payment->creatable?->email ?? '-' }}</td>
+                            <td class="cell-wrap">{{ $payment->creatable?->userable?->displayName() ?? $payment->creatable?->email ?? '-' }}</td>
                             {{-- the receipt (new tab); edit = the owner, or an employee for their own cash in of their open shift
                                  (PaymentService::canEdit()); delete = the account owner only (popups, then back to this view) --}}
                             <td class="whitespace-nowrap">

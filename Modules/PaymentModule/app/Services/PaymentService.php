@@ -141,8 +141,12 @@ class PaymentService
             }
         }
         $payments = Payment::where('account_id', $accountId)->where('member_id', $memberId);
+        // what of the remaining is for reservations not started yet (2026-11-17: "of which upcoming"; packages not split)
+        $upcoming = (float) Reservation::where('account_id', $accountId)->where('member_id', $memberId)->where('package_id', 0)
+            ->where('start_at', '>', now())->where('remaining', '>', 0)->sum('remaining');
 
         return $totals + [
+            'upcoming' => round($upcoming, 2),
             'due' => round($totals['paid'] + $totals['remaining'] + $totals['credit'], 2),
             'count' => (clone $payments)->count(),
             'payments' => $payments->with('paymentMethod', 'incomeCategory', 'creatable.userable', 'payable')

@@ -28,6 +28,10 @@
     </div>
     <div class="money-box__item {{ $summary['remaining'] > 0 ? 'money-box__item--owed' : 'money-box__item--paid' }}" title="What the member still owes">
         <span>Remaining</span><b>{{ number_format($summary['remaining'], 2) }}</b>
+        {{-- the part for reservations not started yet (2026-11-17) --}}
+        @if ($summary['upcoming'] > 0)
+            <small class="money-box__note">of which upcoming: {{ number_format($summary['upcoming'], 2) }}</small>
+        @endif
     </div>
     @if ($summary['credit'] < 0)
         <div class="money-box__item money-box__item--credit" title="Paid beyond the due (cancelled / over paid)">
@@ -38,7 +42,7 @@
 
 @if ($summary['payments']->isNotEmpty())
     <div class="table-wrap table-wrap--tips mt-4">
-        <table class="data-table">
+        <table class="data-table data-table--fit">
             <thead>
                 <tr>
                     <th>Amount</th>
@@ -58,10 +62,10 @@
                         <td><a href="{{ $showUrl }}" data-modal class="font-medium {{ $payment->type === 'refund' ? 'text-danger' : '' }}">{{ number_format($payment->signed_amount, 2) }}</a></td>
                         <td class="whitespace-nowrap"><a href="{{ $showUrl }}" data-modal>@include('paymentmodule::Payment.partials.record-date', ['record' => $payment, 'time' => false])</a></td>
                         <td><a href="{{ $showUrl }}" data-modal class="font-medium">#{{ $payment->payment_no }}</a></td>
-                        <td>@include('paymentmodule::Payment.partials.row-source')</td>
+                        <td class="cell-wrap">@include('paymentmodule::Payment.partials.row-source')</td>
                         <td>{{ $payment->paymentMethod?->name ?? '-' }}</td>
                         <td class="whitespace-nowrap"><span class="badge {{ $payment->type_badge_class }}">{{ $payment->type_label }}</span>@include('layoutmodule::partials.note-tip', ['note' => $payment->note_tip])</td>
-                        <td>{{ $payment->creatable?->userable?->displayName() ?? $payment->creatable?->email ?? '-' }}</td>
+                        <td class="cell-wrap">{{ $payment->creatable?->userable?->displayName() ?? $payment->creatable?->email ?? '-' }}</td>
                         <td class="whitespace-nowrap">
                             <span class="payments-block__icons">
                                 <a href="{{ route($area . '.payments.receipt', $payment->id) }}" target="_blank" title="Receipt"><i data-lucide="printer" class="h-4 w-4"></i></a>

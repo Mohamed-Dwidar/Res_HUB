@@ -1,4 +1,6 @@
-@php($area = request()->routeIs('employee.*') ? 'employee' : 'account')
+@php
+    $area = request()->routeIs('employee.*') ? 'employee' : 'account';
+@endphp
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
@@ -40,18 +42,27 @@
         </div>
     </div>
 
+    {{-- only the fields that have a value (2026-11-17, user), 2 columns; Address / Source / Notes on full rows --}}
+    @php
+        $dataFields = array_filter([
+            'Email' => $member->email,
+            ($member->id_type_label ?? 'ID Number') => $member->national_number,
+            'Nationality' => $member->nationality,
+            'Company' => $member->company?->name,
+            'Job' => $member->job?->name,
+            'WhatsApp Language' => $member->message_language ? config('messagingmodule.languages.' . $member->message_language) : null,
+            'Added At' => $member->created_at?->format('Y-m-d H:i'),
+        ], fn ($value) => filled($value));
+        $wideFields = array_filter(['Address' => $member->address, 'Source (from where)' => $member->from_where, 'Notes' => $member->notes], fn ($value) => filled($value));
+    @endphp
     <div class="form-section mt-6">Member Data</div>
-    <dl class="detail-list">
-        <div><dt>Email</dt><dd>{{ $member->email ?: '-' }}</dd></div>
-        <div><dt>{{ $member->id_type_label ?? 'ID Number' }}</dt><dd>{{ $member->national_number ?: '-' }}</dd></div>
-        <div><dt>Nationality</dt><dd dir="auto">{{ $member->nationality ?: '-' }}</dd></div>
-        <div><dt>Company</dt><dd>{{ $member->company?->name ?? '-' }}</dd></div>
-        <div><dt>Job</dt><dd>{{ $member->job?->name ?? '-' }}</dd></div>
-        <div><dt>WhatsApp Language</dt><dd>{{ config('messagingmodule.languages.' . $member->message_language, 'Account default') }}</dd></div>
-        <div><dt>Added At</dt><dd>{{ $member->created_at->format('Y-m-d H:i') }}</dd></div>
-        <div class="wide"><dt>Address</dt><dd dir="auto">{{ $member->address ?: '-' }}</dd></div>
-        <div class="wide"><dt>Source (from where)</dt><dd>{{ $member->from_where ?: '-' }}</dd></div>
-        <div class="wide"><dt>Notes</dt><dd>{{ $member->notes ?: '-' }}</dd></div>
+    <dl class="detail-list detail-list--two">
+        @foreach ($dataFields as $label => $value)
+            <div><dt>{{ $label }}</dt><dd dir="auto">{{ $value }}</dd></div>
+        @endforeach
+        @foreach ($wideFields as $label => $value)
+            <div class="wide"><dt>{{ $label }}</dt><dd dir="auto" class="whitespace-pre-line">{{ $value }}</dd></div>
+        @endforeach
     </dl>
 
     {{-- every payment of the member (owner AND employees, whoever recorded it) + due / paid / remaining (2026-11-01) --}}

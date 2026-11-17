@@ -480,6 +480,11 @@
 
 ## Session log
 
+### 2026-11-17 — Member popup: tables fit, Member Data without empty fields, "of which upcoming"
+- **Changed:** `Payment/partials/{member-payments, payable-payments}` + `Extra/partials/extras` (`.data-table--fit`, `td.cell-wrap`), custom.css (`#app-modal .table-wrap` scrolls sideways instead of overflowing — the (i) note tips inside popups may clip at the edges; `.money-box__note`, `.detail-list--two`), `MemberModule Account/show` (only filled fields, 2 columns), `PaymentService::memberSummary()` `upcoming` (remaining of own reservations not started yet)
+- **Why:** user
+- **Commit:** uncommitted
+
 ### 2026-11-17 — Discount Type (% or fixed amount) on reservations / packages + Discounts log
 - **Changed:** migrations 100063 – 100065 (not run), `Reservation` / `Package` (`calculate()`, `renewalFixed()`, `effectiveFixed()`), `ReservationService` (`discountAmounts()`, renewals, taxes, logs), `PackageService`, `PackageTax::fixedShares()`, requests, both forms (type select, read only net, no reason), `InvoicePdfService::summary()`, `invoice-summary` (+ hidden when plain), invoice / statement PDFs, row-amount hints, `amount-lines`, `MemberStatementReport`, `DiscountLog` + Payment Exceptions › Discounts, custom.js (net / package calc / tax preview), custom.css
 - **Why:** user
@@ -533,9 +538,3 @@
 - **Why:** user
 - **Affects:** reservation form (all modes), Members list / view, Members report, member statement, reservations list search
 - **Commit:** `f5c8960` (most); Members list column + member view = uncommitted
-
-### 2026-11-11 — Reports R8 Members
-- **Changed:** ReportModule (`MemberReport`, `MemberExport`, routes, `ReportActions`, `Report/members` + `partials/member-totals`), EmployeeModule config (`reports.members`), both sidebars, custom.js (`data-open-page`); docs
-- **Why:** user (report 8)
-- **Affects:** Reports sidebar section; follow-ups the same day: Commitment column + filter, cancelled reservations counted, Inactive min / window, place chain, wa.me phone, balances as of the range end (+ member statement Include future), date presets This year / Until today (`ReportDates`)
-- **Commit:** `513aba1` + `f5c8960`
