@@ -24,6 +24,7 @@ class GeneralSettingRequest extends FormRequest
             'today_hours_from' => 'required|integer|min:0|max:23',
             'today_hours_to' => 'required|integer|gt:today_hours_from|max:30',
             'renewal_days' => 'required|integer|min:1|max:90',
+            'unpaid_days' => 'required|integer|min:1|max:365',
             'late_entry_hours' => 'required|integer|min:0|max:720',
             'expense_review_amount' => 'required|numeric|min:0|max:99999999',
             // Taxes (docs/payments-plan.md §3); a past start date is allowed (2026-10-28): the rows created since then are
@@ -41,7 +42,7 @@ class GeneralSettingRequest extends FormRequest
     {
         return [
             'withholding_enabled' => 'withholding tax', 'vat_enabled' => 'VAT', 'cash_out_offset_enabled' => 'settling a Cash Out against a reservation',
-            'today_hours_from' => 'timeline from', 'today_hours_to' => 'timeline to', 'renewal_days' => 'renewals window',
+            'today_hours_from' => 'timeline from', 'today_hours_to' => 'timeline to', 'renewal_days' => 'renewals window', 'unpaid_days' => 'unpaid (past) window',
             'late_entry_hours' => 'late entry hours', 'expense_review_amount' => 'expenses to review from',
             'vat_rate' => 'VAT rate', 'table_tax_rate' => 'table tax rate', 'tax_start_date' => 'tax start date',
             'tax_rounding' => 'rounding', 'tax_report_basis' => 'tax report month', 'withholding_rate' => 'withholding rate',

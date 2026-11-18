@@ -57,6 +57,7 @@ class ScheduleService
             // a past day (before the business date): no Next N days / Not renewed (today's payments would mislead), 2026-10-29
             'isPast' => $date->lt($today),
             'renewalDays' => $account->renewalDays(),
+            'unpaidDays' => $account->unpaidDays(),
         ];
 
         // read once for the whole page (2026-10-18, 85 → ~16 queries): the account's types, units (+ colors), spaces, statuses;
@@ -71,10 +72,12 @@ class ScheduleService
             'full_day' => $this->fullDaySection($type, $context),
             'period' => $this->periodSection($type, $context),
             default => $this->hourlySection($type, $context),
-        });
+        })->map(fn ($section) => $section['mode'] === 'period' ? $section : $section + $this->unpaidPast($section['type'], $context));
         $this->hydrate($sections, $context);
         // the period groups need the renewals (renewedBy) and the members, loaded by hydrate()
         $sections = $sections->map(fn ($section) => $section['mode'] === 'period' ? $this->periodGroups($section, $context) : $section);
+        // ONE "Not paid" list above the sections (2026-11-18, user): the subscriptions' Not paid + the hourly / full day "Unpaid (past)"
+        $notPaid = $this->mergeNotPaid($sections->flatMap(fn ($section) => $section['mode'] === 'period' ? $section['notPaid'] : ($section['unpaid'] ?? collect())));
 
         return [
             'date' => $date,
@@ -89,8 +92,12 @@ class ScheduleService
             // has some), the remaining of the day
             'notRenewed' => $sections->where('mode', 'period')->sum(fn ($section) => $section['notRenewed']->count()),
             'notRenewedAnchor' => $sections->where('mode', 'period')->first(fn ($section) => $section['notRenewed']->isNotEmpty())['notRenewedAnchor'] ?? null,
-            'notPaid' => $sections->where('mode', 'period')->sum(fn ($section) => $section['notPaid']->count()),
-            'notPaidAnchor' => $sections->where('mode', 'period')->first(fn ($section) => $section['notPaid']->isNotEmpty())['notPaidAnchor'] ?? null,
+            // the merged Not paid list (every type) + the hourly / full day ones older than the window (Outstanding report)
+            'notPaidRows' => $notPaid,
+            'notPaid' => $notPaid->count(),
+            'notPaidOlder' => $sections->sum(fn ($section) => $section['unpaidOlder'] ?? 0),
+            'notPaidAnchor' => 'today-notpaid',
+            'isPast' => $context['isPast'],
             'nextCount' => $sections->where('mode', 'period')->sum(fn ($section) => $section['next']->count()),
             'nextAnchor' => $sections->where('mode', 'period')->first(fn ($section) => $section['next']->isNotEmpty())['nextAnchor'] ?? null,
             'renewalDays' => $context['renewalDays'],
@@ -102,6 +109,7 @@ class ScheduleService
             // the day's cancelled reservations (the summary "Cancelled", opens their list)
             // (the same rule as cancelledQuery(), counted from the sections' own queries)
             'cancelled' => $sections->sum('cancelled'),
+            'unpaidDays' => $context['unpaidDays'],
             // + New: every type of the account (pick a type first), with its start for the selected day
             'newTypes' => $allTypes->map(fn ($type) => ['type' => $type, 'start' => $this->newStart($type, $context, $from)]),
         ];
@@ -184,8 +192,8 @@ class ScheduleService
         $rows = new \Illuminate\Database\Eloquent\Collection();
         foreach ($sections as $section) {
             $lists = match ($section['mode']) {
-                'hourly' => [$section['list']],
-                'full_day' => [$section['rows']],
+                'hourly' => [$section['list'], $section['unpaid'] ?? []],
+                'full_day' => [$section['rows'], $section['unpaid'] ?? []],
                 default => [$section['periods']],
             };
             foreach ($lists as $list) {
@@ -227,6 +235,60 @@ class ScheduleService
             $renewal->setRelation('subscriptionType', $context['types'][$renewal->subscription_type_id] ?? null);
         }
         $renewals->load('member', 'package', 'plan', 'messageLogs');
+    }
+
+    /**
+     * The ONE "Not paid" list (2026-11-18): every owing row (subscriptions' Not paid + hourly / full day Unpaid (past)) grouped by
+     * member ACROSS the types — the member with the newest debt first, a member's rows oldest first, older_due (what their earlier
+     * rows still owe) + "Member total due" under 2+ rows.
+     */
+    private function mergeNotPaid(Collection $rows): Collection
+    {
+        return $rows->unique('id')
+            ->each(fn ($reservation) => $reservation->due_since = $reservation->start_at->toDateString())
+            ->groupBy(fn ($reservation) => $reservation->member_id ?: 'r' . $reservation->id)
+            ->sortByDesc(fn ($group) => $group->max(fn ($reservation) => $reservation->start_at->timestamp))
+            ->flatMap(function ($group) {
+                $group = $group->sortBy(fn ($reservation) => [$reservation->start_at->timestamp, $reservation->id])->values();
+                $older = 0.0;
+                foreach ($group as $reservation) {
+                    $reservation->older_due = round($older, 2);
+                    $older += (float) $reservation->remaining;
+                }
+                if ($group->count() > 1) {
+                    $group->last()->member_total = round($older, 2);
+                }
+                return $group;
+            })->values();
+    }
+
+    /**
+     * The hourly / full day rows of the ONE "Not paid" list (2026-11-18): counted reservations paid on their own (not in a package)
+     * that still owe (stored remaining > 0) and are OVER — hourly: their end time has passed (today included); full day (day use,
+     * no real end time): once its business day is over (dated before the business date) — ended within the last unpaidDays
+     * (Settings › General, default 30) counted from the business day's start, newest first; older ones = a count (the Outstanding
+     * report). None on a past day.
+     */
+    private function unpaidPast(SubscriptionType $type, array $context): array
+    {
+        $none = ['unpaid' => collect(), 'unpaidOlder' => 0, 'unpaidAnchor' => 'today-unpaid-' . $type->id];
+        if (!empty($context['isPast'])) {
+            return $none;
+        }
+        $account = $context['account'];
+        $businessDate = $account->businessDate()->copy()->startOfDay();
+        [$todayStart] = $account->businessDay($businessDate);
+        $since = $todayStart->copy()->subDays($context['unpaidDays']);
+        $base = fn () => $this->reservations($type, $context['accountId'])->where('package_id', 0)->where('remaining', '>', 0)
+            ->whereNotNull('end_at')
+            ->when($type->booking_mode === 'full_day',
+                fn ($query) => $query->where('start_at', '<', $businessDate),
+                fn ($query) => $query->where('end_at', '<=', now()));
+
+        return [
+            'unpaid' => $base()->where('end_at', '>=', $since)->orderByDesc('start_at')->orderByDesc('id')->get(),
+            'unpaidOlder' => $base()->where('end_at', '<', $since)->count(),
+        ] + $none;
     }
 
     // remaining owed (> 0) of reservations paid on their own (not inside a package)
@@ -446,23 +508,9 @@ class ScheduleService
 
         // Not paid = started by D and still owing (renewed-but-unpaid and partly paid included); a member's rows together, oldest
         // first, "Member total due" under 2+ rows
+        // (2026-11-18: grouped by member across every type in mergeNotPaid(), shown above the sections)
         $notPaid = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->start_at?->lt($dayEnd) && $owes($reservation))
-            ->each(fn ($reservation) => $reservation->due_since = $reservation->start_at->toDateString())
-            ->groupBy('member_id')
-            ->sortByDesc(fn ($rows) => $rows->max('due_since'))
-            ->flatMap(function ($rows) {
-                $rows = $rows->sortBy(fn ($reservation) => [$reservation->start_at->timestamp, $reservation->id])->values();
-                $older = 0.0;
-                foreach ($rows as $reservation) {
-                    $reservation->older_due = round($older, 2);
-                    $older += (float) $reservation->remaining;
-                }
-                if ($rows->count() > 1) {
-                    $rows->last()->member_total = round($older, 2);
-                    $rows->last()->member_spaces = $rows->pluck('space_id')->unique()->implode(' ');
-                }
-                return $rows;
-            })->values();
+            ->values();
 
         // Next N days: the renewal dates D+1 … D+N
         $next = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on > $day && $reservation->renews_on <= $last)

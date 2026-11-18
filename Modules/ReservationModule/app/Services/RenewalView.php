@@ -18,8 +18,8 @@ use Modules\ReservationModule\app\Models\Reservation;
  *   renewal; "Older period still owes X" ($reservation->older_due, ScheduleService::periodGroups());
  * - not_renewed (Schedule "Not renewed", 2026-11-18): the NEXT period ($reservation->next_period = ReservationService::renewalOf():
  *   its dates + price with any increase), "due since (N days)" from the renewal date, "Previous: <dates> · <amount>"; Renew + Left;
- * - not_paid (Schedule "Not paid"): this period — "due since" its start, Renewed (a renewal) + payment badge, Due, Pay; "Older
- *   period still owes X";
+ * - not_paid (Schedule "Not paid", ONE list of every type since 2026-11-18): the reservation — "due since" its start, Renewed (a
+ *   renewal) + payment badge, Due, Pay; "Earlier unpaid of this member: X";
  * - renewed (the list's Renewed): "✓ Renewed & paid"; left: "Left" + Undo.
  * $date = the selected day (the Schedule date / the list's last day, the business date at most); $isToday: "today" / "tomorrow".
  */
@@ -152,8 +152,9 @@ class RenewalView
                 $view['badges'][] = self::BADGES[$state($reservation)];
                 $view['due'] = $due($reservation);
                 $view['actions'][] = ['pay', $reservation, 'btn-pay'];
+                // the merged Not paid list (2026-11-18): the member's earlier rows, any type
                 if (($reservation->older_due ?? 0) > 0) {
-                    $view['hints'][] = ['Older period still owes ' . number_format($reservation->older_due, 2), null, null];
+                    $view['hints'][] = ['Earlier unpaid of this member: ' . number_format($reservation->older_due, 2), null, null];
                 }
                 break;
 

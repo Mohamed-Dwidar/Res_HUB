@@ -1,7 +1,8 @@
 {{--
     A period section ($section, ScheduleService::periodSection() / periodGroups(), user 2026-10-29): "+ <type>"; "Not paid by
     space:" chips (the Not renewed + Not paid rows per space; a chip filters the table to that space, again = all); then the groups
-    Starts today | Renews today | Not paid | Not renewed (split 2026-11-18, Not paid first) | Next N days (empty groups hidden), one table:
+    Starts today | Renews today | Not renewed | Next N days (Not paid = the ONE list above the sections since 2026-11-18,
+    Schedule/partials/not-paid) (empty groups hidden), one table:
     Member | Unit | Renewal date | Price | Payment | Action (Schedule/partials/renewal-row, RenewalView).
 --}}
 @php($type = $section['type'])
@@ -18,17 +19,17 @@
     @php($groups = [
         ['title' => $isToday ? 'Starts today' : 'Starts this day', 'rows' => $section['startsToday'], 'kind' => 'new', 'id' => $section['startsAnchor']],
         ['title' => $isToday ? 'Renews today' : 'Renews this day', 'rows' => $section['renewsToday'], 'kind' => 'today'],
-        ['title' => 'Not paid', 'rows' => $section['notPaid'], 'kind' => 'not_paid', 'id' => $section['notPaidAnchor']],
         ['title' => 'Not renewed', 'rows' => $section['notRenewed'], 'kind' => 'not_renewed', 'id' => $section['notRenewedAnchor']],
         ['title' => 'Next ' . $section['renewalDays'] . ' days', 'rows' => $section['next'], 'kind' => 'next', 'id' => $section['nextAnchor']],
     ])
 
     {{-- Not renewed + Not paid per space (spaces in their order); a chip shows only that space's rows --}}
-    @php($dueRows = $section['notRenewed']->concat($section['notPaid']))
+    {{-- (Not paid moved to the ONE list above the sections, 2026-11-18) --}}
+    @php($dueRows = $section['notRenewed'])
     @if ($dueRows->isNotEmpty())
         @php($bySpace = $dueRows->groupBy('space_id')->sortBy(fn ($rows) => [(int) $rows->first()->space?->sort_order, (string) $rows->first()->space?->name]))
         <div class="today-summary today-summary--section">
-            <span class="today-summary__label">Not renewed / not paid by space:</span>
+            <span class="today-summary__label">Not renewed by space:</span>
             @foreach ($bySpace as $spaceId => $rows)
                 <button type="button" class="today-summary__item" data-space-filter="{{ $spaceId }}" title="Show only {{ $rows->first()->space?->name }} (click again for all)"><span>{{ $rows->first()->space?->name ?? '-' }}</span> <b class="text-danger">{{ $rows->count() }}</b></button>
             @endforeach

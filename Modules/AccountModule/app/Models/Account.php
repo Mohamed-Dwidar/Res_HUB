@@ -47,7 +47,7 @@ class Account extends Model implements Userable
 
     protected $fillable = [
         'name_ar', 'name_en', 'phone', 'address', 'description_ar', 'description_en', 'logo', 'status', 'approved_at',
-        'withholding_enabled', 'vat_enabled', 'cash_out_offset_enabled', 'today_hours_from', 'today_hours_to', 'renewal_days',
+        'withholding_enabled', 'vat_enabled', 'cash_out_offset_enabled', 'today_hours_from', 'today_hours_to', 'renewal_days', 'unpaid_days',
         'late_entry_hours', 'expense_review_amount',
         'vat_rate', 'table_tax_rate', 'tax_start_date', 'tax_rounding', 'tax_report_basis', 'withholding_rate',
     ];
@@ -64,6 +64,7 @@ class Account extends Model implements Userable
         'today_hours_from' => 'integer',
         'today_hours_to' => 'integer',
         'renewal_days' => 'integer',
+        'unpaid_days' => 'integer',
         'late_entry_hours' => 'integer',
         'expense_review_amount' => 'decimal:2',
         'vat_rate' => 'float',
@@ -197,6 +198,12 @@ class Account extends Model implements Userable
     public function renewalDays(): int
     {
         return min(90, max(1, (int) ($this->renewal_days ?? 7)));
+    }
+
+    // the Schedule's "Unpaid (past)" window (2026-11-18): hourly / full day reservations that ended in the last N days and still owe
+    public function unpaidDays(): int
+    {
+        return min(365, max(1, (int) ($this->unpaid_days ?? 30)));
     }
 
     // Payment Controls (2026-10-27): recorded more than these hours after the end of its business date = "Late entry"

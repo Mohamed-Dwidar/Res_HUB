@@ -66,6 +66,9 @@
             @include('layoutmodule::partials.field', ['name' => 'renewal_days', 'label' => 'Renewals Window (days)', 'type' => 'number', 'required' => true,
                 'value' => $account->renewalDays(), 'attrs' => 'min=1 max=90 step=1',
                 'hint' => 'Subscriptions ending within these days are listed under "Next days".'])
+            @include('layoutmodule::partials.field', ['name' => 'unpaid_days', 'label' => 'Unpaid (past) Window (days)', 'type' => 'number', 'required' => true,
+                'value' => $account->unpaidDays(), 'attrs' => 'min=1 max=365 step=1',
+                'hint' => 'Hourly / full day reservations that ended within these days and still owe are listed under "Unpaid (past)"; older ones = the Outstanding report.'])
         </div>
 
         {{-- fraud prevention (2026-10-27): the "Late entry" badge + the Payment Exceptions report --}}
