@@ -462,6 +462,33 @@ trait PaymentActions
         ]);
     }
 
+    // a reservation's / package's credit given back (2026-11-18, account + employees with payments.refund): amount = the credit
+    public function creditRefundForm($kind, $payableId)
+    {
+        $payable = $this->paymentService->findPayable($this->accountId(), $kind, $payableId);
+        return view('paymentmodule::Payment.credit-refund', [
+            'payable' => $payable,
+            'kind' => $kind,
+            'payableName' => $this->paymentService->payableName($payable),
+            'credit' => $this->paymentService->creditOf($payable),
+            'methods' => $this->methodService->options($this->accountId()),
+        ]);
+    }
+
+    public function creditRefund(PaymentRefundRequest $request, $kind, $payableId)
+    {
+        $payable = $this->paymentService->findPayable($this->accountId(), $kind, $payableId);
+        $refund = $this->paymentService->refundCredit($this->accountId(), $payable, $request->validated(), Auth::user());
+
+        return response()->json([
+            'message' => 'Refund #' . $refund->payment_no . ' (credit) has been added to your shift.',
+            'reload' => true,
+            // back to the reservation / package view
+            'modal' => route($this->area() . '.' . $kind . 's.show', $payable->getKey()),
+            'redirect' => route($this->area() . '.' . $kind . 's.show', $payable->getKey()),
+        ]);
+    }
+
     // the refund popup (account + employees; an employee: a payment they can open): reason required, not more than this payment less its refunds
     public function refundForm($id)
     {

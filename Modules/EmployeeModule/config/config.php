@@ -102,7 +102,7 @@ return [
             'reports.income' => 'Report: Income',
             'reports.expenses' => 'Report: Expenses',
             'reports.subscriptions' => 'Report: Subscriptions',
-            'reports.occupancy' => 'Report: Occupancy',
+            'reports.occupancy' => 'Report: Performance (occupancy + revenue)',
             'reports.pnl' => 'Report: Profit & Loss',
             'reports.members' => 'Report: Members',
         ],

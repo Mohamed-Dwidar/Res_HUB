@@ -16,21 +16,24 @@
         {{ $open->unit?->name ?? '-' }}
         <div class="text-xs text-slate-500">{{ $open->space?->name }}</div>
     </td>
-    <td data-label="{{ $kind === 'owing' ? 'Date' : 'Renewal date' }}">
+    @php($statusCol = in_array($kind, ['owing', 'not_renewed', 'not_paid'], true))
+    <td data-label="{{ $kind === 'not_renewed' ? 'Next period' : ($statusCol ? 'Date' : 'Renewal date') }}">
         @if ($view['datePrefix'])<div class="text-xs text-danger">{{ $view['datePrefix'] }}</div>@endif
         <div><span class="whitespace-nowrap">{{ $view['date']?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}</span>@if ($view['dateTo']) <span class="whitespace-nowrap">→ {{ $view['dateTo']->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</span>@endif</div>
         @if ($view['when'])<div class="text-xs whitespace-nowrap {{ $view['whenClass'] }}">{{ $view['when'] }}</div>@endif
+        {{-- Not renewed: the period it would renew (2026-11-18) --}}
+        @if ($view['previous'])<div class="text-xs text-slate-500">{{ $view['previous'] }}</div>@endif
     </td>
     <td data-label="Price" class="renewal-row__price">{{ number_format($view['price'], 2) }}
         @if ($view['nextPrice'])<div class="renewal-next-price" title="The next renewal's price (the renewal increase)">Renewal: {{ $view['nextPrice'] }}</div>@endif</td>
-    <td data-label="{{ $kind === 'owing' ? 'Status' : 'Payment' }}" @if ($kind === 'owing') class="renewal-row__status" @endif>@include('reservationmodule::Reservation.partials.renewal-payment')</td>
+    <td data-label="{{ $statusCol ? 'Status' : 'Payment' }}" @if ($statusCol) class="renewal-row__status" @endif>@include('reservationmodule::Reservation.partials.renewal-payment')</td>
     {{-- + WhatsApp after the last button (MessagingModule): about the period the row shows (the renewal when the row shows it:
          its sends = the ✓; suggested = Payment due while it owes, else by its state), else this period with the group's suggestion --}}
     <td data-label="" class="renewal-row__action">@include('reservationmodule::Reservation.partials.renewal-actions')@include('messagingmodule::Message.partials.button', $open->id === $reservation->id
-        ? ['messageContext' => $kind, 'messageDate' => $date]
+        ? ['messageContext' => $statusCol ? 'owing' : $kind, 'messageDate' => $date]
         : ['reservation' => $open, 'messageContext' => $view['due'] ? 'owing' : null, 'messageDate' => $date])</td>
 </tr>
-@if (!empty($reservation->member_total) && $kind === 'owing')
+@if (!empty($reservation->member_total) && in_array($kind, ['owing', 'not_paid'], true))
     {{-- a member with 2+ owing periods: their total under the last one --}}
     <tr class="renewal-row__total" data-spaces="{{ $reservation->member_spaces }}">
         <td colspan="6">Member total due: <b class="text-danger">{{ number_format($reservation->member_total, 2) }}</b> <span class="text-slate-500">({{ $open->member?->name }})</span></td>

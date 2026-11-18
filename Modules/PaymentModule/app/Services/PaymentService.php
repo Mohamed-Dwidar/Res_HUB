@@ -470,6 +470,69 @@ class PaymentService
     }
 
     /**
+     * Refund a reservation's / package's CREDIT (paid more than due, remaining < 0; 2026-11-18): ONE refund row linked to the
+     * reservation / package (refund_of 0: not to a single cash in), by the account OR an employee (`payments.refund`), in the
+     * recorder's open shift; not more than the credit now (the row locked, recalculated from its payments); reason required;
+     * logged (shift_events payment_refund on the open shift, before / after credit). $data: amount, payment_method_id, paid_at,
+     * reason, reference, notes
+     */
+    public function refundCredit($accountId, Payable $payable, array $data, Model $user): Payment
+    {
+        if (!$payable->canTakePayments()) {
+            throw ValidationException::withMessages(['amount' => 'This reservation is paid through its package: refund the package\'s credit.']);
+        }
+        $amount = $this->assertAmount($data['amount'] ?? 0);
+        $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
+        $reason = $this->assertReason($data['reason'] ?? '', 'reason', 'Write why the money is given back.');
+        $paidAt = $this->recordDate($accountId, $data['paid_at'] ?? null, $user);
+
+        return DB::transaction(function () use ($accountId, $payable, $data, $user, $amount, $paidAt, $reason) {
+            $payable->newQuery()->whereKey($payable->getKey())->lockForUpdate()->first();
+            $credit = $this->creditOf($payable);
+            if ($credit <= 0) {
+                throw ValidationException::withMessages(['amount' => 'There is no credit to refund (nothing paid beyond the due).']);
+            }
+            if ($amount > $credit) {
+                throw ValidationException::withMessages(['amount' => 'The amount can\'t be more than the credit: ' . number_format($credit, 2) . '.']);
+            }
+            $number = $this->nextNumber($accountId);
+            $this->assertReference($accountId, (int) $data['payment_method_id'], $data['reference'] ?? null);
+            $refund = new Payment([
+                'account_id' => $accountId,
+                'payment_no' => $number,
+                'payable_type' => $payable->getMorphClass(),
+                'payable_id' => $payable->getKey(),
+                'income_category_id' => 0,
+                'member_id' => (int) $payable->member_id,
+                'type' => 'refund',
+                'amount' => $amount,
+                'payment_method_id' => (int) $data['payment_method_id'],
+                'refund_of' => 0,
+                'paid_at' => $paidAt,
+                'reference' => ($data['reference'] ?? null) ?: 'Credit refund',
+                'notes' => $data['notes'] ?? null,
+                'reason' => $reason,
+            ]);
+            $refund->creatable()->associate($user);
+            $refund->save();
+            $this->refresh($payable instanceof Reservation ? $payable->load('status') : $payable);
+            $this->shifts()->logOpenChange('payment_refund', $refund, $user, $reason,
+                ['after' => $this->snapshot($refund), 'credit_before' => $credit, 'credit_after' => round($credit - $amount, 2)]);
+
+            return $refund;
+        });
+    }
+
+    // the credit of a reservation / package now (paid − due, from its payments), 0 when none
+    public function creditOf(Payable $payable): float
+    {
+        if (!$payable->canTakePayments()) {
+            return 0.0;
+        }
+        return max(0, round(Payment::paidTotal($payable->payments()) - $payable->payableAmount(), 2));
+    }
+
+    /**
      * The most that can be refunded now (the refund form); $except: a refund being edited (its amount is not counted).
      * A payment: its amount - its refunds (refund_of). An imported refund with no link (edited): the money received of its
      * reservation / package (payments - refunds), or its own amount for other income.

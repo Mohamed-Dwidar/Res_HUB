@@ -1,7 +1,7 @@
 {{--
     A period section ($section, ScheduleService::periodSection() / periodGroups(), user 2026-10-29): "+ <type>"; "Not paid by
-    space:" chips (the Not renewed & Not paid rows per space; a chip filters the table to that space, again = all); then the groups
-    Starts today | Renews today | Not renewed & Not paid | Next N days (empty groups hidden), one table:
+    space:" chips (the Not renewed + Not paid rows per space; a chip filters the table to that space, again = all); then the groups
+    Starts today | Renews today | Not paid | Not renewed (split 2026-11-18, Not paid first) | Next N days (empty groups hidden), one table:
     Member | Unit | Renewal date | Price | Payment | Action (Schedule/partials/renewal-row, RenewalView).
 --}}
 @php($type = $section['type'])
@@ -18,15 +18,17 @@
     @php($groups = [
         ['title' => $isToday ? 'Starts today' : 'Starts this day', 'rows' => $section['startsToday'], 'kind' => 'new', 'id' => $section['startsAnchor']],
         ['title' => $isToday ? 'Renews today' : 'Renews this day', 'rows' => $section['renewsToday'], 'kind' => 'today'],
-        ['title' => 'Not renewed & Not paid', 'rows' => $section['notPaid'], 'kind' => 'owing', 'id' => $section['notPaidAnchor']],
+        ['title' => 'Not paid', 'rows' => $section['notPaid'], 'kind' => 'not_paid', 'id' => $section['notPaidAnchor']],
+        ['title' => 'Not renewed', 'rows' => $section['notRenewed'], 'kind' => 'not_renewed', 'id' => $section['notRenewedAnchor']],
         ['title' => 'Next ' . $section['renewalDays'] . ' days', 'rows' => $section['next'], 'kind' => 'next', 'id' => $section['nextAnchor']],
     ])
 
-    {{-- Not renewed & Not paid per space (spaces in their order); a chip shows only that space's rows --}}
-    @if ($section['notPaid']->isNotEmpty())
-        @php($bySpace = $section['notPaid']->groupBy('space_id')->sortBy(fn ($rows) => [(int) $rows->first()->space?->sort_order, (string) $rows->first()->space?->name]))
+    {{-- Not renewed + Not paid per space (spaces in their order); a chip shows only that space's rows --}}
+    @php($dueRows = $section['notRenewed']->concat($section['notPaid']))
+    @if ($dueRows->isNotEmpty())
+        @php($bySpace = $dueRows->groupBy('space_id')->sortBy(fn ($rows) => [(int) $rows->first()->space?->sort_order, (string) $rows->first()->space?->name]))
         <div class="today-summary today-summary--section">
-            <span class="today-summary__label">Not paid by space:</span>
+            <span class="today-summary__label">Not renewed / not paid by space:</span>
             @foreach ($bySpace as $spaceId => $rows)
                 <button type="button" class="today-summary__item" data-space-filter="{{ $spaceId }}" title="Show only {{ $rows->first()->space?->name }} (click again for all)"><span>{{ $rows->first()->space?->name ?? '-' }}</span> <b class="text-danger">{{ $rows->count() }}</b></button>
             @endforeach
@@ -47,7 +49,8 @@
                     <tbody @isset($group['id']) id="{{ $group['id'] }}" @endisset>
                         <tr class="today-renewals__group"><td colspan="6">{{ $group['title'] }} ({{ $group['rows']->count() }})</td></tr>
                         {{-- each group has its own header (2026-10-29): Not renewed & Not paid shows the period in "Date" --}}
-                        <tr class="today-renewals__head"><th>Member</th><th>Unit</th><th>{{ $group['kind'] === 'owing' ? 'Date' : 'Renewal date' }}</th><th class="text-center">Price</th>@if ($group['kind'] === 'owing')<th class="text-center">Status</th>@else<th>Payment</th>@endif<th class="text-right">Action</th></tr>
+                        @php($statusCol = in_array($group['kind'], ['not_renewed', 'not_paid'], true))
+                        <tr class="today-renewals__head"><th>Member</th><th>Unit</th><th>{{ $group['kind'] === 'not_paid' ? 'Date' : ($group['kind'] === 'not_renewed' ? 'Next period' : 'Renewal date') }}</th><th class="text-center">{{ $group['kind'] === 'not_renewed' ? 'Renewal price' : 'Price' }}</th>@if ($statusCol)<th class="text-center">Status</th>@else<th>Payment</th>@endif<th class="text-right">Action</th></tr>
                         @foreach ($group['rows'] as $reservation)
                             @include('reservationmodule::Schedule.partials.renewal-row', ['kind' => $group['kind']])
                         @endforeach

@@ -10,6 +10,7 @@
         @endforeach
         @if ($firstPeriod && empty($firstPeriod['isPast']))
             <a href="#{{ $notPaidAnchor ?? $firstPeriod['anchor'] }}" class="today-summary__item"><span>Not paid</span> <b class="{{ $notPaid ? 'text-danger' : '' }}">{{ $notPaid }}</b></a>
+            <a href="#{{ $notRenewedAnchor ?? $firstPeriod['anchor'] }}" class="today-summary__item"><span>Not renewed</span> <b class="{{ $notRenewed ? 'text-danger' : '' }}">{{ $notRenewed }}</b></a>
             <a href="#{{ $nextAnchor ?? $firstPeriod['anchor'] }}" class="today-summary__item"><span>Next {{ $renewalDays }} days</span> <b>{{ $nextCount }}</b></a>
         @endif
         @if ($starts > 0)

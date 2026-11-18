@@ -4239,6 +4239,8 @@ a.dash-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1); }
 .dash-chart__link { font-size: 0.8rem; color: rgb(var(--color-primary)); white-space: nowrap; }
 .dash-chart__canvas { position: relative; height: 16rem; }
 .dash-chart__canvas--tall { height: 20rem; }
+/* Performance › Over time: the two small charts (2026-11-18) */
+.dash-chart__canvas--small { height: 11rem; }
 .dash-chart__empty { padding: 2rem 0; text-align: center; color: #94a3b8; font-size: 0.875rem; }
 @media (max-width: 1023px) {
     .dash-charts { grid-template-columns: minmax(0, 1fr); }
@@ -4346,4 +4348,19 @@ a.dash-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1); }
     .detail-list--two {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+}
+/* an (i) in a table header (Performance report, 2026-11-18): small, next to the label, the tip opens downward over the rows */
+.info-tip--th {
+    vertical-align: middle;
+    margin-left: 0.15rem;
+}
+.info-tip--th svg {
+    width: 0.8rem;
+    height: 0.8rem;
+}
+.info-tip--th::after {
+    font-weight: 400;
+    text-align: left;
+    white-space: normal;
+    width: 16rem;
 }

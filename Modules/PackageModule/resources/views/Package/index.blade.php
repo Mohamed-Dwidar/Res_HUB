@@ -19,9 +19,16 @@
         picked days = the period overlaps them, the All tab) | payment | Clear (no active / inactive since 2026-10-21).
     --}}
     <form id="packages-filters" class="filter-bar">
-        @include('layoutmodule::partials.filter-tabs', ['tabs' => \Modules\PackageModule\app\Models\Package::TABS, 'default' => 'current', 'dates' => \Modules\PackageModule\app\Models\Package::tabDates()])
+        @include('layoutmodule::partials.filter-tabs', ['tabs' => \Modules\PackageModule\app\Models\Package::TABS, 'default' => 'current', 'initial' => ($member ?? null) ? 'all' : null, 'dates' => \Modules\PackageModule\app\Models\Package::tabDates()])
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Package, member name or phone" autocomplete="off">
         @include('layoutmodule::partials.date-range-filter')
+        {{-- ?member_id= (the member view's Packages button, 2026-11-18): this member only, the All tab; Clear / "All Members" = everyone --}}
+        @if ($member ?? null)
+            <select name="member_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Member" data-initial="{{ $member->id }}">
+                <option value="">All Members</option>
+                <option value="{{ $member->id }}">{{ $member->name }}</option>
+            </select>
+        @endif
         {{-- a package is always paid on its own: no "In package" --}}
         @include('paymentmodule::Payment.partials.status-filter', ['statuses' => \Illuminate\Support\Arr::except(\Modules\PackageModule\app\Models\Package::PAYMENT_STATUSES, 'elsewhere')])
         @include('layoutmodule::partials.datatable-clear')

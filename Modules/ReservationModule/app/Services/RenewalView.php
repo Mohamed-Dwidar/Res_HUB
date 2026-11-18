@@ -16,6 +16,10 @@ use Modules\ReservationModule\app\Models\Reservation;
  * - owing (Not renewed & Not paid): this period — "due since" its start (owing) or its renewal date (paid, ended, no renewal), its
  *   amount, Current / Ended period (+ dates) and its badge; Pay while it owes, Renew when it is paid; Left when it ended with no
  *   renewal; "Older period still owes X" ($reservation->older_due, ScheduleService::periodGroups());
+ * - not_renewed (Schedule "Not renewed", 2026-11-18): the NEXT period ($reservation->next_period = ReservationService::renewalOf():
+ *   its dates + price with any increase), "due since (N days)" from the renewal date, "Previous: <dates> · <amount>"; Renew + Left;
+ * - not_paid (Schedule "Not paid"): this period — "due since" its start, Renewed (a renewal) + payment badge, Due, Pay; "Older
+ *   period still owes X";
  * - renewed (the list's Renewed): "✓ Renewed & paid"; left: "Left" + Undo.
  * $date = the selected day (the Schedule date / the list's last day, the business date at most); $isToday: "today" / "tomorrow".
  */
@@ -43,7 +47,7 @@ class RenewalView
         $view = [
             'open' => $reservation, 'datePrefix' => null, 'date' => $renewsOn, 'dateTo' => null, 'when' => self::when($renewsOn, $date, $isToday), 'whenClass' => 'text-slate-500',
             'price' => $reservation->dueAmount(), 'label' => null, 'labelDates' => null, 'badge' => null, 'badges' => [], 'check' => null,
-            'note' => null, 'due' => null, 'hints' => [], 'actions' => [],
+            'note' => null, 'due' => null, 'hints' => [], 'actions' => [], 'previous' => null,
             // the next renewal's price while it is not renewed yet (the renewal increase, 2026-11-12)
             'nextPrice' => !$renewal && in_array($kind, ['new', 'today', 'next', 'upcoming', 'owing'], true) ? $reservation->nextRenewalText() : null,
         ];
@@ -112,6 +116,42 @@ class RenewalView
                 if ($ended && !$renewal) {
                     $view['actions'][] = ['left', $reservation, 'btn-secondary'];
                 }
+                if (($reservation->older_due ?? 0) > 0) {
+                    $view['hints'][] = ['Older period still owes ' . number_format($reservation->older_due, 2), null, null];
+                }
+                break;
+
+            case 'not_renewed':
+                $next = $reservation->next_period ?? null;
+                $days = $renewsOn ? (int) $renewsOn->copy()->startOfDay()->diffInDays($date, false) : 0;
+                $view['date'] = $next?->start_at ?? $renewsOn;
+                $view['dateTo'] = $next?->end_at;
+                $view['price'] = $next ? (float) $next->net_amount : $reservation->dueAmount();
+                $view['nextPrice'] = null;
+                $view['previous'] = 'Previous: ' . $dates($reservation) . ' · ' . number_format($reservation->dueAmount(), 2);
+                $view['when'] = 'due since (' . ($days > 0 ? $days . ' ' . ($days === 1 ? 'day' : 'days') : 'today') . ')';
+                $view['whenClass'] = 'text-danger';
+                $view['badges'][] = ['Not Renewed', 'badge-status-pending'];
+                if ($reservation->canRenew()) {
+                    $view['actions'][] = ['renew', $reservation, 'btn-primary'];
+                }
+                $view['actions'][] = ['left', $reservation, 'btn-secondary'];
+                break;
+
+            case 'not_paid':
+                $since = $reservation->start_at->copy()->startOfDay();
+                $days = (int) $since->diffInDays($date, false);
+                $view['date'] = $reservation->start_at;
+                $view['dateTo'] = $reservation->realEnd();
+                $view['nextPrice'] = null;
+                $view['when'] = 'due since (' . ($days > 0 ? $days . ' ' . ($days === 1 ? 'day' : 'days') : 'today') . ')';
+                $view['whenClass'] = 'text-danger';
+                if ($reservation->renewal_of) {
+                    $view['badges'][] = ['Renewed', 'badge-status-primary'];
+                }
+                $view['badges'][] = self::BADGES[$state($reservation)];
+                $view['due'] = $due($reservation);
+                $view['actions'][] = ['pay', $reservation, 'btn-pay'];
                 if (($reservation->older_due ?? 0) > 0) {
                     $view['hints'][] = ['Older period still owes ' . number_format($reservation->older_due, 2), null, null];
                 }

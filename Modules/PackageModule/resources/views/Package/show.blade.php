@@ -5,15 +5,30 @@
     <div class="text-lg font-medium">{{ $package->name }}</div>
 @endsection
 
-@section('modal-size', 'lg')
+@section('modal-size', 'xl')
 
+{{-- every button on top (2026-11-18, user), in this order: Invoice PDF (icon) | PDF (the statement) | Cash In | Refund (only with a
+     credit) | Extra (primary); Cash In = .btn-pay (green, user) | Edit | Delete; the Extras / Cash In blocks below have no buttons of their own here --}}
 @section('actions')
     {{-- the combined invoice PDF (package + extras, 2026-11-08) --}}
-    @include('paymentmodule::Payment.partials.invoice-button', ['payable' => $package, 'kind' => 'package'])
-    <a href="{{ route($area . '.packages.edit', $package->id) }}" data-modal class="btn btn-secondary"><i
-            data-lucide="pencil"></i> Edit</a>
+    @include('paymentmodule::Payment.partials.invoice-button', ['payable' => $package, 'kind' => 'package', 'label' => 'Inv'])
     {{-- the customer package statement (PDF, new tab) --}}
-    <a href="{{ route($area . '.packages.statement', $package->id) }}" target="_blank" class="btn btn-secondary"><i data-lucide="file-down"></i> Export PDF</a>
+    <a href="{{ route($area . '.packages.statement', $package->id) }}" target="_blank" class="btn btn-secondary"><i data-lucide="file-down"></i> PDF</a>
+    @can('payments.create')
+        <a href="{{ route($area . '.payments.create', ['payable' => 'package', 'payable_id' => $package->id]) }}" data-modal class="btn btn-pay"><i data-lucide="plus"></i> Cash In</a>
+    @endcan
+    {{-- paid beyond the due: give the credit back (PaymentService::refundCredit()) --}}
+    @if ($package->remaining < 0)
+        @can('payments.refund')
+            <a href="{{ route($area . '.payments.credit-refund', ['package', $package->id]) }}" data-modal class="btn btn-secondary"><i data-lucide="undo-2"></i> Refund</a>
+        @endcan
+    @endif
+    @if (!app(\Modules\PaymentModule\app\Services\ExtraService::class)->extrableError($package))
+        @can('extras.create')
+            <a href="{{ route($area . '.extras.create', ['package_id' => $package->id]) }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Extra</a>
+        @endcan
+    @endif
+    <a href="{{ route($area . '.packages.edit', $package->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     @include('packagemodule::Package.partials.delete-form')
 @endsection
 
@@ -58,9 +73,9 @@
     </div>
 
     {{-- sales / adjustments added to what it owes, then its payments --}}
-    @include('paymentmodule::Extra.partials.package-extras', ['package' => $package])
+    @include('paymentmodule::Extra.partials.package-extras', ['package' => $package, 'buttons' => false])
     {{-- its Due / Paid / Remaining are in Package Data above --}}
-    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $package, 'kind' => 'package', 'summary' => false])
+    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $package, 'kind' => 'package', 'summary' => false, 'buttons' => false])
 
     <div class="form-section mt-8">Reservations ({{ $package->reservations->count() }})</div>
     @if ($package->reservations->isNotEmpty())

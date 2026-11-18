@@ -3,12 +3,13 @@
     Invoice (AR), new tab. Not shown for a reservation inside a package (the package has it) or a cancelled one
     (InvoicePdfService::error()), nor without the receipts' right (payments.receipt).
     @include('paymentmodule::Payment.partials.invoice-button', ['payable' => $reservation, 'kind' => 'reservation'])
+    $label (optional): a text after the icon (the package view: "Inv", 2026-11-18); default icon only
 --}}
 @php($invoiceArea = request()->routeIs('employee.*') ? 'employee' : 'account')
 @if (Gate::allows('payments.receipt') && !app(\Modules\PaymentModule\app\Services\InvoicePdfService::class)->error($payable))
     <div data-tw-merge="" data-tw-placement="bottom-end" class="dropdown relative">
         <button type="button" data-tw-toggle="dropdown" aria-expanded="false" class="btn btn-secondary" title="Invoice PDF">
-            <i data-lucide="file-text"></i>
+            <i data-lucide="file-text"></i>@if (!empty($label)) {{ $label }}@endif
         </button>
         <div class="dropdown-menu js-menu absolute z-[9999]">
             <div data-tw-merge="" class="dropdown-content rounded-md border-transparent bg-white p-2 shadow-[0px_3px_10px_#00000017] dark:border-transparent dark:bg-darkmode-600 w-40">

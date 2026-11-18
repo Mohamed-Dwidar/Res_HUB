@@ -87,6 +87,8 @@ class ScheduleService
             'sections' => $sections,
             // the summary row: hourly / full day counts, Not paid (Not renewed & Not paid) / Next N days (+ the first section that
             // has some), the remaining of the day
+            'notRenewed' => $sections->where('mode', 'period')->sum(fn ($section) => $section['notRenewed']->count()),
+            'notRenewedAnchor' => $sections->where('mode', 'period')->first(fn ($section) => $section['notRenewed']->isNotEmpty())['notRenewedAnchor'] ?? null,
             'notPaid' => $sections->where('mode', 'period')->sum(fn ($section) => $section['notPaid']->count()),
             'notPaidAnchor' => $sections->where('mode', 'period')->first(fn ($section) => $section['notPaid']->isNotEmpty())['notPaidAnchor'] ?? null,
             'nextCount' => $sections->where('mode', 'period')->sum(fn ($section) => $section['next']->count()),
@@ -431,18 +433,29 @@ class ScheduleService
         $renewsToday = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on === $day)
             ->sortBy(fn ($reservation) => [(int) $reservation->member_id, $reservation->id])->values();
 
-        // Not renewed & Not paid: started by D and owing, or ended before D with no renewal
-        $notPaid = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->start_at?->lt($dayEnd)
-                && ($owes($reservation) || ($reservation->renews_on < $day && !$reservation->renewedBy)))
-            ->each(fn ($reservation) => $reservation->due_since = $owes($reservation) ? $reservation->start_at->toDateString() : $reservation->renews_on)
+        // two lists (user 2026-11-18; were "Not renewed & Not paid"):
+        // Not renewed = ended before D, no renewal, not left — the row shows the NEXT period (ReservationService::renewalOf():
+        // renewal dates + price with any increase), fewest days late first;
+        $renewals = app(ReservationService::class);
+        $notRenewed = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on < $day && !$reservation->renewedBy)
+            ->each(function ($reservation) use ($renewals) {
+                $reservation->due_since = $reservation->renews_on;
+                $reservation->next_period = $renewals->renewalOf($reservation);
+            })
+            ->sortBy(fn ($reservation) => [-strtotime($reservation->renews_on), $reservation->id])->values();
+
+        // Not paid = started by D and still owing (renewed-but-unpaid and partly paid included); a member's rows together, oldest
+        // first, "Member total due" under 2+ rows
+        $notPaid = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->start_at?->lt($dayEnd) && $owes($reservation))
+            ->each(fn ($reservation) => $reservation->due_since = $reservation->start_at->toDateString())
             ->groupBy('member_id')
             ->sortByDesc(fn ($rows) => $rows->max('due_since'))
-            ->flatMap(function ($rows) use ($owes) {
+            ->flatMap(function ($rows) {
                 $rows = $rows->sortBy(fn ($reservation) => [$reservation->start_at->timestamp, $reservation->id])->values();
                 $older = 0.0;
                 foreach ($rows as $reservation) {
                     $reservation->older_due = round($older, 2);
-                    $older += $owes($reservation) ? (float) $reservation->remaining : 0;
+                    $older += (float) $reservation->remaining;
                 }
                 if ($rows->count() > 1) {
                     $rows->last()->member_total = round($older, 2);
@@ -457,6 +470,7 @@ class ScheduleService
 
         // a past day: today's payment state would mislead (user 2026-10-29)
         if (!empty($context['isPast'])) {
+            $notRenewed = collect();
             $notPaid = collect();
             $next = collect();
         }
@@ -464,9 +478,11 @@ class ScheduleService
         return array_merge($section, [
             'startsToday' => $startsToday,
             'renewsToday' => $renewsToday,
+            'notRenewed' => $notRenewed,
             'notPaid' => $notPaid,
             'next' => $next,
             'isPast' => !empty($context['isPast']),
+            'notRenewedAnchor' => 'today-notrenewed-' . $section['type']->id,
             'notPaidAnchor' => 'today-notpaid-' . $section['type']->id,
             'nextAnchor' => 'today-next-' . $section['type']->id,
         ]);

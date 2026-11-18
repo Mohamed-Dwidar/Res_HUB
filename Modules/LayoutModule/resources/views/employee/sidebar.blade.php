@@ -128,11 +128,11 @@
             'active' => request()->routeIs('employee.reports.subscriptions*'),
         ],
         [
-            'title' => 'Occupancy',
+            'title' => 'Performance',
             'can' => 'reports.occupancy',
             'icon' => 'gauge',
-            'url' => route('employee.reports.occupancy'),
-            'active' => request()->routeIs('employee.reports.occupancy*'),
+            'url' => route('employee.reports.performance'),
+            'active' => request()->routeIs('employee.reports.performance*'),
         ],
         [
             'title' => 'Profit & Loss',

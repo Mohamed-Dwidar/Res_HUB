@@ -1,5 +1,6 @@
-{{-- the Occupancy report under the toolbar (OccupancyReport::data()): totals box per mode, the capacity check, then a table by space with its
-     units and subtotals --}}
+{{-- the Performance report under the toolbar (OccupancyReport::data()): totals box (revenue + per mode), the capacity check, then a table by
+     space with its units and subtotals; occupancy columns then the money columns (2026-11-18); $cmpRange = the comparison (Revenue
+     cells: compared amount + change) --}}
 @php
     $modes = \Modules\ReportModule\app\Services\OccupancyReport::MODES;
     $unitOf = fn ($mode) => ['hourly' => 'h', 'full_day' => 'days', 'period' => 'seats'][$mode];
@@ -9,15 +10,20 @@
     <div class="notice notice--warning">{{ $error }}</div>
 @else
     <div class="money-box">
+        {{-- revenue first: the value of the bookings, not money received --}}
+        <div class="money-box__item money-box__item--main" title="Value of bookings in the period — not money received (see Income)">
+            <span>Revenue @if ($cmpRange && isset($cmp_grand)) @include('reportmodule::Report.partials.change', ['change' => \Modules\ReportModule\app\Services\ReportPeriod::change($grand['revenue'], $cmp_grand['revenue'] ?? 0), 'short' => true])@endif</span>
+            <b>{{ number_format($grand['revenue'], 2) }}</b>
+        </div>
         @forelse ($totals as $mode => $total)
-            <div @class(['money-box__item', 'money-box__item--main' => $loop->first])>
+            <div class="money-box__item">
                 <span>{{ $modes[$mode] }} · {{ $num($total['booked']) }} / {{ $num($total['available']) }} {{ $unitOf($mode) }}</span>
                 <b>{{ $total['percent'] === null ? '-' : $num($total['percent']) . '%' }}</b>
             </div>
         @empty
             <div class="money-box__item money-box__item--main"><span>Occupancy</span><b>-</b></div>
         @endforelse
-        <div class="money-box__item"><span>Dates · {{ $days }} {{ $days === 1 ? 'day' : 'days' }}</span><b>{{ $range }}</b></div>
+        <div class="money-box__item"><span>Dates · {{ $days }} {{ $days === 1 ? 'day' : 'days' }}@if ($cmpRange) · vs {{ $cmpRange }}@endif</span><b>{{ $range }}</b></div>
         <div class="money-box__item"><span>Business hours a day</span><b>{{ $hours }}</b></div>
     </div>
 
@@ -47,21 +53,26 @@
 
     <div class="table-wrap mt-5">
         <table class="data-table occupancy-table">
+            {{-- every header has an (i) with what the column means (2026-11-18): the reports' .info-tip (opens downward, over the rows) --}}
+            @php($th = fn ($label, $tip) => e($label) . ' <span class="info-tip info-tip--th" tabindex="0" data-tip="' . e($tip) . '" aria-label="' . e($tip) . '"><i data-lucide="info"></i></span>')
             <thead>
                 <tr>
                     <th>Space › Unit</th>
                     <th>Mode</th>
-                    <th class="text-center">Capacity</th>
-                    <th class="text-center">Reservations</th>
-                    <th class="text-right" title="Seats in use: hourly = on average per business hour, full day = on average per day, period = subscriptions taking a seat">Avg occupied</th>
-                    <th class="text-right">Avg free</th>
-                    <th class="occupancy-table__percent">%</th>
-                    <th class="text-center" title="Capacity − reservations active now (hourly) / today (days)">Free today</th>
+                    <th class="text-center">{!! $th('Capacity', 'Seats the unit takes at the same time (its concurrent usage, at least 1).') !!}</th>
+                    <th class="text-center">{!! $th('Reservations', 'Counted reservations in the period (cancelled ones not counted); subscriptions: the periods overlapping it.') !!}</th>
+                    <th class="text-right">{!! $th('Avg occupied', 'Seats in use: hourly = on average per business hour, full day = on average per day, subscriptions = seats taken.') !!}</th>
+                    <th class="text-right">{!! $th('Avg free', 'Capacity − Avg occupied.') !!}</th>
+                    <th class="occupancy-table__percent">{!! $th('%', 'A unit: booked ÷ available (hours, days or seats). A space / overall %: the average of its units\' %, only units with reservations in the period (not weighted by capacity).') !!}</th>
+                    <th class="text-center">{!! $th('Free today', 'Capacity − what is taken right now (hourly) / today (full day, subscriptions).') !!}</th>
+                    <th class="text-right">{!! $th('Standalone', 'Reservations paid on their own: net after discount, before tax (+ their extras; subscriptions prorated by days).') !!}</th>
+                    <th class="text-right">{!! $th('From packages', 'Package reservations: their share of the package net, after the package discount, before tax.') !!}</th>
+                    <th class="text-right">{!! $th('Revenue', 'Value of bookings in the period — not money received (see Income).') !!}</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse ($spaces as $space)
-                    <tr class="occupancy-table__space"><td colspan="8">{{ $space['space'] }}</td></tr>
+                    <tr class="occupancy-table__space"><td colspan="11">{{ $space['space'] }}</td></tr>
                     @foreach ($space['units'] as $row)
                         @include('reportmodule::Report.partials.occupancy-row', ['label' => $row['unit'], 'row' => $row, 'note' => null])
                     @endforeach
@@ -69,7 +80,7 @@
                         @include('reportmodule::Report.partials.occupancy-row', ['label' => $space['space'] . ' total', 'row' => $total, 'class' => 'report-total', 'note' => null])
                     @endforeach
                 @empty
-                    <tr><td colspan="8" class="empty-state">No active units here.</td></tr>
+                    <tr><td colspan="11" class="empty-state">No active units here.</td></tr>
                 @endforelse
             </tbody>
             @if ($totals)

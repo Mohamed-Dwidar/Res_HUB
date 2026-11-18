@@ -610,7 +610,8 @@ class ShiftClosingService
      */
     public function logOpenChange(string $action, Payment|Expense $record, Model $by, ?string $reason, array $changes, ?int $closingId = null): void
     {
-        if (!in_array($action, ['payment_edit', 'payment_delete', 'payment_move', 'expense_edit', 'expense_delete'], true)) {
+        // payment_refund (2026-11-18): a reservation's / package's credit refunded (PaymentService::refundCredit())
+        if (!in_array($action, ['payment_edit', 'payment_delete', 'payment_move', 'payment_refund', 'expense_edit', 'expense_delete'], true)) {
             abort(500, 'Unknown payment change.');
         }
         ShiftEvent::create([

@@ -156,7 +156,9 @@ trait MemberActions
             ->first();
         $confirmed = (int) $counts->confirmed;
         $cancelled = (int) $counts->total - $confirmed;
-        return view('membermodule::Account.show', compact('member', 'confirmed', 'cancelled'));
+        // the Packages button only when the member has packages (2026-11-18)
+        $packages = \Modules\PackageModule\app\Models\Package::where('account_id', $this->accountId())->where('member_id', $member->id)->count();
+        return view('membermodule::Account.show', compact('member', 'confirmed', 'cancelled', 'packages'));
     }
 
     public function edit($id)

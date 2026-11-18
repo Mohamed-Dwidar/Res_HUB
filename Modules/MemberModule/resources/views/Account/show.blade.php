@@ -13,6 +13,12 @@
     {{-- the member's lists (as in the Members list row menu), in a new tab; Payments = every cash in of the member (employees too) --}}
     <a href="{{ route($area . '.reservations.index', ['member_id' => $member->id]) }}" target="_blank" class="btn btn-secondary"><i data-lucide="calendar-check"></i> Reservations</a>
     <a href="{{ route($area . '.payments.index', ['type' => 'in', 'member_id' => $member->id]) }}" target="_blank" class="btn btn-secondary"><i data-lucide="wallet"></i> Payments</a>
+    {{-- only when the member has packages (2026-11-18): the packages list of this member --}}
+    @if ($packages > 0)
+        @can('packages.view')
+            <a href="{{ route($area . '.packages.index', ['member_id' => $member->id]) }}" target="_blank" class="btn btn-secondary"><i data-lucide="package"></i> Packages ({{ $packages }})</a>
+        @endcan
+    @endif
     <a href="{{ route($area . '.members.edit', $member->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     {{-- delete: the account only (a member is deleted for good) --}}
     @if ($area === 'account')

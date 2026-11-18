@@ -3,7 +3,8 @@
     range) + Compare with (previous / same period last year / a period I pick / none). Shared by the Financial Dashboard, Income,
     Expenses and P&L. Value '' = the page's default (not counted by Clear); a link from the dashboard opens it on the same period
     (data-initial: datatables.js / custom.js periodPicker() set it, Clear goes back to the defaults).
-    $typeDefault ('month'), $compareDefault ('none'), $compareKeys (the Compare options in this order; default all), $presets (the Custom date field's quick ranges), $initial (its starting range)
+    $typeDefault ('month'), $compareDefault ('none'), $compareKeys (the Compare options in this order; default all), $presets (the Custom date field's quick ranges), $initial (its starting range),
+    $compareShowIf (optional: the Compare fields only while this show-if rule holds — Performance › Over time compares with last year itself)
 --}}
 @php
     use Modules\ReportModule\app\Services\ReportPeriod;
@@ -34,6 +35,7 @@
     <div data-show-if="period={{ $value('custom', $typeDefault) }}">
         @include('layoutmodule::partials.date-range-filter', ['initial' => $custom, 'presets' => $presets ?? ReportDates::presets()])
     </div>
+    @if (!empty($compareShowIf))<div class="period-picker" data-show-if="{{ $compareShowIf }}">@endif
     <select name="compare" class="{{ config('layoutmodule.form.select') }}" aria-label="Compare with" {{ $initialOf('compare') }}>
         @foreach (array_intersect_key(array_replace(array_flip($compareKeys ?? array_keys(ReportPeriod::COMPARES)), ReportPeriod::COMPARES), ReportPeriod::COMPARES) as $key => $label)
             <option value="{{ $value($key, $compareDefault) }}" @selected($key === $compareDefault)>{{ $key === 'none' ? 'No comparison' : 'Compare: ' . $label }}</option>
@@ -44,4 +46,5 @@
         <span class="text-slate-500">→</span>
         <input type="date" name="cmp_to" class="{{ config('layoutmodule.form.input') }}" aria-label="Compare to" {{ $initialOf('cmp_to') }}>
     </div>
+    @if (!empty($compareShowIf))</div>@endif
 </div>

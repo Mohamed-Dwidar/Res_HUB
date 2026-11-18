@@ -27,7 +27,8 @@
         <span class="text-xs font-normal text-slate-500">· sales, {{ $taxed ? 'taxed with the ' . ($kind === 'package' ? 'reservations' : 'reservation') . ' (invoice requested)' : 'no invoice: no taxes' }}</span>
     </span>
     {{-- the account and employees (employees: extras only, no edit / delete) --}}
-    @if (!$addError && Gate::allows('extras.create'))
+    {{-- $buttons false (the package view, 2026-11-18): "Extra" is in the view header --}}
+    @if (($buttons ?? true) && !$addError && Gate::allows('extras.create'))
         <a href="{{ route($area . '.extras.create', [$kind . '_id' => $extrable->id]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Add Extra</a>
     @endif
 </div>

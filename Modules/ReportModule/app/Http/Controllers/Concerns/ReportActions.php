@@ -20,6 +20,7 @@ use Modules\ReportModule\app\Services\ExpenseReport;
 use Modules\ReportModule\app\Services\SubscriptionReport;
 use Modules\ReportModule\app\Services\OccupancyReport;
 use Modules\ReportModule\app\Exports\OccupancyExport;
+use Modules\ReportModule\app\Exports\OccupancyTimeExport;
 use Modules\ReportModule\app\Exports\PnlExport;
 use Modules\ReportModule\app\Services\PnlReport;
 use Modules\ReportModule\app\Services\MemberReport;
@@ -126,7 +127,8 @@ trait ReportActions
             'pnl' => $link('pnl', 'pnl', $period),
             'outstanding' => $link('outstanding', 'outstanding'),
             'members' => $link('members', 'members', ['view' => 'top'] + $data['dates']),
-            'occupancy' => $link('occupancy', 'occupancy', $data['dates']),
+            // the Performance report (was Occupancy) on the same period
+            'occupancy' => $link('occupancy', 'performance', $period),
         ];
 
         return response()->json(['html' => view('reportmodule::Report.partials.dashboard-body', $data + ['links' => $links])->render()]);
@@ -522,7 +524,7 @@ trait ReportActions
             'subscriptions-' . $filters['view'] . '-' . now()->format('Y-m-d') . '.xlsx');
     }
 
-    // ---- 6. Occupancy ----
+    // ---- 6. Performance (was Occupancy, 2026-11-18: + revenue per unit, the period picker with compare) ----
 
     public function occupancy()
     {
@@ -530,30 +532,89 @@ trait ReportActions
         return view('reportmodule::Report.occupancy', [
             'area' => $this->area(),
             'initial' => $this->linkedDates(),
-            // no "All": occupancy needs dates (× = this month)
-            // no All / Until today: occupancy needs dates, at most OccupancyReport::MAX_DAYS
+            // the Custom range: no All / Until today (dates needed, at most OccupancyReport::MAX_DAYS)
             'presets' => array_values(array_filter(ReportDates::presets(), fn ($preset) => $preset['from'] !== null && ($preset['key'] ?? '') !== 'until_today')),
             'types' => $places['types'],
             'spaces' => $places['spaces'],
+            'units' => $places['units'],
         ]);
+    }
+
+    // Over time (2026-11-18): the picked range (the period picker; Custom without dates = this year to date) in rows of
+    // month / quarter / half-year / year, each vs the same days last year: [data, filters, range text]
+    private function performanceOverTime(Request $request, OccupancyReport $report): array
+    {
+        $period = ReportPeriod::resolve($request->all(), 'month', 'none');
+        [$today] = Reservation::businessToday();
+        $from = $period['from'] ?? $today->copy()->startOfYear();
+        $to = $period['to'] ?? $today->copy()->startOfDay();
+        $size = array_key_exists($request->input('rows'), OccupancyReport::ROWS) ? $request->input('rows') : 'month';
+        $filters = $report->filters(['date_from' => $from->toDateString(), 'date_to' => $to->toDateString()] + $request->all());
+        $data = $report->overTime($this->accountId(), $filters, $from->copy()->startOfDay(), $to->copy()->startOfDay(), $size);
+
+        return [$data + ['size' => $size, 'selection' => $this->performanceSelection($filters)], $filters, $report->rangeText($filters)];
+    }
+
+    // what Over time shows: the unit, else the space, else every unit (of the type)
+    private function performanceSelection(array $filters): string
+    {
+        $name = fn ($table, $id) => DB::table($table)->where('account_id', $this->accountId())->where('id', $id)
+            ->value(DB::raw("COALESCE(NULLIF(name_en, ''), name_ar)"));
+        if ($filters['unit_id']) {
+            $unit = DB::table('units')->where('account_id', $this->accountId())->where('id', $filters['unit_id'])->first(['space_id']);
+            return trim(($unit ? $name('spaces', $unit->space_id) . ' › ' : '') . $name('units', $filters['unit_id']));
+        }
+        if ($filters['space_id']) {
+            return (string) $name('spaces', $filters['space_id']);
+        }
+        return 'All units';
+    }
+
+    // the report of the picked period (ReportPeriod: default this month, no comparison) [+ the comparison's revenue / %]:
+    // [data, filters, compare range text | null]
+    private function performanceData(Request $request, OccupancyReport $report): array
+    {
+        $period = ReportPeriod::resolve($request->all(), 'month', 'none');
+        $filters = $report->filters(ReportPeriod::apply($request->all(), $period));
+        $data = $report->data($this->accountId(), $filters);
+        $cmpRange = null;
+        if (!$data['error'] && ($cmpInput = ReportPeriod::compareInput($request->all(), $period))) {
+            $cmpFilters = $report->filters($cmpInput);
+            $cmp = $report->data($this->accountId(), $cmpFilters);
+            if (!$cmp['error']) {
+                $data = $report->compare($data, $cmp);
+                $cmpRange = $report->rangeText($cmpFilters);
+            }
+        }
+
+        return [$data, $filters, $cmpRange];
     }
 
     // the report as html (json html: the page puts it under the toolbar; custom.js "Live report")
     public function occupancyData(Request $request, OccupancyReport $report)
     {
-        $filters = $report->filters($request->all());
-        return response()->json(['html' => view('reportmodule::Report.partials.occupancy-body', $report->data($this->accountId(), $filters)
-            + ['range' => $report->rangeText($filters)])->render()]);
+        if ($request->input('view') === 'time') {
+            [$data, , $range] = $this->performanceOverTime($request, $report);
+            return response()->json(['html' => view('reportmodule::Report.partials.occupancy-time', $data + ['range' => $range])->render()]);
+        }
+        [$data, $filters, $cmpRange] = $this->performanceData($request, $report);
+        return response()->json(['html' => view('reportmodule::Report.partials.occupancy-body', $data
+            + ['range' => $report->rangeText($filters), 'cmpRange' => $cmpRange])->render()]);
     }
 
     public function occupancyExcel(Request $request, OccupancyReport $report)
     {
-        $filters = $report->filters($request->all());
-        $data = $report->data($this->accountId(), $filters);
+        if ($request->input('view') === 'time') {
+            [$data, $filters, $range] = $this->performanceOverTime($request, $report);
+            abort_if($data['error'], 422, $data['error']);
+            $this->logExport('Report: Performance over time', $filters + ['rows' => $data['size']], count($data['rows']));
+            return Excel::download(new OccupancyTimeExport($data, $range), 'performance-over-time-' . now()->format('Y-m-d') . '.xlsx');
+        }
+        [$data, $filters, $cmpRange] = $this->performanceData($request, $report);
         abort_if($data['error'], 422, $data['error']);
-        $this->logExport('Report: Occupancy', $filters, collect($data['spaces'])->sum(fn ($space) => count($space['units'])));
+        $this->logExport('Report: Performance', $filters + ['compare' => $cmpRange], collect($data['spaces'])->sum(fn ($space) => count($space['units'])));
 
-        return Excel::download(new OccupancyExport($data, $report->rangeText($filters)), 'occupancy-' . now()->format('Y-m-d') . '.xlsx');
+        return Excel::download(new OccupancyExport($data, $report->rangeText($filters), $cmpRange), 'performance-' . now()->format('Y-m-d') . '.xlsx');
     }
 
     // ---- 7. Profit & Loss ----

@@ -15,27 +15,37 @@
     </span>
 @endsection
 
-@section('modal-size', 'lg')
+@section('modal-size', 'xl')
 
+{{-- buttons on top like the package view (2026-11-18, user): WhatsApp (icon) | status | Inv (invoice menu) | Pay (green; opens the
+     Add Cash In fields of the Cash In block, while it owes) | Refund (only with a credit) | Extra | Renew | Restore | Edit | Delete;
+     the Extras / Cash In blocks below have no buttons of their own here --}}
 @section('actions')
     {{-- WhatsApp (MessagingModule): the suggested type by the reservation's state --}}
     @include('messagingmodule::Message.partials.button')
-    {{-- the combined invoice PDF (booking + extras; not inside a package: the package has it) --}}
-    @include('paymentmodule::Payment.partials.invoice-button', ['payable' => $reservation, 'kind' => 'reservation'])
     {{-- the status: a drop menu like its badge, changed by ajax --}}
     @include('reservationmodule::Reservation.partials.status-menu')
-    @unless ($reservation->isCounted() || Gate::denies('reservations.status'))
-        <a href="{{ route($area . '.reservations.restore', [$reservation->id, 'back_to_view' => 1]) }}" data-modal class="btn btn-secondary"><i data-lucide="rotate-ccw"></i> Restore</a>
-    @endunless
+    {{-- the combined invoice PDF (booking + extras; not inside a package: the package has it) --}}
+    @include('paymentmodule::Payment.partials.invoice-button', ['payable' => $reservation, 'kind' => 'reservation', 'label' => 'Inv'])
+    {{-- still owed, paid on its own (not inside a package / not counted): never more than the remaining --}}
+    @if ($reservation->canTakePayments() && $reservation->remaining > 0 && Gate::allows('payments.create'))
+        <button type="button" data-reveal="#cash-in-form" class="btn btn-pay"><i data-lucide="wallet"></i> Pay</button>
+    @endif
+    {{-- paid beyond the due: give the credit back (PaymentService::refundCredit()) --}}
+    @if ($reservation->canTakePayments() && $reservation->remaining < 0 && Gate::allows('payments.refund'))
+        <a href="{{ route($area . '.payments.credit-refund', ['reservation', $reservation->id]) }}" data-modal class="btn btn-secondary"><i data-lucide="undo-2"></i> Refund</a>
+    @endif
+    @if (!app(\Modules\PaymentModule\app\Services\ExtraService::class)->extrableError($reservation) && Gate::allows('extras.create'))
+        <a href="{{ route($area . '.extras.create', ['reservation_id' => $reservation->id]) }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Extra</a>
+    @endif
     {{-- a counted subscription period not renewed yet: the next period, pre-filled (renewal_of = this one); an unpaid one too
          (2026-10-29: the Renew form shows what the member will owe and asks a reason) --}}
     @if ($reservation->canRenew() && Gate::allows('reservations.renew'))
         <a href="{{ route($area . '.reservations.create', ['renew' => $reservation->id]) }}" data-modal class="btn btn-secondary"><i data-lucide="refresh-cw"></i> Renew</a>
     @endif
-    {{-- Pay: opens the Add Cash In fields of this view (Cash In block; still owed, paid on its own: not inside a package / not counted) --}}
-    @if ($reservation->canTakePayments() && $reservation->remaining > 0 && Gate::allows('payments.create'))
-        <button type="button" data-reveal="#cash-in-form" class="btn btn-pay"><i data-lucide="wallet"></i> Pay</button>
-    @endif
+    @unless ($reservation->isCounted() || Gate::denies('reservations.status'))
+        <a href="{{ route($area . '.reservations.restore', [$reservation->id, 'back_to_view' => 1]) }}" data-modal class="btn btn-secondary"><i data-lucide="rotate-ccw"></i> Restore</a>
+    @endunless
     {{-- roles (docs/roles-plan.md, R0): the buttons follow the employee's permissions (the owner: all) --}}
     @can('reservations.edit')
         <a href="{{ route($area . '.reservations.edit', $reservation->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
@@ -119,11 +129,11 @@
 
     {{-- extras charged on the reservation (2026-11-08: buffet, printing …; PaymentModule); inside a package: "add it on the package" --}}
     @if ($reservation->canHaveExtras() || !$reservation->canTakePayments() || $reservation->extrasTotal() != 0)
-        @include('paymentmodule::Extra.partials.extras', ['extrable' => $reservation, 'kind' => 'reservation'])
+        @include('paymentmodule::Extra.partials.extras', ['extrable' => $reservation, 'kind' => 'reservation', 'buttons' => false])
     @endif
 
     {{-- the Cash In block without its Due / Paid / Remaining (shown above), + the Add Cash In fields (Pay / "+ Cash In") --}}
-    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $reservation, 'kind' => 'reservation', 'summary' => false, 'methods' => $methods])
+    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $reservation, 'kind' => 'reservation', 'summary' => false, 'methods' => $methods, 'buttons' => false])
 
     {{-- ContractModule (Phase 2): the contract covering this period, or Create / Renew Contract (only when its unit has a template on) --}}
     @include('contractmodule::Contract.partials.reservation-block')

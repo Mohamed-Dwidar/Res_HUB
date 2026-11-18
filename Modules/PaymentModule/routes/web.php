@@ -41,6 +41,11 @@ $paymentRoutes = function ($controller) {
     Route::get('{id}/edit', [$controller, 'edit'])->name('edit')->can('payments.edit_own_open');
     Route::put('{id}', [$controller, 'update'])->name('update')->can('payments.edit_own_open');
     // a refund (reason required) goes into the refunder's own open shift
+    // a reservation's / package's credit given back (2026-11-18): one refund linked to it, same permission
+    Route::get('credit-refund/{kind}/{payableId}', [$controller, 'creditRefundForm'])->name('credit-refund')->can('payments.refund')
+        ->whereIn('kind', ['reservation', 'package'])->whereNumber('payableId');
+    Route::post('credit-refund/{kind}/{payableId}', [$controller, 'creditRefund'])->name('credit-refund.store')->can('payments.refund')
+        ->whereIn('kind', ['reservation', 'package'])->whereNumber('payableId');
     Route::get('{id}/refund', [$controller, 'refundForm'])->name('refund')->can('payments.refund');
     Route::post('{id}/refund', [$controller, 'refund'])->name('refund.store')->can('payments.refund');
 };

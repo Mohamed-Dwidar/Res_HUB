@@ -3029,6 +3029,8 @@ document.addEventListener("DOMContentLoaded", function () {
             var dates = (values.get("date_from") || "") + "," + (values.get("date_to") || "");
             values.delete("date_from");
             values.delete("date_to");
+            // a view choice (data-filter-keep) is not a filter
+            form.querySelectorAll("[data-filter-keep]").forEach(function (el) { values.delete(el.name); });
             return values.toString() !== "" || (box && box.dataset.dateInitial && dates !== "," && dates !== box.dataset.dateInitial);
         }
         function load() {
@@ -3166,4 +3168,60 @@ function dashDraw(root) {
 }
 document.addEventListener("report:loaded", function (e) {
     if (e.target.matches("[data-dashboard-body]")) dashDraw(e.target);
+    if (e.target.matches("[data-occupancy-body]")) perfDraw(e.target);
 });
+
+// ------------------------------------------------------------------
+// Live report view buttons (Performance: By unit | Over time, 2026-11-18): [data-live-view="x"] sets the form's hidden "view"
+// (data-filter-keep: Clear keeps it), its show-if fields follow, then the report reloads
+// ------------------------------------------------------------------
+document.addEventListener("click", function (e) {
+    var button = e.target.closest && e.target.closest("[data-live-view]");
+    if (!button) return;
+    var form = button.closest("form");
+    button.parentElement.querySelectorAll("[data-live-view]").forEach(function (other) { other.classList.toggle("active", other === button); });
+    form.querySelector('[name="view"]').value = button.dataset.liveView;
+    applyConditions(form);
+    form.dispatchEvent(new Event("change", { bubbles: true }));
+});
+
+// Performance › Over time: two small line charts from [data-perf-data] (Occupancy %, Revenue — one axis each, never a dual axis);
+// this year = blue, the same days last year = grey dashed
+var perfCharts = [];
+function perfDraw(root) {
+    perfCharts.forEach(function (chart) { chart.destroy(); });
+    perfCharts = [];
+    var holder = root.querySelector("[data-perf-data]");
+    if (!holder || !window.Chart) return;
+    var data = JSON.parse(holder.textContent);
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.color = "#64748b";
+    var grid = { color: "rgba(100, 116, 139, 0.12)" };
+    var chart = function (key, current, previous, format, yScale) {
+        var canvas = root.querySelector('canvas[data-perf-chart="' + key + '"]');
+        if (!canvas) return;
+        perfCharts.push(new Chart(canvas, {
+            type: "line",
+            data: {
+                labels: data.labels,
+                datasets: [
+                    { label: "This period", data: current, borderColor: DASH_COLORS[0], backgroundColor: DASH_COLORS[0], borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, tension: 0.25, spanGaps: true },
+                    { label: "Last year", data: previous, borderColor: DASH_GREY, backgroundColor: DASH_GREY, borderWidth: 2, borderDash: [4, 4], pointRadius: 4, pointHoverRadius: 6, tension: 0.25, spanGaps: true },
+                ],
+            },
+            options: {
+                maintainAspectRatio: false,
+                interaction: { mode: "index", intersect: false },
+                plugins: {
+                    legend: { position: "top", align: "end", labels: { boxWidth: 12 } },
+                    tooltip: { callbacks: { label: function (c) { return " " + c.dataset.label + ": " + (c.parsed.y === null ? "-" : format(c.parsed.y)); } } },
+                },
+                scales: { x: { grid: { display: false } }, y: Object.assign({ grid: grid, ticks: { callback: function (v) { return format(v, true); } } }, yScale) },
+            },
+        }));
+    };
+    chart("percent", data.percent, data.cmpPercent, function (v) { return v + "%"; }, { min: 0, suggestedMax: 100 });
+    chart("revenue", data.revenue, data.cmpRevenue, function (v, tick) {
+        return tick ? Number(v).toLocaleString("en-US", { notation: "compact" }) : dashMoney(v);
+    }, { beginAtZero: true });
+}

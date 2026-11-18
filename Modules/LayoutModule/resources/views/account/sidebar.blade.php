@@ -123,10 +123,10 @@
             'active' => request()->routeIs('account.reports.subscriptions*'),
         ],
         [
-            'title' => 'Occupancy',
+            'title' => 'Performance',
             'icon' => 'gauge',
-            'url' => route('account.reports.occupancy'),
-            'active' => request()->routeIs('account.reports.occupancy*'),
+            'url' => route('account.reports.performance'),
+            'active' => request()->routeIs('account.reports.performance*'),
         ],
         [
             'title' => 'Profit & Loss',

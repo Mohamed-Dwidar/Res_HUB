@@ -37,10 +37,12 @@ $reportRoutes = function ($controller) {
     Route::get('subscriptions', [$controller, 'subscriptions'])->name('subscriptions')->can('reports.subscriptions');
     Route::get('subscriptions/data', [$controller, 'subscriptionsData'])->name('subscriptions.data')->can('reports.subscriptions');
     Route::get('subscriptions/excel', [$controller, 'subscriptionsExcel'])->name('subscriptions.excel')->can('reports.subscriptions');
-    // 6. Occupancy
-    Route::get('occupancy', [$controller, 'occupancy'])->name('occupancy')->can('reports.occupancy');
-    Route::get('occupancy/data', [$controller, 'occupancyData'])->name('occupancy.data')->can('reports.occupancy');
-    Route::get('occupancy/excel', [$controller, 'occupancyExcel'])->name('occupancy.excel')->can('reports.occupancy');
+    // 6. Performance (was Occupancy, renamed 2026-11-18; the permission key stays reports.occupancy, the old URL redirects)
+    Route::get('performance', [$controller, 'occupancy'])->name('performance')->can('reports.occupancy');
+    Route::get('performance/data', [$controller, 'occupancyData'])->name('performance.data')->can('reports.occupancy');
+    Route::get('performance/excel', [$controller, 'occupancyExcel'])->name('performance.excel')->can('reports.occupancy');
+    Route::get('occupancy', fn () => redirect(str_replace('/reports/occupancy', '/reports/performance', request()->fullUrl())))
+        ->name('occupancy')->can('reports.occupancy');
     // 7. Profit & Loss
     Route::get('pnl', [$controller, 'pnl'])->name('pnl')->can('reports.pnl');
     Route::get('pnl/data', [$controller, 'pnlData'])->name('pnl.data')->can('reports.pnl');

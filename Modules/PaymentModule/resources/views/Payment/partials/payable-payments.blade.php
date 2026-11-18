@@ -14,15 +14,22 @@
     $paymentService = app(\Modules\PaymentModule\app\Services\PaymentService::class);
     // roles (docs/roles-plan.md, R0): "+ Cash In" only with payments.create
     $canAdd = $payable->canTakePayments() && ($kind === 'package' || $payable->remaining > 0) && Gate::allows('payments.create');
+    // $buttons false (the package view, 2026-11-18): "Cash In" / "Refund" are in the view header; "+ Cash In" = green .btn-pay (user)
+    $buttons ??= true;
 @endphp
 
 <div class="form-section mt-8 payments-block__head">
     {{-- "Cash In" (2026-10-14): its payments, withholding and refunds --}}
     <span>Cash In</span>
-    @if ($canAdd && isset($methods))
-        <button type="button" data-reveal="#cash-in-form" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Cash In</button>
+    {{-- paid beyond the due (2026-11-18): give the credit back = one refund linked to this reservation / package --}}
+    @if ($buttons && $payable->canTakePayments() && $payable->remaining < 0 && Gate::allows('payments.refund'))
+        <a href="{{ route($area . '.payments.credit-refund', [$kind, $payable->getKey()]) }}" data-modal class="btn btn-secondary btn-sm"><i data-lucide="undo-2"></i> Refund credit</a>
+    @endif
+    @if (!$buttons)
+    @elseif ($canAdd && isset($methods))
+        <button type="button" data-reveal="#cash-in-form" class="btn btn-pay btn-sm"><i data-lucide="plus"></i> Cash In</button>
     @elseif ($canAdd)
-        <a href="{{ route($area . '.payments.create', ['payable' => $kind, 'payable_id' => $payable->getKey()]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Cash In</a>
+        <a href="{{ route($area . '.payments.create', ['payable' => $kind, 'payable_id' => $payable->getKey()]) }}" data-modal class="btn btn-pay btn-sm"><i data-lucide="plus"></i> Cash In</a>
     @endif
 </div>
 

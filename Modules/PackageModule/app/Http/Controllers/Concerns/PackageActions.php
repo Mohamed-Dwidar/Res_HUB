@@ -44,7 +44,10 @@ trait PackageActions
     // the list page, the rows come from data() (DataTables)
     public function index()
     {
-        return view('packagemodule::Package.index');
+        // ?member_id= (the member view's Packages button, 2026-11-18): that member's packages, the All tab
+        $member = request()->filled('member_id')
+            ? \Modules\MemberModule\app\Models\Member::where('account_id', $this->accountId())->find((int) request('member_id')) : null;
+        return view('packagemodule::Package.index', compact('member'));
     }
 
     // the list tab: current (default, also '') | past | all
@@ -78,7 +81,7 @@ trait PackageActions
 
         return DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the packages
-            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['payment_status', 'date_from', 'date_to']))->tab($tab))
+            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['payment_status', 'date_from', 'date_to', 'member_id']))->tab($tab))
             ->setRowId(fn ($package) => 'row-' . $package->id)
             ->addColumn('name_html', fn ($package) => view('packagemodule::Package.partials.row-package', compact('package'))->render())
             ->addColumn('period', fn ($package) => view('packagemodule::Package.partials.row-period', compact('package'))->render())
