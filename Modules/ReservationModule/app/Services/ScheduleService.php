@@ -5,6 +5,7 @@ namespace Modules\ReservationModule\app\Services;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Modules\AccountModule\app\Models\Account;
+use Modules\PackageModule\app\Models\Package;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Models\ReservationStatus;
 use Modules\SpaceModule\app\Models\Space;
@@ -77,7 +78,10 @@ class ScheduleService
         // the period groups need the renewals (renewedBy) and the members, loaded by hydrate()
         $sections = $sections->map(fn ($section) => $section['mode'] === 'period' ? $this->periodGroups($section, $context) : $section);
         // ONE "Not paid" list above the sections (2026-11-18, user): the subscriptions' Not paid + the hourly / full day "Unpaid (past)"
-        $notPaid = $this->mergeNotPaid($sections->flatMap(fn ($section) => $section['mode'] === 'period' ? $section['notPaid'] : ($section['unpaid'] ?? collect())));
+        // + the packages (2026-11-18): started, still owing, not ended before the window
+        $packages = $this->unpaidPackages($accountId, $context);
+        $notPaid = $this->mergeNotPaid($sections->flatMap(fn ($section) => $section['mode'] === 'period' ? $section['notPaid'] : ($section['unpaid'] ?? collect()))
+            ->concat($packages['rows']));
 
         return [
             'date' => $date,
@@ -95,7 +99,7 @@ class ScheduleService
             // the merged Not paid list (every type) + the hourly / full day ones older than the window (Outstanding report)
             'notPaidRows' => $notPaid,
             'notPaid' => $notPaid->count(),
-            'notPaidOlder' => $sections->sum(fn ($section) => $section['unpaidOlder'] ?? 0),
+            'notPaidOlder' => $sections->sum(fn ($section) => $section['unpaidOlder'] ?? 0) + $packages['older'],
             'notPaidAnchor' => 'today-notpaid',
             'isPast' => $context['isPast'],
             'nextCount' => $sections->where('mode', 'period')->sum(fn ($section) => $section['next']->count()),
@@ -244,12 +248,14 @@ class ScheduleService
      */
     private function mergeNotPaid(Collection $rows): Collection
     {
-        return $rows->unique('id')
-            ->each(fn ($reservation) => $reservation->due_since = $reservation->start_at->toDateString())
-            ->groupBy(fn ($reservation) => $reservation->member_id ?: 'r' . $reservation->id)
-            ->sortByDesc(fn ($group) => $group->max(fn ($reservation) => $reservation->start_at->timestamp))
-            ->flatMap(function ($group) {
-                $group = $group->sortBy(fn ($reservation) => [$reservation->start_at->timestamp, $reservation->id])->values();
+        // a package row (2026-11-18) starts on its date_from; ids are per table (a reservation and a package may share one)
+        $start = fn ($row) => $row instanceof Package ? $row->date_from : $row->start_at;
+        return $rows->unique(fn ($row) => get_class($row) . ':' . $row->id)
+            ->each(fn ($row) => $row->due_since = $start($row)->toDateString())
+            ->groupBy(fn ($row) => $row->member_id ?: get_class($row) . ':' . $row->id)
+            ->sortByDesc(fn ($group) => $group->max(fn ($row) => $start($row)->timestamp))
+            ->flatMap(function ($group) use ($start) {
+                $group = $group->sortBy(fn ($row) => [$start($row)->timestamp, $row->id])->values();
                 $older = 0.0;
                 foreach ($group as $reservation) {
                     $reservation->older_due = round($older, 2);
@@ -260,6 +266,28 @@ class ScheduleService
                 }
                 return $group;
             })->values();
+    }
+
+    /**
+     * The packages of the ONE "Not paid" list (2026-11-18): started (date_from ≤ the business date), still owing (stored remaining
+     * > 0), not ended before the window (date_to ≥ the business day's start − unpaidDays, or no end); older ones = a count (the
+     * Outstanding report). None on a past day. ['rows', 'older']
+     */
+    private function unpaidPackages(int $accountId, array $context): array
+    {
+        if (!empty($context['isPast'])) {
+            return ['rows' => collect(), 'older' => 0];
+        }
+        $account = $context['account'];
+        $businessDate = $account->businessDate()->copy()->startOfDay();
+        $since = $businessDate->copy()->subDays($context['unpaidDays']);
+        $base = fn () => Package::where('account_id', $accountId)->where('remaining', '>', 0)
+            ->whereNotNull('date_from')->where('date_from', '<=', $businessDate);
+
+        return [
+            'rows' => $base()->where(fn ($query) => $query->whereNull('date_to')->orWhere('date_to', '>=', $since))->with('member')->get(),
+            'older' => $base()->where('date_to', '<', $since)->count(),
+        ];
     }
 
     /**
