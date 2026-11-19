@@ -17,7 +17,8 @@ use Modules\ReservationModule\app\Models\Reservation;
  *   amount, Current / Ended period (+ dates) and its badge; Pay while it owes, Renew when it is paid; Left when it ended with no
  *   renewal; "Older period still owes X" ($reservation->older_due, ScheduleService::periodGroups());
  * - not_renewed (Schedule "Not renewed", 2026-11-18): the NEXT period ($reservation->next_period = ReservationService::renewalOf():
- *   its dates + price with any increase), "due since (N days)" from the renewal date, "Previous: <dates> · <amount>"; Renew + Left;
+ *   its dates + price with any increase), "due since (N days)" from the renewal date, "Current: <amount> (+10%)" when it differs;
+ *   Renew + Left;
  * - not_paid (Schedule "Not paid", ONE list of every type since 2026-11-18): the reservation — "due since" its start, Renewed (a
  *   renewal) + payment badge, Due, Pay; "Earlier unpaid of this member: X";
  * - renewed (the list's Renewed): "✓ Renewed & paid"; left: "Left" + Undo.
@@ -47,7 +48,7 @@ class RenewalView
         $view = [
             'open' => $reservation, 'datePrefix' => null, 'date' => $renewsOn, 'dateTo' => null, 'when' => self::when($renewsOn, $date, $isToday), 'whenClass' => 'text-slate-500',
             'price' => $reservation->dueAmount(), 'label' => null, 'labelDates' => null, 'badge' => null, 'badges' => [], 'check' => null,
-            'note' => null, 'due' => null, 'hints' => [], 'actions' => [], 'previous' => null,
+            'note' => null, 'due' => null, 'hints' => [], 'actions' => [], 'previous' => null, 'current' => null, 'period' => null,
             // the next renewal's price while it is not renewed yet (the renewal increase, 2026-11-12)
             'nextPrice' => !$renewal && in_array($kind, ['new', 'today', 'next', 'upcoming', 'owing'], true) ? $reservation->nextRenewalText() : null,
         ];
@@ -66,6 +67,10 @@ class RenewalView
             case 'today':
             case 'next':
             case 'upcoming':
+                // Schedule (2026-11-19, user): the date cell = renewal date + when / the renewal period (the renewal's, else the next one)
+                if (in_array($kind, ['today', 'next'], true) && ($period = $renewal ?? ($reservation->next_period ?? null))) {
+                    $view['period'] = $dates($period);
+                }
                 if ($renewal) {
                     $view['open'] = $renewal;
                     $view['price'] = $renewal->dueAmount();
@@ -78,6 +83,15 @@ class RenewalView
                         $view['check'] = $state($renewal) === 'package' ? 'Renewed · In package' : 'Renewed & paid';
                     }
                 } else {
+                    // Schedule Renews today / Next N days (2026-11-19, user): the column = "Renewal price" = the next price with
+                    // any increase (the discount kept, before taxes), "Current: X (+10%)" under it only when it differs
+                    if (in_array($kind, ['today', 'next'], true)) {
+                        $view['nextPrice'] = null;
+                        if (($next = $reservation->nextRenewalAmounts()) && round($next['net_amount'], 2) !== round($view['price'], 2)) {
+                            $view['current'] = 'Current: ' . number_format($view['price'], 2) . ' (' . $reservation->renewalIncreaseLabel() . ')';
+                            $view['price'] = $next['net_amount'];
+                        }
+                    }
                     $view['badge'] = ['Not renewed yet', 'badge-status-slate'];
                     // no Pay for the current period's debt here: it is listed (with Pay) in Not renewed & Not paid (user
                     // 2026-10-29); Renew of an unpaid period asks a reason
@@ -125,10 +139,14 @@ class RenewalView
                 $next = $reservation->next_period ?? null;
                 $days = $renewsOn ? (int) $renewsOn->copy()->startOfDay()->diffInDays($date, false) : 0;
                 $view['date'] = $next?->start_at ?? $renewsOn;
-                $view['dateTo'] = $next?->end_at;
+                $view['period'] = $next ? $dates($next) : null;
                 $view['price'] = $next ? (float) $next->net_amount : $reservation->dueAmount();
                 $view['nextPrice'] = null;
-                $view['previous'] = 'Previous: ' . $dates($reservation) . ' · ' . number_format($reservation->dueAmount(), 2);
+                // "Current: X (+10%)" only when the next price differs (2026-11-19, user; replaces the "Previous: …" line)
+                if (round($view['price'], 2) !== round($reservation->dueAmount(), 2)) {
+                    $label = $reservation->renewalIncreaseLabel();
+                    $view['current'] = 'Current: ' . number_format($reservation->dueAmount(), 2) . ($label ? ' (' . $label . ')' : '');
+                }
                 $view['when'] = 'due since (' . ($days > 0 ? $days . ' ' . ($days === 1 ? 'day' : 'days') : 'today') . ')';
                 $view['whenClass'] = 'text-danger';
                 $view['badges'][] = ['Not Renewed', 'badge-status-pending'];

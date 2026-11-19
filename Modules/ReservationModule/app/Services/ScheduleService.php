@@ -519,14 +519,18 @@ class ScheduleService
             ->sortBy(fn ($reservation) => [(int) $reservation->space?->sort_order, (int) $reservation->unit?->sort_order,
                 mb_strtolower((string) $reservation->member?->name), $reservation->id])->values();
 
+        $renewals = app(ReservationService::class);
+        // the renewal period under the renewal date (2026-11-19, user): not renewed yet = the next period (renewalOf(), in memory)
+        $withNext = fn ($reservation) => $reservation->renewedBy ? null : $reservation->next_period = $renewals->renewalOf($reservation);
+
         // Renews today: every period renewing on D — not renewed, renewed and owing, renewed and paid ("✓ Renewed & paid", user 2026-11-01)
         $renewsToday = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on === $day)
+            ->each($withNext)
             ->sortBy(fn ($reservation) => [(int) $reservation->member_id, $reservation->id])->values();
 
         // two lists (user 2026-11-18; were "Not renewed & Not paid"):
         // Not renewed = ended before D, no renewal, not left — the row shows the NEXT period (ReservationService::renewalOf():
         // renewal dates + price with any increase), fewest days late first;
-        $renewals = app(ReservationService::class);
         $notRenewed = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on < $day && !$reservation->renewedBy)
             ->each(function ($reservation) use ($renewals) {
                 $reservation->due_since = $reservation->renews_on;
@@ -542,6 +546,7 @@ class ScheduleService
 
         // Next N days: the renewal dates D+1 … D+N
         $next = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on > $day && $reservation->renews_on <= $last)
+            ->each($withNext)
             ->sortBy(fn ($reservation) => [$reservation->renews_on, $reservation->id])->values();
 
         // a past day: today's payment state would mislead (user 2026-10-29)

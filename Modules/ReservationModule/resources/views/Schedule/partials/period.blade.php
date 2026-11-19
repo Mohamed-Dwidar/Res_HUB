@@ -51,7 +51,7 @@
                         <tr class="today-renewals__group"><td colspan="6">{{ $group['title'] }} ({{ $group['rows']->count() }})</td></tr>
                         {{-- each group has its own header (2026-10-29): Not renewed & Not paid shows the period in "Date" --}}
                         @php($statusCol = in_array($group['kind'], ['not_renewed', 'not_paid'], true))
-                        <tr class="today-renewals__head"><th>Member</th><th>Unit</th><th>{{ $group['kind'] === 'not_paid' ? 'Date' : ($group['kind'] === 'not_renewed' ? 'Next period' : 'Renewal date') }}</th><th class="text-center">{{ $group['kind'] === 'not_renewed' ? 'Renewal price' : 'Price' }}</th>@if ($statusCol)<th class="text-center">Status</th>@else<th>Payment</th>@endif<th class="text-right">Action</th></tr>
+                        <tr class="today-renewals__head"><th>Member</th><th>Unit</th><th>{{ $group['kind'] === 'not_paid' ? 'Date' : 'Renewal date' }}</th><th class="text-center">{{ in_array($group['kind'], ['today', 'next', 'not_renewed'], true) ? 'Renewal price' : 'Price' }}</th>@if ($statusCol)<th class="text-center">Status</th>@else<th>Payment</th>@endif<th class="text-right">Action</th></tr>
                         @foreach ($group['rows'] as $reservation)
                             @include('reservationmodule::Schedule.partials.renewal-row', ['kind' => $group['kind']])
                         @endforeach

@@ -2149,10 +2149,10 @@ a.today-summary__item:hover {
 
 .renewal-col--member { width: 16%; }
 .renewal-col--unit { width: 12%; }
-.renewal-col--date { width: 21%; }
-.renewal-col--price { width: 9%; }
-.renewal-col--payment { width: 21%; }
-.renewal-col--action { width: 22%; }
+.renewal-col--date { width: 19%; }
+.renewal-col--price { width: 13%; }
+.renewal-col--payment { width: 19%; }
+.renewal-col--action { width: 21%; }
 
 .renewal-row td {
     vertical-align: top;
@@ -2164,6 +2164,15 @@ a.today-summary__item:hover {
     text-align: center;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+}
+
+/* "Current: X (+10%)" under the Renewal price (2026-11-19): may wrap, never runs into the next cell */
+.renewal-row__current {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: rgb(100 116 139);
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 /* the renewal increase (2026-11-12): the next renewal's price (Schedule renewals, the list Renewal column, the view, the
@@ -3173,12 +3182,12 @@ td.renewal-row__action > .wa-btn {
 /* Schedule renewal rows (user 2026-10-29): every button of the Action cell on ONE line (computer screens; the phone layout keeps
    wrapping) — the buttons as wide as their text, the Action column wider, the others a little narrower */
 @media (min-width: 768px) {
-    .renewal-col--member { width: 15%; }
-    .renewal-col--unit { width: 11%; }
-    .renewal-col--date { width: 19%; }
-    .renewal-col--price { width: 8%; }
-    .renewal-col--payment { width: 19%; }
-    .renewal-col--action { width: 28%; }
+    .renewal-col--member { width: 16%; }
+    .renewal-col--unit { width: 12%; }
+    .renewal-col--date { width: 18%; }
+    .renewal-col--price { width: 15%; }
+    .renewal-col--payment { width: 12%; }
+    .renewal-col--action { width: 27%; }
 
     td.renewal-row__action {
         white-space: nowrap;
@@ -4363,4 +4372,12 @@ a.dash-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1); }
     text-align: left;
     white-space: normal;
     width: 16rem;
+}
+
+/* Schedule renewals: the Renewal price = 2 lines — the price + "Current: X (+10%)" on one line (2026-11-19, user); on narrower
+   screens the Current line still wraps inside its cell (no overlap) */
+@media (min-width: 1280px) {
+    .renewal-row__current { white-space: nowrap; }
+    /* the renewal date + "due since (N days)" / "(in N days)" on ONE line, the period on the second (2026-11-19, user) */
+    .renewal-row__when-line { white-space: nowrap; }
 }

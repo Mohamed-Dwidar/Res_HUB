@@ -17,14 +17,19 @@
         <div class="text-xs text-slate-500">{{ $open->space?->name }}</div>
     </td>
     @php($statusCol = in_array($kind, ['owing', 'not_renewed', 'not_paid'], true))
-    <td data-label="{{ $kind === 'not_renewed' ? 'Next period' : ($statusCol ? 'Date' : 'Renewal date') }}">
+    <td data-label="{{ $statusCol && $kind !== 'not_renewed' ? 'Date' : 'Renewal date' }}">
         @if ($view['datePrefix'])<div class="text-xs text-danger">{{ $view['datePrefix'] }}</div>@endif
+        @if ($view['period'])
+            {{-- renewal rows (2026-11-19, user): renewal date + when on one line, the renewal period under it --}}
+            <div class="renewal-row__when-line"><span class="whitespace-nowrap">{{ $view['date']?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}</span>@if ($view['when']) <span class="text-xs whitespace-nowrap {{ $view['whenClass'] }}">{{ str_starts_with($view['when'], 'due since') ? $view['when'] : '(' . $view['when'] . ')' }}</span>@endif</div>
+            <div class="text-xs text-slate-500 whitespace-nowrap">{{ $view['period'] }}</div>
+        @else
         <div><span class="whitespace-nowrap">{{ $view['date']?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}</span>@if ($view['dateTo']) <span class="whitespace-nowrap">→ {{ $view['dateTo']->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) }}</span>@endif</div>
         @if ($view['when'])<div class="text-xs whitespace-nowrap {{ $view['whenClass'] }}">{{ $view['when'] }}</div>@endif
-        {{-- Not renewed: the period it would renew (2026-11-18) --}}
-        @if ($view['previous'])<div class="text-xs text-slate-500">{{ $view['previous'] }}</div>@endif
+        @endif
     </td>
-    <td data-label="Price" class="renewal-row__price">{{ number_format($view['price'], 2) }}
+    <td data-label="{{ in_array($kind, ['today', 'next', 'not_renewed'], true) ? 'Renewal price' : 'Price' }}" class="renewal-row__price">{{ number_format($view['price'], 2) }}
+        @if ($view['current'])<div class="renewal-row__current">{{ $view['current'] }}</div>@endif
         @if ($view['nextPrice'])<div class="renewal-next-price" title="The next renewal's price (the renewal increase)">Renewal: {{ $view['nextPrice'] }}</div>@endif</td>
     <td data-label="{{ $statusCol ? 'Status' : 'Payment' }}" @if ($statusCol) class="renewal-row__status" @endif>@include('reservationmodule::Reservation.partials.renewal-payment')</td>
     {{-- + WhatsApp after the last button (MessagingModule): about the period the row shows (the renewal when the row shows it:
