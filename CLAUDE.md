@@ -37,7 +37,7 @@ Then suggest a commit message.
 - `public/assets/css/custom.css` — ALL custom CSS (except PDF views: `pdf.css`); `public/assets/js/custom.js` — modal, ajax forms, dynamic forms, toggles; `public/assets/js/datatables.js` — DataTables + `window.dataTables` row API
 - `Template_Source/` — the purchased template HTML (reference for markup/classes)
 - `docs/archive/to_run` — ARCHIVED 2026-10-27 (was `to_run`): the old system → new DB transfer script, history only; never run it, never add to it
-- `database/fixes/` — data fix SQL files (`YYYY-MM-DD-<what>.sql`), written by Claude, tested on the local `dwidar_res_portal`, run by the user on the server
+- `database/fixes/` — data fix SQL files (`YYYY-MM-DD-<what>.sql`), written by Claude, tested on the local `dwidar_res_portal`, run by the user on the server; deploy-time data changes may be data migrations instead (see Rules)
 
 ## Conventions
 - Controllers: `{Module}{UserType}ModuleController` in `Controllers/{UserType}/`; a feature used by account AND employee = `Controllers/Concerns/{X}Actions` trait + 2 thin controllers (`area()` = account|employee)
@@ -100,6 +100,7 @@ Then suggest a commit message.
 - `to_run` is archived (`docs/archive/to_run`): don't run it, don't add to it.
 - Schema changes = proper new migrations, reviewed by the user before they run. Never edit migrations that already ran.
 - Data fixes = one SQL file in `database/fixes/`: a transaction, idempotent (safe twice), UPDATEs limited by explicit ids, a SELECT of the expected counts before and after each block, the follow-up commands named (e.g. `payments:refresh`). Claude runs it only on the local `dwidar_res_portal`; the user runs it on the server after a backup.
+- Data changes that must run on deploy may be a DATA MIGRATION instead of a SQL file (2026-11-19): in the module's `database/Migrations`, rows found by RULE (no ids, safe on any DB), only rows still in the old state change (idempotent), counts logged (console + `Log::info`), every changed row recorded in `data_migration_rows` (migration, table_name, row_id) so `down()` reverts ONLY those (and only while they still hold the new value); reviewed by the user like any migration; first one `ReservationModule 2026_11_19_100067_apply_virtual_office_renewal_increase`.
 - Ask before deleting files or changing shared layouts.
 - Keep changes minimal and scoped to the task.
 - Don't commit — the user commits; suggest the commit message only.
