@@ -39,7 +39,8 @@ class PackageService
             // newest first (the reservation form, user 2026-10-22)
             ->orderByDesc('id')->get()
             ->mapWithKeys(fn ($package) => [$package->id => [
-                'name' => $package->name . ' - ' . ($package->member?->name ?? '?'),
+                // only the package name (2026-11-19, user): its member is shown under the field; still searchable by the member
+                'name' => $package->name,
                 'member_id' => $package->member_id,
                 // the reservation form shows the package's member in its Member field (server search: the option is added)
                 'member_text' => $package->member ? $package->member->name . ' ' . $package->member->phone : '',

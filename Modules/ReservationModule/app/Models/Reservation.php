@@ -17,6 +17,8 @@ use Modules\PackageModule\app\Models\Package;
 use Modules\PaymentModule\app\Contracts\Payable;
 use Modules\PaymentModule\app\Models\Concerns\HasExtras;
 use Modules\PaymentModule\app\Models\Concerns\HasPayments;
+use Modules\PaymentModule\app\Services\Tax\TaxCalculator;
+use Modules\PaymentModule\app\Services\Tax\TaxRule;
 use Modules\PlanModule\app\Models\Plan;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\SpaceModule\app\Models\SubscriptionType;
@@ -234,6 +236,19 @@ class Reservation extends Model implements Payable
                 ? ' · ' . trim(($next['discount_percentage'] > 0 ? '−' . rtrim(rtrim(number_format($next['discount_percentage'], 2, '.', ''), '0'), '.') . '% ' : '')
                     . ($next['discount_fixed'] > 0 ? '−' . number_format($next['discount_fixed'], 2) : '')) . ' = ' . number_format($next['net_amount'], 2)
                 : '');
+    }
+
+    // what the NEXT period will cost (2026-11-19, the Schedule "Renewal price"): its price with any increase − the discount it
+    // keeps, + taxes when this one's invoice is requested (a renewal copies the toggle and the tax type); extras are never copied
+    public function nextRenewalDue(): float
+    {
+        $next = $this->nextRenewalAmounts();
+        $amount = $next ? $next['amount'] : (float) $this->amount;
+        $discount = $next ? $next['discount_value'] + $next['discount_fixed'] : (float) $this->discount_value + $this->renewalFixed();
+        if ($this->isTaxed() && ($rule = TaxRule::fromSnapshot($this))) {
+            return app(TaxCalculator::class)->calculate($amount, $discount, $rule)->total;
+        }
+        return round($amount - $discount, 2);
     }
 
     // the fixed discount a renewal / repeat copy takes: this one's when "Repeat on renewal" is ticked, else none (one-off)

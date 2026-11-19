@@ -17,7 +17,7 @@
     $planOptions = collect($plans)->mapWithKeys(fn ($plan) => [$plan['id'] => ['name' => $plan['name'], 'data' => ['amount' => $plan['amount'], 'time-based' => $plan['timeBased'], 'period-hours' => $plan['periodHours'], 'lease-period' => $plan['leasePeriod'],
         'vat-exempt' => $plan['vatExempt'], 'table-tax' => $plan['tableTax'], 'inclusive' => $plan['inclusive'], 'invoice-default' => $plan['invoiceDefault'],
         'increase-type' => $plan['increaseType'] ?? 'none', 'increase-value' => $plan['increaseValue'] ?? 0]]])->all();
-    $packageOptions = collect($packages)->map(fn ($package) => ['name' => $package['name'], 'data' => ['member-id' => $package['member_id'], 'member-text' => $package['member_text']]])->all();
+    $packageOptions = collect($packages)->map(fn ($package) => ['name' => $package['name'], 'data' => ['member-id' => $package['member_id'], 'member-text' => $package['member_text'], 'search' => $package['member_text']]])->all();
     // the date / time inputs need Y-m-d / H:i values (the browser shows them in the user's format)
     // create: today, now -> in 1 hour (pre-filled from the Schedule page: its start -> in 1 hour); edit / renew: the saved values
     // (the times only for a time based plan)

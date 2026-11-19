@@ -1354,6 +1354,8 @@ function initSearchable(root) {
             plugins: { dropdown_input: {} },
             maxOptions: null,
             allowEmptyOption: true,
+            // an option's data-search = more words to find it by (the reservation form's packages: the member's name / phone)
+            searchField: ["text", "search"],
             placeholder: select.options[0] ? select.options[0].text : "",
             render: {
                 no_results: function () {
