@@ -56,11 +56,8 @@
         </div>
     @endif
 
-    {{-- order (2026-11-22, user): By Collector, Shifts, Day Totals --}}
-    @include('paymentmodule::DailySummary.partials.totals', ['part' => 'collectors', 'first' => $longOpen->isEmpty()])
-
     {{-- the shifts holding payments of this day --}}
-    <div class="form-section {{ $longOpen->isNotEmpty() || !empty($summary['collectors']) ? 'mt-8' : '' }}">Shifts</div>
+    <div class="form-section {{ $longOpen->isNotEmpty() ? 'mt-8' : '' }}">Shifts</div>
     @if ($openPeriods->isEmpty() && $shifts->isEmpty())
         <div class="text-slate-500">No cash in or cash out on this day.</div>
     @else
@@ -120,6 +117,9 @@
         </div>
         <div class="mt-2 text-xs text-slate-500">A shift's totals are for the whole shift (it can hold cash in / cash out of other days); the day totals below are for this day only.</div>
     @endif
+
+    {{-- order (2026-11-22, user): Shifts, By Collector, Day Totals --}}
+    @include('paymentmodule::DailySummary.partials.totals', ['part' => 'collectors'])
 
     <div class="form-section mt-8">Day Totals</div>
     @include('paymentmodule::DailySummary.partials.totals', ['part' => 'day'])

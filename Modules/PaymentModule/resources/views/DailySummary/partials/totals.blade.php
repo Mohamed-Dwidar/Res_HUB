@@ -2,7 +2,7 @@
     A day's totals (DailySummaryService::summary(), the shift totals shape): per method Cash In - Refunds - Cash Out = net
     (the shift totals table: Cash In, Refunds, Cash Out, Net to hand over, withholding apart), then the
     same per collector (a totals row + its methods). $part: 'day' (default) = the method totals, 'collectors' = By Collector
-    (2026-11-22, user: the page shows By Collector first, then Shifts, then Day Totals). $summary: ['collectors', 'methods', 'refunds', 'expenses', 'withholding', 'cash_total', 'net_total', 'count']
+    (2026-11-22, user: the page shows Shifts, then By Collector, then Day Totals). $summary: ['collectors', 'methods', 'refunds', 'expenses', 'withholding', 'cash_total', 'net_total', 'count']
 --}}
 @php
     $methods = $summary['methods'] ?? [];
