@@ -56,8 +56,11 @@
         </div>
     @endif
 
+    {{-- order (2026-11-22, user): By Collector, Shifts, Day Totals --}}
+    @include('paymentmodule::DailySummary.partials.totals', ['part' => 'collectors', 'first' => $longOpen->isEmpty()])
+
     {{-- the shifts holding payments of this day --}}
-    <div class="form-section {{ $longOpen->isNotEmpty() ? 'mt-8' : '' }}">Shifts</div>
+    <div class="form-section {{ $longOpen->isNotEmpty() || !empty($summary['collectors']) ? 'mt-8' : '' }}">Shifts</div>
     @if ($openPeriods->isEmpty() && $shifts->isEmpty())
         <div class="text-slate-500">No cash in or cash out on this day.</div>
     @else
@@ -119,7 +122,7 @@
     @endif
 
     <div class="form-section mt-8">Day Totals</div>
-    @include('paymentmodule::DailySummary.partials.totals')
+    @include('paymentmodule::DailySummary.partials.totals', ['part' => 'day'])
 
     {{-- company Cash Out (docs/hr-plan.md §6b: advances, salaries): paid by the company, not in any shift / hand-over above --}}
     @if ($companyExpenses->isNotEmpty())

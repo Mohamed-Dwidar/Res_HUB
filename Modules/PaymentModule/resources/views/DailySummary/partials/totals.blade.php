@@ -1,7 +1,8 @@
 {{--
     A day's totals (DailySummaryService::summary(), the shift totals shape): per method Cash In - Refunds - Cash Out = net
     (the shift totals table: Cash In, Refunds, Cash Out, Net to hand over, withholding apart), then the
-    same per collector (a totals row + its methods). $summary: ['collectors', 'methods', 'refunds', 'expenses', 'withholding', 'cash_total', 'net_total', 'count']
+    same per collector (a totals row + its methods). $part: 'day' (default) = the method totals, 'collectors' = By Collector
+    (2026-11-22, user: the page shows By Collector first, then Shifts, then Day Totals). $summary: ['collectors', 'methods', 'refunds', 'expenses', 'withholding', 'cash_total', 'net_total', 'count']
 --}}
 @php
     $methods = $summary['methods'] ?? [];
@@ -12,12 +13,14 @@
     $netClass = fn ($value) => 'money-net' . ((float) $value < 0 ? ' money-net--negative' : '');
 @endphp
 
-@include('paymentmodule::Shift.partials.totals')
+@if (($part ?? 'day') === 'day')
+    @include('paymentmodule::Shift.partials.totals')
+@endif
 
-@if (!empty($summary['collectors']))
+@if (($part ?? 'day') === 'collectors' && !empty($summary['collectors']))
     {{-- By Collector (redesigned 2026-10-26): one bold row per collector with their totals, then their methods indented and
          lighter (always, also for one method: user 2026-10-27); an empty closing = the tag "No cash in / out"; amounts right aligned --}}
-    <div class="form-section mt-8">By Collector</div>
+    <div class="form-section {{ !empty($first) ? '' : 'mt-8' }}">By Collector</div>
     <div class="table-wrap">
         <table class="data-table collector-table">
             <thead><tr><th>Collected By</th><th class="num">Cash In</th><th class="num">Refunds</th><th class="num">Cash Out</th><th class="num">Net</th></tr></thead>
