@@ -1681,11 +1681,11 @@ document.addEventListener("click", function (e) {
     if (field) field.focus({ preventScroll: true });
 });
 
-// the reservations list "Renewal" filter: its dates are renewal dates (this month when none) — choosing it moves to the All
+// (and the "Contract" filter, 2026-11-25) the reservations list "Renewal" filter: its dates are renewal dates (this month when none) — choosing it moves to the All
 // tab (no Today / Upcoming rule; the date field emptied); capture phase: before datatables.js reloads the list once
 document.addEventListener("change", function (e) {
     var form = e.target.form;
-    if (!form || e.target.name !== "renewal" || !e.target.value) return;
+    if (!form || (e.target.name !== "renewal" && !(e.target.name === "contract" && form.id === "reservations-filters")) || !e.target.value) return;
     var all = dateRangeTabs(form).find(function (tab) { return tab.dataset.tab === "all"; });
     var tabInput = form.querySelector('input[name="tab"]');
     if (!all || !tabInput || tabInput.value === all.dataset.value || form.querySelector('[name="date_from"]')?.value) return;
@@ -2618,7 +2618,10 @@ function contractPreview(form, field) {
 function contractUnits(form) {
     var box = form.querySelector("[data-contract-units]");
     if (!box) return;
-    var taken = contractJson(form, "data-contract-taken");
+    // {contract: {...}, renewal: {...}}: the units of the other templates of the chosen type
+    var takenAll = contractJson(form, "data-contract-taken");
+    var kindEl = form.querySelector("[data-contract-kind]");
+    var taken = takenAll[(kindEl && kindEl.value) || "contract"] || {};
     var total = 0;
     box.querySelectorAll(".message-unit-space").forEach(function (space) {
         var units = space.querySelectorAll('input[name="units[]"]');
@@ -2648,7 +2651,7 @@ document.addEventListener("change", function (e) {
             unit.checked = e.target.checked;
         });
     }
-    if (e.target.name === "units[]" || e.target.matches("[data-contract-space]")) contractUnits(form);
+    if (e.target.name === "units[]" || e.target.matches("[data-contract-space], [data-contract-kind]")) contractUnits(form);
 });
 
 document.addEventListener("click", function (e) {
@@ -2682,7 +2685,8 @@ function contractTermEnd(form) {
     if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start.value)) return;
     var count = parseInt(months && months.value, 10);
     contractTermDefaults(form, count);
-    if (!count) {
+    // no term, or the subscription's own term from its own start = its last day
+    if (!count || (String(count) === end.getAttribute("data-reservation-months") && start.value === end.getAttribute("data-reservation-start"))) {
         end.value = end.getAttribute("data-reservation-end") || end.value;
         return;
     }
@@ -2696,17 +2700,21 @@ function contractTermEnd(form) {
 }
 
 // the duration in words + the contract value follow the term while not typed in (ContractService::term() / termAmount(): the
-// period price × months for a month plan, × months / 12 for a year plan)
+// reservation's price ÷ its own months × the term)
 function contractTermDefaults(form, count) {
     var duration = form.querySelector("[data-contract-duration]");
-    if (duration && !duration.dataset.touched && count) {
-        duration.value = count === 1 ? "شهر واحد" : count === 2 ? "شهران" : count <= 10 ? count + " أشهر" : count + " شهرًا";
+    if (duration && !duration.dataset.touched) {
+        // the same words as ContractService::term(); no term = the reservation's own (from its plan)
+        var years = count && count % 12 === 0 ? count / 12 : 0;
+        duration.value = !count ? (duration.dataset.reservationDuration || duration.value)
+            : years === 1 ? "سنة ميلادية" : years === 2 ? "سنتان ميلاديتان" : years ? years + (years <= 10 ? " سنوات ميلادية" : " سنة ميلادية")
+            : count === 1 ? "شهر" : count === 2 ? "شهران" : count <= 10 ? count + " أشهر" : count + " شهرًا";
     }
     var value = form.querySelector("[data-contract-value]");
     if (value && !value.dataset.touched) {
         var price = parseFloat(value.getAttribute("data-price")) || 0;
-        var lease = value.getAttribute("data-lease");
-        var amount = count && lease === "month" ? price * count : count && lease === "year" ? price * count / 12 : price;
+        var own = parseInt(value.getAttribute("data-reservation-months"), 10);
+        var amount = count && own ? price * count / own : price;
         value.value = (Math.round(amount * 100) / 100).toFixed(2);
     }
 }

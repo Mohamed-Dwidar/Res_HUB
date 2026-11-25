@@ -35,6 +35,8 @@ class ContractTemplateRequest extends FormRequest
 
         return [
             'name' => 'required|string|max:100',
+            // the type: chosen when the template is added, kept after (its units are assigned per type)
+            'kind' => $this->route('id') ? ['exclude'] : ['required', Rule::in(array_keys(\Modules\ContractModule\app\Models\ContractTemplate::KINDS))],
             'title_ar' => 'required|string|max:255',
             'title_en' => 'nullable|string|max:255',
             'body_ar' => ['required', 'string', 'max:200000', $known],
@@ -44,8 +46,9 @@ class ContractTemplateRequest extends FormRequest
             'default_term_months' => 'nullable|integer|min:1|max:120',
             'is_enabled' => 'required|boolean',
             'units' => ['nullable', 'array', function ($attribute, $value, $fail) use ($accountId) {
+                $kind = $this->route('id') ? (string) app(ContractService::class)->findTemplate($accountId, $this->route('id'))->kind : (string) $this->input('kind');
                 if (($error = app(ContractService::class)->templateUnitsError($accountId, array_map('intval', (array) $value),
-                        $this->route('id') ? (int) $this->route('id') : null))) {
+                        $this->route('id') ? (int) $this->route('id') : null, $kind ?: 'contract'))) {
                     $fail($error);
                 }
             }],

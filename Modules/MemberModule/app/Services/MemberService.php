@@ -116,6 +116,14 @@ class MemberService
             'id_type' => ($data['id_type'] ?? null) ?: (!empty($data['national_number']) ? 'national_id' : null),
             'nationality' => ($data['nationality'] ?? null) ?: null,
             'address' => ($data['address'] ?? null) ?: null,
+            // the lessee of a contract (2026-11-25); the quick add has no such fields
+            'legal_name' => ($data['legal_name'] ?? null) ?: null,
+            'representative_name' => ($data['representative_name'] ?? null) ?: null,
+            'representative_title' => ($data['representative_title'] ?? null) ?: null,
+            'commercial_register' => ($data['commercial_register'] ?? null) ?: null,
+            'tax_number' => ($data['tax_number'] ?? null) ?: null,
+            'other_phone' => Member::cleanPhone(($data['other_phone'] ?? null) ?: null),
+            'activity' => ($data['activity'] ?? null) ?: null,
             // the columns are not nullable: 0 = none
             'company_id' => $data['company_id'] ?? 0,
             'job_id' => $data['job_id'] ?? 0,

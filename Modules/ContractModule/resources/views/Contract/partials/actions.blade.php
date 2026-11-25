@@ -17,7 +17,7 @@
 @endif
 @if ($contractService->can($contract, 'issue', $user))
     <form method="POST" action="{{ route($area . '.contracts.issue', $contract->id) }}" class="inline-form" data-ajax
-        data-confirm="It gets its contract number and its text and values are kept as they are now: an issued contract is never edited. Check the PDF first."
+        data-confirm="It gets its contract number{{ $contract->contract_no ? ' (it keeps ' . $contract->number_label . ')' : '' }} and its text and values are kept as they are now: an issued contract is never edited. Check the PDF first."
         data-confirm-title="Issue this {{ $contract->isRenewal() ? 'renewal annex' : 'contract' }}?"
         data-confirm-button="Issue"
         data-confirm-variant="success">
@@ -33,9 +33,15 @@
 @if ($contract->signed_file)
     <a href="{{ route($area . '.contracts.signed.file', $contract->id) }}" target="_blank" class="btn btn-secondary {{ $size }}"><i data-lucide="paperclip"></i> Signed Scan</a>
 @endif
+@if ($contractService->can($contract, 'unissue', $user))
+    <a href="{{ route('account.contracts.unissue', $contract->id) }}" data-modal class="btn btn-secondary {{ $size }}" title="Not issued again: it can be edited (the owner only)"><i data-lucide="undo-2"></i> Back to Draft</a>
+@endif
+@if ($contractService->can($contract, 'cancel', $user))
+    <a href="{{ route('account.contracts.close', [$contract->id, 'cancel']) }}" data-modal class="btn btn-secondary {{ $size }}" title="Void it (the owner only)"><i data-lucide="ban"></i> Cancel</a>
+@endif
 @if ($contractService->can($contract, 'delete', $user))
     <form method="POST" action="{{ route($area . '.contracts.destroy', $contract->id) }}" class="inline-form" data-ajax
-        data-confirm="The draft will be deleted (no number was given)."
+        data-confirm="{{ $contract->contract_no ? 'The draft will be deleted; its number ' . $contract->number_label . ' is not used again.' : 'The draft will be deleted (no number was given).' }}"
         data-confirm-title="Delete this draft?"
         data-confirm-button="Delete"
         data-confirm-variant="danger">

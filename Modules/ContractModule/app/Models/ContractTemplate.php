@@ -19,9 +19,12 @@ class ContractTemplate extends Model
     use SafeMorphHelper, SoftDeletes;
 
     protected $fillable = [
-        'account_id', 'name', 'title_ar', 'title_en', 'body_ar', 'body_en', 'renewal_body_ar', 'renewal_body_en',
+        'account_id', 'name', 'kind', 'title_ar', 'title_en', 'body_ar', 'body_en', 'renewal_body_ar', 'renewal_body_en',
         'default_term_months', 'is_enabled',
     ];
+
+    // the template type (2026-11-25): a contract, or the renewal annex printed for a renewed term; a unit has one of each
+    const KINDS = ['contract' => 'Contract', 'renewal' => 'Renewal annex'];
 
     protected $casts = [
         'is_enabled' => 'boolean',
@@ -39,7 +42,17 @@ class ContractTemplate extends Model
         return $this->morphTo();
     }
 
-    // "12 months" / "The reservation's period"
+    public function isRenewalAnnex(): bool
+    {
+        return $this->kind === 'renewal';
+    }
+
+    public function getKindLabelAttribute(): string
+    {
+        return self::KINDS[$this->kind] ?? self::KINDS['contract'];
+    }
+
+    // "1 year" / "3 months" / "The reservation's period"
     public function getTermLabelAttribute(): string
     {
         return self::termLabel($this->default_term_months);
@@ -47,6 +60,9 @@ class ContractTemplate extends Model
 
     public static function termLabel(?int $months): string
     {
+        if ($months && $months % 12 === 0) {
+            return $months / 12 . ' ' . ($months === 12 ? 'year' : 'years');
+        }
         return $months ? $months . ' ' . ($months === 1 ? 'month' : 'months') : 'The reservation\'s period';
     }
 }

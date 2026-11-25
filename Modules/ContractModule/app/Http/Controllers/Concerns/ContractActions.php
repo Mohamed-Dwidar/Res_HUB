@@ -75,7 +75,7 @@ trait ContractActions
                 match ($filters['ending'] ?? null) {
                     'soon' => $query->whereIn('contracts.status', ['issued', 'signed'])->whereDate('contracts.ends_on', '>=', $today)
                         ->whereDate('contracts.ends_on', '<=', $today->copy()->addDays((int) config('contractmodule.ending_days'))),
-                    'ended' => $query->whereIn('contracts.status', ['issued', 'signed', 'ended'])->whereDate('contracts.ends_on', '<', $today)
+                    'ended' => $query->whereIn('contracts.status', ['issued', 'signed', 'ended', 'terminated'])->whereDate('contracts.ends_on', '<', $today)
                         ->whereDoesntHave('renewals'),
                     default => null,
                 };
@@ -120,10 +120,16 @@ trait ContractActions
     public function show($id)
     {
         $contract = $this->contractService->findContract($this->accountId(), $id);
+        $languages = $this->contractService->languages($contract);
         return view('contractmodule::Contract.show', [
-            'contract' => $contract,
+            'contract' => $contract->load(['events.creatable.userable']),
+            // the contract with its annexes (Phase 3)
+            'chain' => $this->contractService->chain($contract),
+            // the whole contract as printed (the PDF's data), one per language
+            'documents' => array_values(array_filter(array_map(fn ($lang) => $this->contractService->pdfData($this->accountId(), $id, $lang), $languages),
+                fn ($document) => $document['body'] !== null)),
             'missing' => $contract->isDraft() ? $this->contractService->missingToIssue($contract) : [],
-            'languages' => $this->contractService->languages($contract),
+            'languages' => $languages,
             'hasScan' => (bool) $this->contractService->signedPath($contract),
         ]);
     }
@@ -138,7 +144,7 @@ trait ContractActions
 
     public function update(ContractRequest $request, $id)
     {
-        $contract = $this->contractService->updateDraft($this->accountId(), $id, $request->validated());
+        $contract = $this->contractService->updateDraft($this->accountId(), $id, $request->validated(), Auth::user());
 
         return response()->json([
             'message' => 'The draft has been saved.',
@@ -166,12 +172,14 @@ trait ContractActions
         abort_unless($data['body'] !== null, 404, 'This contract has no ' . ($lang === 'en' ? 'English' : 'Arabic') . ' text.');
         $watermark = ['draft' => 'DRAFT', 'cancelled' => 'CANCELLED'][$data['contract']->status] ?? null;
 
+        // Cairo everywhere (autoLangToFont would print Arabic in mpdf's XB Riyaz, 2026-11-25); without its files: mpdf's own fonts
+        $cairo = is_file(config('pdf.font_path') . 'Cairo-Regular.ttf');
         $config = [
             'format' => 'A4',
-            'margin_top' => 30, 'margin_bottom' => 24, 'margin_header' => 8, 'margin_footer' => 8,
-            'instanceConfigurator' => function ($mpdf) use ($watermark, $lang) {
-                $mpdf->autoScriptToLang = true;
-                $mpdf->autoLangToFont = true;
+            'margin_top' => 31, 'margin_bottom' => 18, 'margin_left' => 9, 'margin_right' => 9, 'margin_header' => 9, 'margin_footer' => 7,
+            'instanceConfigurator' => function ($mpdf) use ($watermark, $lang, $cairo) {
+                $mpdf->autoScriptToLang = !$cairo;
+                $mpdf->autoLangToFont = !$cairo;
                 if ($lang === 'ar') {
                     $mpdf->SetDirectionality('rtl');
                 }
@@ -182,7 +190,7 @@ trait ContractActions
                 }
             },
         ];
-        if (!is_file(config('pdf.font_path') . 'Cairo-Regular.ttf')) {
+        if (!$cairo) {
             $config['default_font'] = 'dejavusans';
         }
 

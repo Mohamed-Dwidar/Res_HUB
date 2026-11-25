@@ -4,21 +4,32 @@
     (rich text: TinyMCE 4.7.13, public/assets/vendor/tinymce, custom.js contractEditors(); the same allowlist as the server's
     ContractService::sanitize()), each with a preview of the sample values ($sample = the account's newest subscription,
     ContractService::sampleVariables()), the placeholder chips (insert {name} in the editor used last), the units grouped by space
-    (a space's checkbox = all its units; $taken = units of other templates, marked: one template per unit).
+    (a space's checkbox = all its units; $taken = {contract|renewal: units of other templates of that type}, marked: one template of each type per unit).
+    2026-11-25: Type (Contract | Renewal annex); one text pair (no separate annex editors: an annex is its own template).
 --}}
 @php($chosenUnits = array_map('intval', old('units', $template ? $template->units->pluck('id')->all() : [])))
 @php($fill = $template ?? ($copy ?? null))
 <script type="application/json" data-contract-sample>@json((object) $sample)</script>
-<script type="application/json" data-contract-taken>@json((object) $taken)</script>
+<script type="application/json" data-contract-taken>@json($taken)</script>
 <span hidden data-contract-editor-base="{{ asset('assets/vendor/tinymce') }}"
     data-contract-editor-css="{{ asset('assets/css/pdf.css') }}?v={{ filemtime(public_path('assets/css/pdf.css')) }}"></span>
 
-<div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+@php($kind = $template?->kind ?: ($fill?->kind ?: (request('kind') === 'renewal' ? 'renewal' : 'contract')))
+<div class="grid grid-cols-1 gap-5 md:grid-cols-3">
+    {{-- the type (2026-11-25): chosen on add, kept after (its units are assigned per type) --}}
+    @if ($template)
+        <div data-field="kind"><div class="{{ config('layoutmodule.form.label') }}">Type</div><div class="font-medium">{{ $template->kind_label }}</div>
+            <input type="hidden" name="kind_shown" value="{{ $kind }}" data-contract-kind></div>
+    @else
+        @include('layoutmodule::partials.field', ['name' => 'kind', 'label' => 'Type', 'type' => 'select', 'required' => true,
+            'options' => \Modules\ContractModule\app\Models\ContractTemplate::KINDS, 'value' => $kind, 'attrs' => 'data-contract-kind',
+            'hint' => 'Renewal annex = the short text printed when a contract is renewed for another term.'])
+    @endif
     @include('layoutmodule::partials.field', ['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $fill?->name,
         'attrs' => 'maxlength="100" dir="auto"', 'hint' => 'What you and the users see, e.g. "Private office rental".'])
     @include('layoutmodule::partials.field', ['name' => 'default_term_months', 'label' => 'Contract Term', 'type' => 'select',
         'options' => ['' => 'The reservation\'s period'] + $terms, 'value' => $fill?->default_term_months,
-        'hint' => 'How long a contract runs; monthly renewals inside it need no new contract. 12 months for monthly units.'])
+        'hint' => 'How long a contract runs; monthly renewals inside it need no new contract. An annex always follows its renewal.'])
 </div>
 <div class="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
     @include('layoutmodule::partials.field', ['name' => 'title_ar', 'label' => 'Title (Arabic)', 'required' => true, 'value' => $fill?->title_ar,
@@ -33,25 +44,17 @@
 
 @include('contractmodule::partials.placeholders')
 
-@foreach ([
-    'Contract Text' => ['body_ar' => ['Arabic', 'rtl', true], 'body_en' => ['English', 'ltr', false]],
-    'Renewal Annex' => ['renewal_body_ar' => ['Arabic', 'rtl', false], 'renewal_body_en' => ['English', 'ltr', false]],
-] as $section => $fields)
-    <div class="form-section mt-8">{{ $section }}</div>
-    @if ($section === 'Renewal Annex')
-        <div class="mb-3 text-sm text-slate-500">Printed when a contract is renewed for another term (a short text that refers to the first contract: {previous_contract_no}, {previous_contract_date}). Empty = renewals print the full contract text again.</div>
-    @else
-        <div class="mb-3 text-sm text-slate-500">The clauses. The contract number, the parties, the unit table and the signatures are printed around this text by the system. Write each clause title as "Clause title" (in the paragraph list) with its number in the text.</div>
-    @endif
-    @foreach ($fields as $field => [$language, $dir, $required])
-        <div class="contract-editor">
-            @include('layoutmodule::partials.field', ['name' => $field, 'label' => $language, 'type' => 'textarea', 'required' => $required,
-                'value' => $fill?->{$field}, 'attrs' => 'dir="' . $dir . '" data-contract-editor="' . substr($field, -2) . '"',
-                'hint' => $field === 'body_en' ? 'Optional: an English contract when the member asks for one.' : null])
-            <button type="button" class="contract-editor__preview-toggle" data-contract-preview-toggle="{{ $field }}"><i data-lucide="eye"></i> Preview with sample data</button>
-            <div class="contract-preview contract-body" dir="{{ $dir }}" data-contract-preview="{{ $field }}" hidden></div>
-        </div>
-    @endforeach
+<div class="form-section mt-8">Text</div>
+<div class="mb-3 text-sm text-slate-500">A contract: the clauses (the parties, the unit table and the signatures are printed around it by the system). A renewal annex: its whole
+    text ({original_contract_date}, {start_date}, {end_date}, {contract_value} …); printed with the title, the logo and the two signatures.</div>
+@foreach (['body_ar' => ['Arabic', 'rtl', true], 'body_en' => ['English', 'ltr', false]] as $field => [$language, $dir, $required])
+    <div class="contract-editor">
+        @include('layoutmodule::partials.field', ['name' => $field, 'label' => $language, 'type' => 'textarea', 'required' => $required,
+            'value' => $fill?->{$field}, 'attrs' => 'dir="' . $dir . '" data-contract-editor="' . substr($field, -2) . '"',
+            'hint' => $field === 'body_en' ? 'Optional: an English version when the member asks for one.' : null])
+        <button type="button" class="contract-editor__preview-toggle" data-contract-preview-toggle="{{ $field }}"><i data-lucide="eye"></i> Preview with sample data</button>
+        <div class="contract-preview contract-body" dir="{{ $dir }}" data-contract-preview="{{ $field }}" hidden></div>
+    </div>
 @endforeach
 
 <div class="form-section mt-8">Units <span class="message-units-count" data-contract-units-count></span></div>

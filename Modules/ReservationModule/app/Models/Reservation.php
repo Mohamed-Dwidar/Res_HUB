@@ -849,6 +849,11 @@ class Reservation extends Model implements Payable
             }
         }
 
+        // subscriptions with / without a contract (ContractModule, 2026-11-25)
+        if (!empty($filters['contract'])) {
+            app(\Modules\ContractModule\app\Services\ContractService::class)->filterReservations($query, $filters['contract']);
+        }
+
         // ranges (not whereDate) so the start_at index can be used
         if (!empty($filters['date_from'])) {
             $query->where('start_at', '>=', Carbon::parse($filters['date_from'])->startOfDay());

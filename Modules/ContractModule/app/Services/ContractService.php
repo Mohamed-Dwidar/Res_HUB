@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Modules\AccountModule\app\Models\Account;
 use Modules\ContractModule\app\Models\Contract;
+use Modules\ContractModule\app\Models\ContractEvent;
 use Modules\ContractModule\app\Models\ContractSetting;
 use Modules\ContractModule\app\Models\ContractTemplate;
 use Modules\ContractModule\app\Repositories\ContractRepository;
@@ -43,6 +44,9 @@ class ContractService
     const BODIES = ['body_ar', 'body_en', 'renewal_body_ar', 'renewal_body_en'];
 
     const ID_TYPES_AR = ['national_id' => 'بطاقة رقم قومي', 'passport' => 'جواز سفر'];
+
+    // a contract's own value in the shape of its column (Arabic letters pasted from a PDF → normal letters, plainArabic())
+    const TENANT_FIELDS = ['tenant_name', 'tenant_representative', 'tenant_title', 'tenant_national_id', 'tenant_commercial_register', 'tenant_tax_number', 'tenant_mobile', 'tenant_email'];
 
     const LEASE_PERIODS_AR = ['hour' => 'ساعة', 'day' => 'يوم', 'week' => 'أسبوع', 'month' => 'شهر', 'year' => 'سنة'];
 
@@ -77,7 +81,7 @@ class ContractService
     public function saveSettings(int $accountId, array $data): ContractSetting
     {
         $settings = $this->settings($accountId);
-        $settings->fill($data)->save();
+        $settings->fill(array_map(fn ($value) => is_string($value) ? self::plainArabic($value) : $value, $data))->save();
         unset(self::$settings[$accountId]);
         return $settings;
     }
@@ -97,10 +101,10 @@ class ContractService
         return self::$templates[$accountId];
     }
 
-    // the unit's template (on or off), null = none
-    public function unitTemplate(int $accountId, int $unitId): ?ContractTemplate
+    // the unit's template of that type (on or off), null = none
+    public function unitTemplate(int $accountId, int $unitId, string $kind = 'contract'): ?ContractTemplate
     {
-        return $unitId ? $this->templates($accountId)->first(fn ($template) => in_array($unitId, $template->unit_ids, true)) : null;
+        return $unitId ? $this->templates($accountId)->first(fn ($template) => ($template->kind ?: 'contract') === $kind && in_array($unitId, $template->unit_ids, true)) : null;
     }
 
     // 404 when the template belongs to another account
@@ -119,6 +123,7 @@ class ContractService
         $original = $this->findTemplate($accountId, $id);
         return new ContractTemplate([
             'name' => mb_substr($original->name . ' (copy)', 0, 100),
+            'kind' => $original->kind,
             'title_ar' => $original->title_ar,
             'title_en' => $original->title_en,
             'body_ar' => $original->body_ar,
@@ -132,7 +137,7 @@ class ContractService
 
     public function createTemplate(int $accountId, array $data, Model $creator): ContractTemplate
     {
-        return $this->saveTemplate($accountId, new ContractTemplate(['account_id' => $accountId]), $data, $creator);
+        return $this->saveTemplate($accountId, new ContractTemplate(['account_id' => $accountId, 'kind' => ($data['kind'] ?? 'contract') === 'renewal' ? 'renewal' : 'contract']), $data, $creator);
     }
 
     public function updateTemplate(int $accountId, $id, array $data): ContractTemplate
@@ -159,7 +164,8 @@ class ContractService
     private function saveTemplate(int $accountId, ContractTemplate $template, array $data, ?Model $creator = null): ContractTemplate
     {
         $bodies = [];
-        foreach (self::BODIES as $field) {
+        // only the texts the form sent (2026-11-25: the template page has no renewal annex editors any more; an old annex text stays)
+        foreach (array_filter(self::BODIES, fn ($field) => $field === 'body_ar' || array_key_exists($field, $data)) as $field) {
             $bodies[$field] = self::sanitize($data[$field] ?? null) ?: null;
             if ($unknown = self::unknownPlaceholders($bodies[$field])) {
                 throw ValidationException::withMessages([$field => self::unknownMessage($unknown)]);
@@ -172,7 +178,7 @@ class ContractService
         DB::transaction(function () use ($accountId, $template, $data, $creator, $bodies) {
             ContractTemplate::where('account_id', $accountId)->lockForUpdate()->pluck('id');
             $unitIds = $this->accountUnitIds($accountId, $data['units'] ?? []);
-            if ($error = $this->templateUnitsError($accountId, $unitIds, $template->id)) {
+            if ($error = $this->templateUnitsError($accountId, $unitIds, $template->id, $template->kind ?: 'contract')) {
                 throw ValidationException::withMessages(['units' => $error]);
             }
             $template->fill($bodies + [
@@ -189,7 +195,8 @@ class ContractService
             // the deleted units' rows stay (a restored unit keeps its template)
             DB::table('contract_template_unit')->where('contract_template_id', $template->id)
                 ->whereIn('unit_id', Unit::where('account_id', $accountId)->select('id'))->delete();
-            DB::table('contract_template_unit')->insert(array_map(fn ($unitId) => ['contract_template_id' => $template->id, 'unit_id' => $unitId, 'account_id' => $accountId], $unitIds));
+            DB::table('contract_template_unit')->insert(array_map(fn ($unitId) => ['contract_template_id' => $template->id, 'unit_id' => $unitId,
+                'kind' => $template->kind ?: 'contract', 'account_id' => $accountId], $unitIds));
         });
         unset(self::$templates[$accountId]);
         return $template;
@@ -206,13 +213,13 @@ class ContractService
      * The template form's check: the units that already have another template (one per unit), null = none.
      * 'Office 3 (Private Office) already has "Office rental".'
      */
-    public function templateUnitsError(int $accountId, array $unitIds, ?int $exceptId = null): ?string
+    public function templateUnitsError(int $accountId, array $unitIds, ?int $exceptId = null, string $kind = 'contract'): ?string
     {
         if (!$unitIds) {
             return null;
         }
         $taken = DB::table('contract_template_unit')->join('contract_templates', 'contract_templates.id', '=', 'contract_template_unit.contract_template_id')
-            ->where('contract_template_unit.account_id', $accountId)->whereNull('contract_templates.deleted_at')
+            ->where('contract_template_unit.account_id', $accountId)->where('contract_template_unit.kind', $kind)->whereNull('contract_templates.deleted_at')
             ->when($exceptId, fn ($query) => $query->where('contract_templates.id', '!=', $exceptId))
             ->whereIn('contract_template_unit.unit_id', $unitIds)->get(['contract_template_unit.unit_id', 'contract_templates.name'])->keyBy('unit_id');
         if ($taken->isEmpty()) {
@@ -220,13 +227,13 @@ class ContractService
         }
         $units = Unit::whereIn('id', $taken->keys())->with('space')->get();
         return $units->map(fn ($unit) => $unit->name . ' (' . $unit->space?->name . ') already has "' . $taken[$unit->id]->name . '".')
-            ->push('A unit has one contract template: untick these units, or choose another template for them from that template / the unit form first.')->implode(' ');
+            ->push('A unit has one ' . strtolower(ContractTemplate::KINDS[$kind] ?? 'contract') . ' template: untick these units, or choose another template for them from that template / the unit form first.')->implode(' ');
     }
 
     // the unit form's check: the chosen template is one of the account's, null = fine (none chosen = no contracts for the unit)
-    public function unitTemplateError(int $accountId, $templateId): ?string
+    public function unitTemplateError(int $accountId, $templateId, string $kind = 'contract'): ?string
     {
-        return $templateId && !$this->templateRepository->forAccount($accountId)->whereKey((int) $templateId)->exists()
+        return $templateId && !$this->templateRepository->forAccount($accountId)->where('kind', $kind)->whereKey((int) $templateId)->exists()
             ? 'The chosen contract template was not found, reload the page.' : null;
     }
 
@@ -234,26 +241,26 @@ class ContractService
      * The unit form's save (UnitService create / update, inside its transaction): the unit's template = $templateId (null = none;
      * the account's templates locked while checking, 422 under contract_template_id).
      */
-    public function syncUnitTemplate(int $accountId, int $unitId, $templateId): void
+    public function syncUnitTemplate(int $accountId, int $unitId, $templateId, string $kind = 'contract'): void
     {
         ContractTemplate::where('account_id', $accountId)->lockForUpdate()->pluck('id');
-        if ($error = $this->unitTemplateError($accountId, $templateId)) {
-            throw ValidationException::withMessages(['contract_template_id' => $error]);
+        if ($error = $this->unitTemplateError($accountId, $templateId, $kind)) {
+            throw ValidationException::withMessages([$kind === 'renewal' ? 'renewal_template_id' : 'contract_template_id' => $error]);
         }
-        DB::table('contract_template_unit')->where('unit_id', $unitId)->where('account_id', $accountId)->delete();
+        DB::table('contract_template_unit')->where('unit_id', $unitId)->where('account_id', $accountId)->where('kind', $kind)->delete();
         if ($templateId) {
-            DB::table('contract_template_unit')->insert(['contract_template_id' => (int) $templateId, 'unit_id' => $unitId, 'account_id' => $accountId]);
+            DB::table('contract_template_unit')->insert(['contract_template_id' => (int) $templateId, 'unit_id' => $unitId, 'kind' => $kind, 'account_id' => $accountId]);
         }
         unset(self::$templates[$accountId]);
     }
 
     // the unit form's select: [id => name (Off)] + the chosen id
-    public function unitFormData(int $accountId, ?int $unitId): array
+    public function unitFormData(int $accountId, ?int $unitId, string $kind = 'contract'): array
     {
-        $templates = $this->templates($accountId);
+        $templates = $this->templates($accountId)->filter(fn ($template) => ($template->kind ?: 'contract') === $kind);
         return [
             'options' => $templates->mapWithKeys(fn ($template) => [$template->id => $template->name . ($template->is_enabled ? '' : ' (Off)')])->all(),
-            'selected' => $unitId ? $this->unitTemplate($accountId, $unitId)?->id : null,
+            'selected' => $unitId ? $this->unitTemplate($accountId, $unitId, $kind)?->id : null,
         ];
     }
 
@@ -266,11 +273,11 @@ class ContractService
     }
 
     // the template form's hints: {unit id: "other template's name"} (custom.js marks them; the save refuses them)
-    public function unitsTaken(int $accountId, ?int $exceptId = null): array
+    public function unitsTaken(int $accountId, ?int $exceptId = null, string $kind = 'contract'): array
     {
         $taken = [];
         foreach ($this->templates($accountId) as $template) {
-            if ($template->id !== $exceptId) {
+            if ($template->id !== $exceptId && ($template->kind ?: 'contract') === $kind) {
                 foreach ($template->unit_ids as $unitId) {
                     $taken[$unitId] = $template->name;
                 }
@@ -334,11 +341,13 @@ class ContractService
         return 'Unknown placeholder(s): {' . implode('}, {', $unknown) . '}. Use the ones listed under the texts.';
     }
 
-    // {name} → its value, HTML-escaped (the text is HTML); an unknown {name} stays as typed
+    // {name} → its value, HTML-escaped (the text is HTML); an unknown {name} stays as typed; a date / number / Latin value is kept
+    // left to right (LRE … PDF marks: inside an Arabic line its parts would be reordered)
     public static function render(?string $html, array $variables): string
     {
         return preg_replace_callback('/\{(\w+)\}/u', fn ($match) => array_key_exists($match[1], $variables)
-            ? e($variables[$match[1]]) : $match[0], (string) $html);
+            ? (preg_match('/^(?=.*\d)[\x20-\x7E]+$/', (string) $variables[$match[1]]) ? "\u{202A}" . e($variables[$match[1]]) . "\u{202C}" : e($variables[$match[1]]))
+            : $match[0], (string) $html);
     }
 
     /**
@@ -357,16 +366,22 @@ class ContractService
         $ar = $lang === 'ar';
         $local = fn ($model, $field) => $model ? (string) (($ar ? $model->{$field . '_ar'} : $model->{$field . '_en'}) ?: ($model->{$field . '_ar'} ?: $model->{$field . '_en'})) : '';
         $format = Reservation::DATE_FORMAT;
-        $price = $reservation->dueAmount();
+        // before tax (2026-11-25): the taxes are never part of the contract value
+        $price = self::netPrice($reservation);
         $leasePeriod = (string) $reservation->plan?->lease_period;
         $months = $contract['term_months'] ?? null;
         $start = $contract['start_date'] ?? $reservation->start_at;
         $end = $contract['end_date'] ?? ($months && $start ? $start->copy()->addMonthsNoOverflow($months)->subDay() : $reservation->realEnd());
-        $termAmount = $months && $leasePeriod === 'month' ? $price * $months : ($months && $leasePeriod === 'year' ? $price * $months / 12 : $price);
+        $termAmount = self::termAmount($reservation, $months);
+        $length = $months ?: self::leaseMonths($reservation, $start, $end);
         $taxed = $reservation->isTaxed();
         $money = fn ($amount) => number_format((float) $amount, 2);
         $idType = $member?->national_number ? ($member->id_type ?: 'national_id') : null;
         $own = $contract['fields'] ?? $this->fieldDefaults($reservation, $months);
+        // the lessor: the contract's own, else (never set) the settings'; an English PDF keeps the settings' English name
+        foreach ($this->lessorDefaults($accountId) as $field => $default) {
+            $own[$field] ??= $default;
+        }
         $text = fn ($field) => trim((string) ($own[$field] ?? ''));
         $date = fn ($value) => $value ? \Illuminate\Support\Carbon::parse($value)->format($format) : '';
 
@@ -375,11 +390,12 @@ class ContractService
             'contract_date' => ($contract['contract_date'] ?? now())->format($format),
             'start_date' => (string) $start?->format($format),
             'end_date' => (string) $end?->format($format),
-            'term' => $months ? self::term($months, $lang) : (string) $reservation->period,
+            'term' => $length ? self::term($length, $lang) : (string) $reservation->period,
             'activity' => (string) ($contract['activity'] ?? ''),
             'deposit' => isset($contract['deposit']) && $contract['deposit'] !== null ? $money($contract['deposit']) : '',
             'previous_contract_no' => (string) ($contract['previous_contract_no'] ?? ''),
             'previous_contract_date' => (string) ($contract['previous_contract_date'] ?? ''),
+            'original_contract_date' => (string) ($contract['original_contract_date'] ?? ''),
 
             'lessor_name' => (string) (($ar ? $settings->lessor_name_ar : $settings->lessor_name_en) ?: ($settings->lessor_name_ar ?: $settings->lessor_name_en)),
             'lessor_phone' => (string) $account?->phone,
@@ -437,7 +453,7 @@ class ContractService
             'currency' => $text('currency'),
             'tenant_name' => $text('tenant_name'),
             'tenant_representative' => $text('tenant_representative'),
-            'tenant_company' => $text('tenant_company'),
+            'tenant_company' => $text('tenant_company') ?: (($contract['party_type'] ?? '') === 'company' ? $text('tenant_name') : ''),
             'tenant_title' => $text('tenant_title'),
             'tenant_national_id' => $text('tenant_national_id'),
             'tenant_mobile' => $text('tenant_mobile'),
@@ -452,52 +468,124 @@ class ContractService
             'member_phone' => $text('tenant_mobile'),
             'member_email' => $text('tenant_email'),
             'member_id_number' => $text('tenant_national_id'),
-            'company_name' => $text('tenant_company'),
+            'company_name' => $text('tenant_company') ?: (($contract['party_type'] ?? '') === 'company' ? $text('tenant_name') : ''),
             'company_representative' => $text('tenant_representative'),
             'company_representative_title' => $text('tenant_title'),
+            // 2026-11-25
+            'contract_value_label' => $ar ? ['قيمة العقد', 1 => 'قيمة العقد الشهرية', 12 => 'قيمة العقد السنوية'][in_array($length, [1, 12], true) ? $length : 0]
+                : ['Contract value', 1 => 'Monthly contract value', 12 => 'Annual contract value'][in_array($length, [1, 12], true) ? $length : 0],
+            'contract_value_period' => ($ar ? [1 => 'شهريا', 12 => 'سنويا'] : [1 => 'per month', 12 => 'per year'])[$length] ?? '',
+            'tenant_commercial_register' => $text('tenant_commercial_register'),
+            'tenant_tax_number' => $text('tenant_tax_number'),
+            'company_commercial_register' => $text('tenant_commercial_register'),
+            'company_tax_number' => $text('tenant_tax_number'),
+            'lessor_name' => !$ar && $settings->lessor_name_en && $text('lessor_name') === self::plainArabic($settings->lessor_name_ar) ? (string) $settings->lessor_name_en : $text('lessor_name'),
+            'lessor_commercial_register' => $text('lessor_commercial_register'),
+            'lessor_tax_number' => $text('lessor_tax_number'),
+            'lessor_representative' => $text('lessor_representative'),
+            'lessor_representative_title' => $text('lessor_representative_title'),
+            'lessor_representative_national_id' => $text('lessor_representative_national_id'),
         ]);
     }
 
+    // the lessor as Settings › Contracts has it (a new contract's own lessor fields)
+    public function lessorDefaults(int $accountId): array
+    {
+        $settings = $this->settings($accountId);
+        return array_map(fn ($value) => (string) self::plainArabic($value), [
+            'lessor_name' => $settings->lessor_name_ar ?: $settings->lessor_name_en,
+            'lessor_commercial_register' => $settings->commercial_register,
+            'lessor_tax_number' => $settings->tax_number,
+            'lessor_representative' => $settings->representative_name,
+            'lessor_representative_title' => $settings->representative_title,
+            'lessor_representative_national_id' => $settings->representative_national_id,
+        ]);
+    }
+
+    // Arabic copied from a PDF comes as presentation forms (ﺷﻘﻪ): back to normal letters (شقه), so it prints and is searched
+    public static function plainArabic(?string $text): ?string
+    {
+        return $text === null ? null : preg_replace_callback('/[\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFC}]+/u',
+            fn ($match) => \Normalizer::normalize($match[0], \Normalizer::FORM_KC) ?: $match[0], $text);
+    }
+
+    // the reservation's price before tax (2026-11-25): the net of its tax snapshot when an invoice is requested, else its net
+    public static function netPrice(Reservation $reservation): float
+    {
+        return round((float) ($reservation->isTaxed() ? $reservation->tax_net : $reservation->net_amount), 2);
+    }
+
+    // the length in months of a contract without a term of its own, by the plan's lease period and the dates (365 days of a year
+    // plan = 12, 1,095 = 36; 30 days of a month plan = 1); null = another lease period
+    public static function leaseMonths(Reservation $reservation, $start, $end): ?int
+    {
+        $lease = (string) $reservation->plan?->lease_period;
+        if (!in_array($lease, ['month', 'year'], true) || !$start || !$end) {
+            return null;
+        }
+        $days = (int) round($start->copy()->startOfDay()->diffInDays($end->copy()->startOfDay())) + 1;
+        return $lease === 'year' ? max(1, (int) round($days / 365)) * 12 : max(1, (int) round($days / 30.4));
+    }
+
     /**
-     * The contract's own data pre-filled (a new draft; the template page's preview): unit number = the unit's name, contract date =
-     * the business date, duration = the term in words, value = the price for the term + the default currency, the tenant = the
-     * member (+ the member's company and its representative), unit address = Settings › Contracts' property address.
+     * The contract's own data pre-filled (a new draft; the template page's preview): unit number = the reservation's Unit no. (none:
+     * the unit's name, empty for a shared unit such as Virtual Office), contract date = today (emptied = the issue date), duration in words
+     * (the term / the plan), value = the price BEFORE TAX for the term + the default currency, the lessor = Settings › Contracts,
+     * the tenant = the member's contract data (legal name, else the company when it has legal data, else the member), unit address =
+     * the property address, activity = the member's, notes "لا توجد".
+     * A company without legal data ("Other", "Freelancer" …) is never printed.
      */
     public function fieldDefaults(Reservation $reservation, ?int $months): array
     {
         $member = $reservation->member;
-        $company = $member && $member->company_id ? $member->company : null;
+        $company = $member ? self::legalCompany($member) : null;
         $settings = $this->settings((int) $reservation->account_id);
         $unit = $reservation->unit;
-        return [
-            'unit_number' => (string) ($unit?->name_ar ?: $unit?->name_en),
+        $length = $months ?: self::leaseMonths($reservation, $reservation->start_at, $reservation->realEnd());
+        $mobiles = array_filter([(string) $member?->phone, (string) $member?->other_phone], fn ($phone) => $phone !== '');
+        return $this->lessorDefaults((int) $reservation->account_id) + [
+            // the unit number belongs to the contract (user 2026-11-25): a numbered unit = the suggested free number (suggestNumber()); a
+            // shared unit without numbering = typed on the contract; else the unit's name
+            'unit_number' => (string) ($this->suggestNumber($unit) ?? ((int) $unit?->concurrent_usage > 1 ? '' : ($unit?->name_ar ?: $unit?->name_en))),
             'contract_date' => (Account::settingsOf((int) $reservation->account_id)?->businessDate() ?? now())->format('Y-m-d'),
-            'duration_text' => $months ? self::term($months) : '',
+            'duration_text' => $length ? self::term($length) : '',
             'term_amount' => self::termAmount($reservation, $months),
             'currency' => (string) config('contractmodule.currency'),
-            'tenant_name' => (string) $member?->name,
-            'tenant_representative' => (string) ($company?->representative_name ?: $member?->name),
-            'tenant_company' => (string) ($company ? ($company->name_ar ?: $company->name_en) : ''),
-            'tenant_title' => (string) $company?->representative_title,
-            'tenant_national_id' => (string) $member?->national_number,
-            'tenant_mobile' => (string) $member?->phone,
+            'tenant_name' => (string) ($member?->legal_name ?: ($company ? ($company->name_ar ?: $company->name_en) : $member?->name)),
+            'tenant_representative' => (string) ($member?->representative_name ?: ($company?->representative_name ?: $member?->name)),
+            'tenant_title' => (string) ($member?->representative_title ?: $company?->representative_title),
+            'tenant_national_id' => (string) ($member?->national_number ?: $company?->representative_national_id),
+            'tenant_commercial_register' => (string) ($member?->commercial_register ?: $company?->commercial_register),
+            'tenant_tax_number' => (string) ($member?->tax_number ?: $company?->tax_number),
+            'tenant_mobile' => implode(' - ', $mobiles),
             // a stored email that is not one ("--" in old data) is not offered: the page would refuse it
             'tenant_email' => filter_var((string) $member?->email, FILTER_VALIDATE_EMAIL) ? (string) $member->email : '',
-            'unit_address' => (string) ($settings->property_address_ar ?: $settings->property_address_en),
-            'activity' => '',
+            'unit_address' => (string) self::plainArabic($settings->property_address_ar ?: $settings->property_address_en),
+            'activity' => (string) $member?->activity,
             'deposit_amount' => null,
-            'notes' => '',
+            'notes' => (string) config('contractmodule.notes'),
         ];
     }
 
-    // 1 → شهر واحد / 1 month, 2 → شهران, 3–10 → 3 أشهر, 11+ → 12 شهرًا
+    // the member's company when it has legal data (a commercial register / a representative), else null
+    private static function legalCompany(Member $member): ?\Modules\CompanyModule\app\Models\Company
+    {
+        $company = $member->company_id ? $member->company : null;
+        return $company && ($company->commercial_register || $company->representative_name) ? $company : null;
+    }
+
+    // 1 → شهر, 2 → شهران, 3–10 → 3 أشهر, 11+ → 18 شهرًا; whole years: سنة ميلادية, سنتان ميلاديتان, 3 سنوات ميلادية (custom.js the same)
     public static function term(int $months, string $lang = 'ar'): string
     {
+        $years = $months % 12 === 0 ? intdiv($months, 12) : 0;
         if ($lang !== 'ar') {
-            return $months . ' ' . ($months === 1 ? 'month' : 'months');
+            return $years ? $years . ' ' . ($years === 1 ? 'year' : 'years') : $months . ' ' . ($months === 1 ? 'month' : 'months');
         }
         return match (true) {
-            $months === 1 => 'شهر واحد',
+            $years === 1 => 'سنة ميلادية',
+            $years === 2 => 'سنتان ميلاديتان',
+            $years > 0 => $years . ($years <= 10 ? ' سنوات ميلادية' : ' سنة ميلادية'),
+            $months === 1 => 'شهر',
             $months === 2 => 'شهران',
             $months <= 10 => $months . ' أشهر',
             default => $months . ' شهرًا',
@@ -518,7 +606,8 @@ class ContractService
             return [];
         }
         $contract = ['contract_no' => $this->settings($accountId)->number_start, 'term_months' => 12,
-            'previous_contract_no' => max(1, $this->settings($accountId)->number_start - 1), 'previous_contract_date' => now()->subYear()->format(Reservation::DATE_FORMAT)];
+            'previous_contract_no' => max(1, $this->settings($accountId)->number_start - 1), 'previous_contract_date' => now()->subYear()->format(Reservation::DATE_FORMAT),
+            'original_contract_date' => now()->subYear()->format(Reservation::DATE_FORMAT)];
         return ['ar' => $this->variables($reservation, 'ar', $contract), 'en' => $this->variables($reservation, 'en', $contract)];
     }
 
@@ -550,15 +639,76 @@ class ContractService
     {
         return self::$contracts[$accountId] ??= Contract::where('account_id', $accountId)->where('status', '!=', 'cancelled')
             ->where('member_id', '>', 0)->where('unit_id', '>', 0)->orderByDesc('starts_on')->orderByDesc('id')
-            ->get(['id', 'account_id', 'contract_no', 'kind', 'renewal_of', 'status', 'member_id', 'unit_id', 'starts_on', 'ends_on', 'creatable_type', 'creatable_id'])
+            ->get(['id', 'account_id', 'contract_no', 'kind', 'renewal_of', 'status', 'reservation_id', 'member_id', 'unit_id', 'unit_number', 'starts_on', 'ends_on', 'ended_on', 'creatable_type', 'creatable_id'])
             ->groupBy(fn ($contract) => $contract->member_id . '-' . $contract->unit_id);
     }
 
     /**
-     * The contract state of a reservation (its view's Contract block, the reservations list row menu), by its start day:
-     * ['state' => 'covered', 'contract'] = a not cancelled contract of the member + unit whose term holds it (any template state);
-     * else only when its unit has a switched on template: ['state' => 'ended', 'contract' => the last issued one before it,
-     * 'template'] (→ Renew contract) | ['state' => 'none', 'template'] (→ Create contract); null = no contract button.
+     * The not cancelled contract covering the reservation (2026-11-25): made from it, or of its member + unit with a term holding its
+     * start day; a member with two places of a shared unit (two contracts on those dates): the one whose reservation is in this period's
+     * renewal chain (the unit number belongs to the contract, not to the reservation; user 2026-11-25).
+     * One query per request (accountContracts()); filterReservations() = the same rule in SQL.
+     */
+    public function coveringContract(Reservation $reservation): ?Contract
+    {
+        if (!$reservation->member_id || !$reservation->unit_id || !$reservation->start_at) {
+            return null;
+        }
+        $date = $reservation->start_at->copy()->startOfDay();
+        $contracts = $this->accountContracts((int) $reservation->account_id)->get($reservation->member_id . '-' . $reservation->unit_id, collect());
+        return $contracts->first(fn ($contract) => (int) $contract->reservation_id === (int) $reservation->id)
+            ?? self::ofChain($reservation, $contracts->filter(fn ($contract) => $contract->starts_on->lte($date) && $contract->covers_until->gte($date))->values());
+    }
+
+    // of several candidate contracts, the one made from this reservation's renewal chain (its earlier periods); one candidate = it
+    private static function ofChain(Reservation $reservation, Collection $candidates): ?Contract
+    {
+        if ($candidates->count() <= 1) {
+            return $candidates->first();
+        }
+        $chain = [];
+        for ($row = $reservation, $steps = 0; $row && $steps < 60; $steps++) {
+            $chain[] = (int) $row->id;
+            $row = $row->renewal_of ? Reservation::withTrashed()->select(['id', 'renewal_of'])->find($row->renewal_of) : null;
+        }
+        return $candidates->first(fn ($contract) => in_array((int) $contract->reservation_id, $chain, true)) ?? $candidates->first();
+    }
+
+    // a unit number as compared: "V 138" = "v-138" = "V138"
+    private static function numberKey(?string $value): string
+    {
+        return mb_strtoupper(str_replace([' ', '-', '.'], '', (string) $value));
+    }
+
+    /**
+     * The reservations list "Contract" filter (2026-11-25): counted subscriptions with a covering contract | the current ones (not
+     * ended by the business date, not left) without one. The coveringContract() rule in SQL.
+     */
+    public function filterReservations($query, string $filter): void
+    {
+        if (!in_array($filter, ['with', 'without'], true)) {
+            return;
+        }
+        $covering = fn ($sub) => $sub->selectRaw('1')->from('contracts')->whereNull('contracts.deleted_at')->where('contracts.status', '!=', 'cancelled')
+            ->whereColumn('contracts.account_id', 'reservations.account_id')->whereColumn('contracts.member_id', 'reservations.member_id')
+            ->whereColumn('contracts.unit_id', 'reservations.unit_id')->where('contracts.unit_id', '>', 0)->where('contracts.member_id', '>', 0)
+            ->whereRaw("(contracts.reservation_id = reservations.id OR (contracts.starts_on <= DATE(reservations.start_at) AND LEAST(contracts.ends_on, COALESCE(contracts.ended_on, contracts.ends_on)) >= DATE(reservations.start_at)))");
+        $query->counted()->whereIn('reservations.subscription_type_id', SubscriptionType::idsOf('period') ?: [0]);
+        if ($filter === 'with') {
+            $query->whereExists($covering);
+        } else {
+            $query->whereNotExists($covering)->whereNull('reservations.left_at')->where('reservations.end_at', '>=', Reservation::businessToday()[0]);
+        }
+    }
+
+    /**
+     * The contract state of a reservation (its view's Contract block, the reservations list row menu, the badge), by its start day:
+     * ['state' => 'covered', 'contract'] = a not cancelled contract / annex covers it (made from it, or its term holds the start; an
+     * ended one only up to its end date);
+     * ['state' => 'ended', 'contract' => the chain's last issued / signed contract before it, 'template' => the unit's renewal annex
+     * template (null = none switched on: no annex button)] → Renewal annex (Phase 3, 2026-11-25: only a chain WITH a contract gets one);
+     * ['state' => 'none', 'template'] → Create contract (the unit's contract template switched on; a renewed period without any
+     * contract = "No contract — issue a contract first"); null = nothing to offer.
      */
     public function reservationState(Reservation $reservation): ?array
     {
@@ -566,17 +716,55 @@ class ContractService
         if (!$reservation->member_id || !$reservation->unit_id || !$reservation->start_at) {
             return null;
         }
-        $date = $reservation->start_at->copy()->startOfDay();
-        $contracts = $this->accountContracts($accountId)->get($reservation->member_id . '-' . $reservation->unit_id, collect());
-        if ($covering = $contracts->first(fn ($contract) => $contract->starts_on->lte($date) && $contract->ends_on->gte($date))) {
+        if ($covering = $this->coveringContract($reservation)) {
             return ['state' => 'covered', 'contract' => $covering];
         }
-        $template = $this->unitTemplate($accountId, (int) $reservation->unit_id);
-        if (!$template || !$template->is_enabled) {
-            return null;
+        if ($previous = $this->previousContract($reservation)) {
+            return ['state' => 'ended', 'contract' => $previous, 'template' => $this->annexTemplate($accountId, (int) $reservation->unit_id)];
         }
-        $previous = $contracts->first(fn ($contract) => $contract->ends_on->lt($date) && $contract->status !== 'draft');
-        return $previous ? ['state' => 'ended', 'contract' => $previous, 'template' => $template] : ['state' => 'none', 'template' => $template];
+        $template = $this->unitTemplate($accountId, (int) $reservation->unit_id);
+        return $template && $template->is_enabled ? ['state' => 'none', 'template' => $template] : null;
+    }
+
+    // the chain's last issued / signed contract or annex of the member's unit ending before the period starts (two places of a shared
+    // unit: the one of this period's renewal chain); an ended (terminated) or cancelled one closes the chain
+    public function previousContract(Reservation $reservation): ?Contract
+    {
+        $date = $reservation->start_at->copy()->startOfDay();
+        $before = $this->accountContracts((int) $reservation->account_id)->get($reservation->member_id . '-' . $reservation->unit_id, collect())
+            ->filter(fn ($contract) => $contract->status !== 'draft' && $contract->ends_on->lt($date))->values();
+        // the newest one of each place (a place = its original contract's chain)
+        $last = self::ofChain($reservation, $before->unique(fn ($contract) => self::numberKey($contract->unit_number))->values());
+        return $last && in_array($last->status, ['issued', 'signed'], true) ? $last : null;
+    }
+
+    // the renewal annex template of a unit (switched on): its own "Renewal annex" template, else (old templates) its contract template
+    // when that one has an annex text; null = none
+    public function annexTemplate(int $accountId, int $unitId): ?ContractTemplate
+    {
+        $annex = $this->unitTemplate($accountId, $unitId, 'renewal');
+        if ($annex) {
+            return $annex->is_enabled ? $annex : null;
+        }
+        $contract = $this->unitTemplate($accountId, $unitId);
+        return $contract && $contract->is_enabled && $contract->renewal_body_ar ? $contract : null;
+    }
+
+    /**
+     * A contract with its annexes, oldest first (the original contract, then every annex renewing it or one of its annexes; cancelled
+     * ones too) — the timeline of the reservation view and the contract view.
+     */
+    public function chain(Contract $contract): Collection
+    {
+        $root = self::original($contract) ?? $contract;
+        $all = collect([$root]);
+        $ids = [$root->id];
+        for ($steps = 0; $ids && $steps < 50; $steps++) {
+            $children = Contract::where('account_id', $root->account_id)->whereIn('renewal_of', $ids)->get();
+            $all = $all->merge($children);
+            $ids = $children->pluck('id')->all();
+        }
+        return $all->unique('id')->sortBy(fn ($item) => [$item->starts_on->format('Ymd'), $item->id])->values();
     }
 
     // the reservations list row menu: Create / Renew contract, or the covering contract (view) — [] = nothing
@@ -586,7 +774,7 @@ class ContractService
         return match ($state['state'] ?? null) {
             // the draft page = a full page (its editors need room)
             'none' => [['label' => 'Create Contract', 'icon' => 'file-plus', 'url' => route($area . '.contracts.create', ['reservation_id' => $reservation->id])]],
-            'ended' => [['label' => 'Renew Contract', 'icon' => 'file-plus', 'url' => route($area . '.contracts.create', ['reservation_id' => $reservation->id])]],
+            'ended' => !empty($state['template']) ? [['label' => 'Renewal Annex', 'icon' => 'file-plus', 'url' => route($area . '.contracts.create', ['reservation_id' => $reservation->id])]] : [],
             'covered' => [['label' => 'Contract ' . $state['contract']->number_label, 'icon' => 'file-text', 'url' => route($area . '.contracts.show', $state['contract']->id), 'modal' => true],
                 ['label' => 'Contract PDF (AR)', 'icon' => 'file-down', 'url' => route($area . '.contracts.pdf', ['id' => $state['contract']->id, 'lang' => 'ar']), 'blank' => true]],
             default => [],
@@ -601,7 +789,7 @@ class ContractService
 
     /**
      * The draft form of a reservation: what it will be (kind, the previous contract of a renewal, the template) + the defaults
-     * (term from the template's default_term_months, else the reservation's own period; a renewal starts the day after the previous
+     * (term from the template's default_term_months, else a year / month by the subscription's plan; a renewal starts the day after the previous
      * contract and keeps its party, deposit, activity). 422 when the reservation can't get a contract (no template / covered).
      */
     public function draftFor(Reservation $reservation): array
@@ -610,22 +798,32 @@ class ContractService
         if (($state['state'] ?? null) === 'covered') {
             throw ValidationException::withMessages(['reservation_id' => 'This reservation is already covered by contract ' . $state['contract']->number_label . '.']);
         }
-        if (!$state) {
-            throw ValidationException::withMessages(['reservation_id' => 'This reservation\'s unit has no contract template switched on (Settings › Contracts).']);
+        if (!$state || empty($state['template'])) {
+            throw ValidationException::withMessages(['reservation_id' => ($state['state'] ?? null) === 'ended'
+                ? 'This unit has no renewal annex template switched on (Settings › Contracts).'
+                : 'This reservation\'s unit has no contract template switched on (Settings › Contracts).']);
         }
         $previous = $state['state'] === 'ended' ? Contract::find($state['contract']->id) : null;
         $template = $state['template'];
-        $startsOn = $previous ? $previous->ends_on->copy()->addDay() : $reservation->start_at->copy()->startOfDay();
-        $months = $template->default_term_months;
+        $startsOn = $reservation->start_at->copy()->startOfDay();
+        // the template's term (a contract template's), else the subscription's own: a year / a month by its plan (leaseMonths())
+        $templateMonths = $template->kind === 'renewal' ? null : $template->default_term_months;
+        $months = $templateMonths ?: self::leaseMonths($reservation, $reservation->start_at, $reservation->realEnd());
 
-        // the contract's own data: pre-filled from the member / company / settings; a renewal from the previous contract's (its
-        // dates, duration and value follow the new term, the contract date = today)
+        // the contract's own data: pre-filled from the member / company / settings; an annex (Phase 3, 2026-11-25) from the ORIGINAL
+        // contract (lessor, lessee, unit no., address, activity — as edited there): only the period, duration and value from the renewal,
+        // its date = the issue date
         $fields = $this->fieldDefaults($reservation, $months);
         if ($previous) {
-            foreach (['unit_number', 'currency', 'tenant_name', 'tenant_representative', 'tenant_company', 'tenant_title', 'tenant_national_id',
-                    'tenant_mobile', 'tenant_email', 'unit_address', 'activity', 'deposit_amount'] as $field) {
-                $fields[$field] = $previous->{$field};
+            $original = self::original($previous) ?? $previous;
+            foreach (array_merge(['currency', 'unit_number', 'unit_address', 'activity', 'deposit_amount'], self::TENANT_FIELDS, Contract::LESSOR_FIELDS) as $field) {
+                if ($original->{$field} !== null) {
+                    $fields[$field] = $original->{$field};
+                }
             }
+            // an old company contract: its company name is the tenant's name now
+            $fields['tenant_name'] = $original->party_type === 'company' ? ($original->tenant_company ?: $original->tenant_name) : $original->tenant_name;
+            $fields['contract_date'] = null;
         }
 
         return [
@@ -634,8 +832,9 @@ class ContractService
             'template' => $template,
             'starts_on' => $startsOn,
             'term_months' => $months,
-            'ends_on' => $this->termEnd($startsOn, $months, $reservation),
-            'party_type' => $previous?->party_type ?? (($fields['tenant_company'] ?? '') !== '' && $reservation->member?->company?->representative_name ? 'company' : 'individual'),
+            // the subscription's own term = its last day (a billing day may make it a day off start + months)
+            'ends_on' => $this->termEnd($startsOn, $templateMonths ? $months : null, $reservation),
+            'party_type' => isset($original) ? $original->party_type : (($fields['tenant_commercial_register'] ?? '') !== '' || ($reservation->member && !$reservation->member->legal_name && self::legalCompany($reservation->member)) ? 'company' : 'individual'),
         ] + $fields;
     }
 
@@ -645,15 +844,13 @@ class ContractService
         return $months ? $startsOn->copy()->addMonthsNoOverflow($months)->subDay() : ($reservation->realEnd() ?? $startsOn)->copy()->startOfDay();
     }
 
-    // the price for the whole term: a month plan × months, a year plan × months / 12, else the reservation's price
+    // the price for the whole term: the reservation's price ÷ its own months (leaseMonths()) × the term, else the reservation's price
+    // before tax (netPrice())
     public static function termAmount(Reservation $reservation, ?int $months): float
     {
-        $price = $reservation->dueAmount();
-        return round(match (true) {
-            $months && $reservation->plan?->lease_period === 'month' => $price * $months,
-            $months && $reservation->plan?->lease_period === 'year' => $price * $months / 12,
-            default => $price,
-        }, 2);
+        $price = self::netPrice($reservation);
+        $own = $months ? self::leaseMonths($reservation, $reservation->start_at, $reservation->realEnd()) : null;
+        return round($own ? $price * $months / $own : $price, 2);
     }
 
     /**
@@ -686,7 +883,7 @@ class ContractService
             $contract->creatable()->associate($creator);
             $contract->setRelation('template', $draft['template']);
             $contract->setRelation('previous', $draft['previous']);
-            $this->fillDraft($contract, $reservation, $data);
+            $this->fillDraft($contract, $reservation, $data, $creator);
             $this->setText($contract, $data);
             $contract->save();
             unset(self::$contracts[$accountId]);
@@ -695,14 +892,14 @@ class ContractService
     }
 
     // the draft page again (account + employees): term, party, deposit, activity, notes, its wording; never after issue
-    public function updateDraft(int $accountId, $id, array $data): Contract
+    public function updateDraft(int $accountId, $id, array $data, ?Model $by = null): Contract
     {
-        return DB::transaction(function () use ($accountId, $id, $data) {
+        return DB::transaction(function () use ($accountId, $id, $data, $by) {
             $contract = $this->contractRepository->forAccount($accountId)->lockForUpdate()->findOrFail($id);
             if (!$contract->isDraft()) {
                 throw ValidationException::withMessages(['status' => 'Only a draft can be edited: this contract is ' . strtolower($contract->status_label) . '.']);
             }
-            $this->fillDraft($contract, $this->findReservation($accountId, $contract->reservation_id), $data);
+            $this->fillDraft($contract, $this->findReservation($accountId, $contract->reservation_id), $data, $by);
             $this->setText($contract, $data);
             $contract->save();
             unset(self::$contracts[$accountId]);
@@ -712,8 +909,12 @@ class ContractService
 
     // the draft page's fields (the contract's own data; never the member / company unless "Also save to member / company"); the
     // term must not overlap another contract of the member's unit
-    private function fillDraft(Contract $contract, Reservation $reservation, array $data): void
+    private function fillDraft(Contract $contract, Reservation $reservation, array $data, ?Model $by = null): void
     {
+        // an annex (user 2026-11-25): the original contract's data and the renewal's period / amount, never what the page sent
+        if ($contract->isRenewal()) {
+            $data = array_merge($data, $this->annexData($contract, $reservation));
+        }
         $partyType = ($data['party_type'] ?? 'individual') === 'company' ? 'company' : 'individual';
         $months = ($data['term_months'] ?? null) ? (int) $data['term_months'] : null;
         $startsOn = \Illuminate\Support\Carbon::parse($data['starts_on'])->startOfDay();
@@ -723,17 +924,32 @@ class ContractService
         }
         $overlap = Contract::where('account_id', $contract->account_id)->where('member_id', $contract->member_id)->where('unit_id', $contract->unit_id)
             ->where('status', '!=', 'cancelled')->when($contract->exists, fn ($query) => $query->whereKeyNot($contract->id))
-            ->whereDate('starts_on', '<=', $endsOn)->whereDate('ends_on', '>=', $startsOn)->first();
+            ->whereDate('starts_on', '<=', $endsOn)->whereDate('ends_on', '>=', $startsOn)->get()
+            // a shared unit (Virtual Office): another unit number of the same member is another place = another contract
+            ->first(fn ($other) => (int) $reservation->unit?->concurrent_usage <= 1 || self::numberKey($other->unit_number) === '' || self::numberKey($data['unit_number'] ?? '') === ''
+                || self::numberKey($other->unit_number) === self::numberKey($data['unit_number'] ?? ''));
         if ($overlap) {
             throw ValidationException::withMessages(['starts_on' => 'Contract ' . $overlap->number_label . ' (' . $overlap->starts_on->format(Reservation::DATE_FORMAT) . ' → '
-                . $overlap->ends_on->format(Reservation::DATE_FORMAT) . ') already covers part of these dates for this member and unit.']);
+                . $overlap->ends_on->format(Reservation::DATE_FORMAT) . ') already covers part of these dates for this member and unit'
+                . ((int) $reservation->unit?->concurrent_usage > 1 ? ' (another place of the unit needs its own unit number on both contracts).' : '.')]);
+        }
+        // the unit number (2026-11-25): free in its unit (not held by another active chain); a numbered unit's suggestion = changed by the
+        // owner only (an annex keeps its contract's number: annexData())
+        if (!$contract->isRenewal()) {
+            $this->checkNumber($contract, $reservation, trim((string) ($data['unit_number'] ?? '')), $by);
+        }
+        // a contract has its date; an annex may leave it empty (= its issue date)
+        if (!$contract->isRenewal() && trim((string) ($data['contract_date'] ?? '')) === '') {
+            throw ValidationException::withMessages(['contract_date' => 'The contract date is required.']);
         }
         $member = $reservation->member;
-        $clean = fn ($field) => ($value = trim((string) ($data[$field] ?? ''))) === '' ? null : $value;
+        $clean = fn ($field) => ($value = trim((string) self::plainArabic($data[$field] ?? ''))) === '' ? null : $value;
 
         $contract->fill([
             'party_type' => $partyType,
-            'company_id' => $partyType === 'company' ? (int) ($member?->company_id ?? 0) : 0,
+            'company_id' => $partyType === 'company' && $member && self::legalCompany($member) ? (int) $member->company_id : 0,
+            // one tenant name since 2026-11-25 (tenant_name)
+            'tenant_company' => null,
             'starts_on' => $startsOn,
             'ends_on' => $endsOn,
             'term_months' => $months,
@@ -741,17 +957,71 @@ class ContractService
             'term_amount' => isset($data['contract_value']) && $data['contract_value'] !== '' ? round((float) $data['contract_value'], 2) : self::termAmount($reservation, $months),
             'deposit_amount' => isset($data['deposit_amount']) && $data['deposit_amount'] !== '' ? round((float) $data['deposit_amount'], 2) : null,
             'contract_date' => $clean('contract_date'),
-        ] + collect(['unit_number', 'duration_text', 'currency', 'tenant_name', 'tenant_representative', 'tenant_company', 'tenant_title',
-            'tenant_national_id', 'tenant_mobile', 'tenant_email', 'unit_address', 'activity', 'notes'])->mapWithKeys(fn ($field) => [$field => $clean($field)])->all());
+        ] + collect(array_merge(['unit_number', 'duration_text', 'currency', 'unit_address', 'activity', 'notes'], self::TENANT_FIELDS))->mapWithKeys(fn ($field) => [$field => $clean($field)])->all()
+            // '' = emptied on this contract; not sent = the settings' now
+            + collect($this->lessorDefaults((int) $contract->account_id))->map(fn ($default, $field) => array_key_exists($field, $data) ? (string) $clean($field) : ($contract->{$field} ?? $default))->all());
+        // the commercial register / tax card: a company only (the form hides them for an individual)
+        if ($partyType !== 'company') {
+            $contract->fill(['tenant_commercial_register' => null, 'tenant_tax_number' => null]);
+        }
         if (!empty($data['save_to_member'])) {
             $this->saveBack($member, $contract);
         }
     }
 
     /**
-     * "Also save to member / company" (unticked by default): the member's / company's EMPTY fields get what was typed on the contract
-     * (member: ID number when it is 5–20 letters / digits, email; the member's company: representative name + title). Nothing that
-     * is already filled is changed; the phone never (it is the member's key).
+     * The fixed data of a renewal annex (user 2026-11-25: not edited on the annex): lessor, lessee, unit number, address, activity,
+     * currency, deposit and the contract type from the ORIGINAL contract (as edited there; a lessor field never set = Settings ›
+     * Contracts); the period from the renewal reservation (its start → end; the term = the months between them) and its price before
+     * tax; the date = the issue date. Nothing of it is edited on the annex page (user 2026-11-25: it shows the annex text only).
+     * In the shape of the draft page's fields (fillDraft()).
+     */
+    public function annexData(Contract $contract, Reservation $reservation): array
+    {
+        $original = self::original($contract->previous) ?? $contract->previous;
+        // the renewal's own dates; the term = the months from its start to its end (365 days = سنة ميلادية, 30 = شهر)
+        $start = $reservation->start_at->copy()->startOfDay();
+        $end = ($reservation->realEnd() ?? $start)->copy()->startOfDay();
+        $months = max(1, (int) round(((int) round($start->diffInDays($end)) + 1) / 30.4));
+        $data = [
+            'starts_on' => $start->format('Y-m-d'),
+            'ends_on' => $end->format('Y-m-d'),
+            'term_months' => $months,
+            'duration_text' => $months ? self::term($months) : (string) $reservation->period,
+            'contract_value' => self::netPrice($reservation),
+            'contract_date' => null,
+            'notes' => (string) config('contractmodule.notes'),
+        ];
+        if (!$original) {
+            return $data;
+        }
+        $lessor = $this->lessorDefaults((int) $contract->account_id);
+        foreach (array_merge(['currency', 'unit_number', 'unit_address', 'activity', 'deposit_amount'], self::TENANT_FIELDS, Contract::LESSOR_FIELDS) as $field) {
+            $data[$field] = $original->{$field} ?? ($lessor[$field] ?? null);
+        }
+        $data['party_type'] = $original->party_type;
+        $data['tenant_name'] = $original->party_type === 'company' ? ($original->tenant_company ?: $original->tenant_name) : $original->tenant_name;
+        $data['save_to_member'] = false;
+        return $data;
+    }
+
+    // the annex page's text values (Arabic): the draft (or the saved annex) with annexData() applied, as it will print
+    public function annexPreview(Reservation $reservation, ?Contract $contract, ?array $draft): array
+    {
+        $contract ??= $this->draftContract($draft);
+        $contract->fill(array_intersect_key($this->annexData($contract, $reservation), array_flip(Contract::OWN_FIELDS))
+            + ['starts_on' => $reservation->start_at->copy()->startOfDay(), 'ends_on' => ($reservation->realEnd() ?? $reservation->start_at)->copy()->startOfDay()]);
+        $data = $this->annexData($contract, $reservation);
+        $contract->term_amount = $data['contract_value'];
+        $contract->duration_text = $data['duration_text'];
+        return $this->variables($reservation, 'ar', $this->contractVariables($contract));
+    }
+
+    /**
+     * "Also save to member" (unticked by default): the member's EMPTY fields get what was typed on the contract (ID number when it is
+     * 5–20 letters / digits, email, legal name / representative when they differ from the member's name, title, commercial register,
+     * tax card, activity); not what already comes from the member's company. Nothing that is already filled is changed; the phone
+     * never (it is the member's key).
      */
     private function saveBack(?Member $member, Contract $contract): void
     {
@@ -766,31 +1036,33 @@ class ContractService
         if (!$member->email && filter_var($contract->tenant_email, FILTER_VALIDATE_EMAIL)) {
             $member->email = $contract->tenant_email;
         }
+        $company = self::legalCompany($member);
+        $known = ['legal_name' => [$member->name, $company?->name_ar, $company?->name_en], 'representative_name' => [$member->name, $company?->representative_name],
+            'representative_title' => [$company?->representative_title], 'commercial_register' => [$company?->commercial_register], 'tax_number' => [$company?->tax_number], 'activity' => []];
+        foreach (['legal_name' => 'tenant_name', 'representative_name' => 'tenant_representative', 'representative_title' => 'tenant_title',
+                'commercial_register' => 'tenant_commercial_register', 'tax_number' => 'tenant_tax_number', 'activity' => 'activity'] as $field => $from) {
+            if (!$member->{$field} && $contract->{$from} && !in_array($contract->{$from}, $known[$field], true)) {
+                $member->{$field} = $contract->{$from};
+            }
+        }
         if ($member->isDirty()) {
             $member->save();
         }
-        $company = $member->company_id ? $member->company : null;
-        if ($company) {
-            if (!$company->representative_name && $contract->tenant_representative) {
-                $company->representative_name = $contract->tenant_representative;
-            }
-            if (!$company->representative_title && $contract->tenant_title) {
-                $company->representative_title = $contract->tenant_title;
-            }
-            if ($company->isDirty()) {
-                $company->save();
-            }
-        }
     }
 
-    // what is still missing to issue (the contract's own fields, 2026-11-01): an individual = tenant name + national ID; a company =
-    // company name + legal representative
+    // what is still missing to issue: the same fields as the draft page (Contract::REQUIRED_FIELDS; a draft saved before 2026-11-25
+    // may lack some); a lessor field never set = Settings › Contracts'
     public function missingToIssue(Contract $contract): array
     {
-        $required = $contract->party_type === 'company'
-            ? ['tenant_company' => 'the company name', 'tenant_representative' => 'the legal representative']
-            : ['tenant_name' => 'the tenant name', 'tenant_national_id' => 'the national ID'];
-        return array_values(array_filter($required, fn ($label, $field) => trim((string) $contract->{$field}) === '', ARRAY_FILTER_USE_BOTH));
+        $required = Contract::REQUIRED_FIELDS + ($contract->party_type === 'company' ? Contract::COMPANY_FIELDS : []);
+        // an annex: its date = the issue date when empty
+        if ($contract->isRenewal()) {
+            unset($required['contract_date']);
+        }
+        $lessor = $this->lessorDefaults((int) $contract->account_id);
+        $value = fn ($field) => $field === 'tenant_name' && $contract->party_type === 'company' && $contract->tenant_company
+            ? $contract->tenant_company : ($contract->{$field} ?? $lessor[$field] ?? '');
+        return array_values(array_filter($required, fn ($label, $field) => trim((string) $value($field)) === '', ARRAY_FILTER_USE_BOTH));
     }
 
     /**
@@ -820,6 +1092,10 @@ class ContractService
     {
         if (!$template) {
             return null;
+        }
+        // a renewal annex template's text is the annex; an (old) contract template: its annex text, else the full text
+        if ($template->kind === 'renewal') {
+            return $template->{'body_' . $lang} ?: null;
         }
         return ($contract->isRenewal() ? ($template->{'renewal_body_' . $lang} ?: $template->{'body_' . $lang}) : $template->{'body_' . $lang}) ?: null;
     }
@@ -870,7 +1146,105 @@ class ContractService
             'fields' => collect(Contract::OWN_FIELDS)->mapWithKeys(fn ($field) => [$field => $contract->{$field}])->all(),
             'previous_contract_no' => $previous?->contract_no,
             'previous_contract_date' => ($previous?->contract_date ?? $previous?->issued_at)?->format(Reservation::DATE_FORMAT),
+            'original_contract_date' => (($original = self::original($previous))?->contract_date ?? $original?->issued_at)?->format(Reservation::DATE_FORMAT),
         ];
+    }
+
+    /**
+     * Unit numbers (2026-11-25, user: on the CONTRACT): the numbers held in a unit = its chains (a contract + its annexes, one number)
+     * whose latest item is a draft / issued / signed — whatever the dates (an ended term still holds it until Mark left terminates it). [number key => the chain's latest contract], $except = a chain (its root id) left out.
+     */
+    public function heldNumbers(int $accountId, int $unitId, ?int $exceptRoot = null): Collection
+    {
+        $all = Contract::where('account_id', $accountId)->where('unit_id', $unitId)->get(['id', 'renewal_of', 'status', 'unit_number', 'tenant_name', 'tenant_company', 'party_type', 'member_id', 'contract_no', 'starts_on'])->keyBy('id');
+        $root = function ($contract) use ($all) {
+            for ($steps = 0; $contract->renewal_of && isset($all[$contract->renewal_of]) && $steps < 60; $steps++) {
+                $contract = $all[$contract->renewal_of];
+            }
+            return (int) $contract->id;
+        };
+        // a chain holds its number while its LATEST item is a draft / issued / signed (Mark left terminates the latest = the number is free)
+        return $all->filter(fn ($contract) => self::numberKey($contract->unit_number) !== '' && $contract->status !== 'cancelled')
+            ->groupBy(fn ($contract) => $root($contract))
+            ->reject(fn ($items, $chainRoot) => $exceptRoot !== null && (int) $chainRoot === $exceptRoot)
+            ->map(fn ($items) => $items->sortBy(fn ($contract) => [$contract->starts_on?->format('Ymd'), $contract->id])->last())
+            ->filter(fn ($latest) => in_array($latest->status, ['draft', 'issued', 'signed'], true))
+            ->keyBy(fn ($latest) => self::numberKey($latest->unit_number));
+    }
+
+    // the suggested number of a numbered unit (a prefix or a first number set): the lowest free one from the first number (else the
+    // lowest held, else 1) up to the highest held, else the highest + 1; null = the unit has no numbering
+    public function suggestNumber(?Unit $unit): ?string
+    {
+        if (!$unit || ((string) $unit->unit_no_prefix === '' && !$unit->unit_no_start)) {
+            return null;
+        }
+        $prefix = (string) $unit->unit_no_prefix;
+        $key = self::numberKey($prefix);
+        $used = $this->heldNumbers((int) $unit->account_id, (int) $unit->id)->keys()
+            ->filter(fn ($number) => $key === '' ? ctype_digit($number) : str_starts_with($number, $key) && ctype_digit(substr($number, strlen($key))))
+            ->map(fn ($number) => (int) substr($number, strlen($key)))->unique()->sort()->values();
+        $start = (int) ($unit->unit_no_start ?: ($used->first() ?: 1));
+        $max = (int) ($used->max() ?? ($start - 1));
+        for ($number = $start; $number <= $max; $number++) {
+            if (!$used->contains($number)) {
+                return $prefix . $number;
+            }
+        }
+        return $prefix . max($start, $max + 1);
+    }
+
+    // a draft contract's unit number: not held by another chain of its unit (422 with who holds it); on a numbered unit an employee
+    // keeps the suggested / saved number (the owner types any free one)
+    private function checkNumber(Contract $contract, Reservation $reservation, string $number, ?Model $by): void
+    {
+        $unit = $reservation->unit;
+        if ($number === '' || !$unit) {
+            return;
+        }
+        $holder = $this->heldNumbers((int) $contract->account_id, (int) $unit->id, $contract->exists ? (int) (self::original($contract) ?? $contract)->id : null)
+            ->get(self::numberKey($number));
+        if ($holder && (int) $holder->id !== (int) $contract->id) {
+            throw ValidationException::withMessages(['unit_number' => $number . ' is held by ' . ($holder->party_type === 'company' && $holder->tenant_company ? $holder->tenant_company : ($holder->tenant_name ?: 'member #' . $holder->member_id))
+                . ' (' . ($holder->contract_no ? 'contract #' . $holder->contract_no : 'a draft') . '). Choose a free number.']);
+        }
+        $suggested = $this->suggestNumber($unit);
+        $kept = $contract->exists ? self::numberKey($contract->getOriginal('unit_number')) : self::numberKey($suggested);
+        if ($suggested !== null && $by && !self::isOwner($by) && self::numberKey($number) !== $kept) {
+            throw ValidationException::withMessages(['unit_number' => 'Only the account owner can change the unit number (suggested: ' . ($contract->exists ? $contract->getOriginal('unit_number') : $suggested) . ').']);
+        }
+    }
+
+    // the original contract of a chain (the draft page's note)
+    public static function originalOf(?Contract $contract): ?Contract
+    {
+        return self::original($contract);
+    }
+
+    // the contract a chain of renewal annexes starts from ("التعاقد الأصلي")
+    private static function original(?Contract $contract): ?Contract
+    {
+        for ($steps = 0; $contract?->renewal_of && $steps < 50 && $contract->previous; $steps++) {
+            $contract = $contract->previous;
+        }
+        return $contract;
+    }
+
+    // printed as a renewal annex (the template's annex text: its own short layout) — not a renewal that prints the full contract text;
+    // an issued contract = as it was when issued (its snapshot)
+    public function isAnnex(Contract $contract, string $lang): bool
+    {
+        return $contract->isDraft()
+            ? $contract->isRenewal() && ($contract->template?->kind === 'renewal' ? (bool) $contract->template->{'body_' . $lang} : (bool) $contract->template?->{'renewal_body_' . $lang})
+            : (bool) ($contract->values['annex'][$lang] ?? false);
+    }
+
+    // the template's title, "ملحق تجديد …" for an annex
+    private function printedTitle(Contract $contract, string $lang, bool $annex): ?string
+    {
+        $title = $contract->template?->{'title_' . $lang} ?: $contract->{'title_' . $lang};
+        // a renewal annex template carries its own title ("ملحق تجديد …")
+        return $title && $annex && $contract->template?->kind !== 'renewal' ? ($lang === 'en' ? 'Renewal Annex: ' : 'ملحق تجديد ') . $title : $title;
     }
 
     /**
@@ -894,34 +1268,159 @@ class ContractService
             }
             $contract->load(['member.company', 'member.job', 'company', 'template', 'previous']);
             if ($missing = $this->missingToIssue($contract)) {
-                throw ValidationException::withMessages(['status' => 'To issue it, fill ' . implode(' and ', $missing) . ' on the contract (Edit Draft).']);
+                throw ValidationException::withMessages(['status' => 'To issue it, fill ' . implode(', ', $missing) . ' on the contract (Edit Draft).']);
             }
             if (!$this->sourceText($contract, 'ar')) {
                 throw ValidationException::withMessages(['status' => 'The contract has no Arabic text (its template\'s text is empty).']);
             }
             $reservation = $this->findReservation($accountId, $contract->reservation_id);
-            $number = max((int) $settings->number_start, (int) Contract::where('account_id', $accountId)->max('contract_no') + 1);
+            // a contract set back to draft keeps its number (unissue()); a deleted draft's number is not used again
+            $number = $contract->contract_no ?: max((int) $settings->number_start, (int) Contract::withTrashed()->where('account_id', $accountId)->max('contract_no') + 1);
 
             $contract->contract_no = $number;
             $contract->issued_at = now();
             $contract->amount = $reservation->dueAmount();
-            $contract->contract_date ??= now()->startOfDay();
+            // empty = the issue date
+            $contract->contract_date ??= (Account::settingsOf($accountId)?->businessDate() ?? now())->copy()->startOfDay();
             $input = $this->contractVariables($contract);
-            $values = ['party_type' => $contract->party_type];
+            // source = the draft's own texts (NULL = the template's), given back by unissue(); history = its earlier unissues
+            $values = ['party_type' => $contract->party_type, 'source' => ['ar' => $contract->body_ar, 'en' => $contract->body_en]];
             foreach (['ar', 'en'] as $lang) {
                 $values[$lang] = $this->variables($reservation, $lang, $input);
                 $source = $this->sourceText($contract, $lang);
                 $contract->{'body_' . $lang} = $source ? self::render($source, $values[$lang]) : null;
             }
-            $contract->title_ar = $contract->template?->title_ar ?? $contract->title_ar;
-            $contract->title_en = $contract->template?->title_en ?? $contract->title_en;
+            $values['annex'] = ['ar' => $this->isAnnex($contract, 'ar'), 'en' => $this->isAnnex($contract, 'en')];
+            $contract->title_ar = $this->printedTitle($contract, 'ar', $values['annex']['ar']);
+            $contract->title_en = $this->printedTitle($contract, 'en', $values['annex']['en']);
             $contract->values = $values;
             $contract->status = 'issued';
             $contract->issued_by = $user->getKey();
             $contract->save();
+            $this->event($contract, 'issued', $user, null, null, ['contract_no' => $contract->contract_no]);
             unset(self::$contracts[$accountId]);
             return $contract;
         });
+    }
+
+    /**
+     * Back to draft (2026-11-25, user: the account owner only, with a reason): an issued contract, not signed and not renewed, becomes
+     * a draft again — its number is kept for the next issue, its texts go back to the draft's (values.source; issued before that was
+     * kept: the template's when they print the same, else the issued text). Logged in values.history (who, when, reason), shown on
+     * its page.
+     */
+    public function unissue(int $accountId, $id, string $reason, Model $user): Contract
+    {
+        return DB::transaction(function () use ($accountId, $id, $reason, $user) {
+            $contract = $this->contractRepository->forAccount($accountId)->lockForUpdate()->findOrFail($id);
+            if (!self::isOwner($user)) {
+                throw ValidationException::withMessages(['reason' => 'Only the account owner can set a contract back to draft.']);
+            }
+            if ($contract->status !== 'issued') {
+                throw ValidationException::withMessages(['reason' => 'Only an issued contract can be set back to draft: this one is ' . strtolower($contract->status_label) . '.']);
+            }
+            if ($contract->renewals()->exists()) {
+                throw ValidationException::withMessages(['reason' => 'This contract has a renewal annex: it can\'t be set back to draft.']);
+            }
+            $values = $contract->values ?? [];
+            foreach (['ar', 'en'] as $lang) {
+                $body = $contract->{'body_' . $lang};
+                $contract->{'body_' . $lang} = array_key_exists('source', $values) ? ($values['source'][$lang] ?? null)
+                    : ($body === self::render($this->templateText($contract, $contract->template, $lang), $values[$lang] ?? []) ? null : $body);
+            }
+            $contract->title_ar = $contract->template?->title_ar ?? $contract->title_ar;
+            $contract->title_en = $contract->template?->title_en ?? $contract->title_en;
+            // an older back-to-draft line kept (values.history, before the events)
+            $contract->values = isset($values['history']) ? ['history' => $values['history']] : null;
+            $this->event($contract, 'back_to_draft', $user, null, $reason, ['contract_no' => $contract->contract_no, 'issued_at' => $contract->issued_at?->format('Y-m-d H:i:s')]);
+            $contract->status = 'draft';
+            $contract->issued_at = null;
+            $contract->issued_by = null;
+            $contract->save();
+            unset(self::$contracts[$accountId]);
+            return $contract;
+        });
+    }
+
+    /**
+     * Mark left (ReservationService::markLeft(), user 2026-11-25): the chain of the period (its covering contract / annex, else the
+     * one it renews) — its latest issued / signed contract or annex is TERMINATED on the left date (ended_on, status terminated),
+     * reason "Left", logged (contract_events: terminated + the reservation and the status before). Nothing when there is none.
+     */
+    public function terminateOnLeft(Reservation $reservation, Model $user): ?Contract
+    {
+        unset(self::$contracts[(int) $reservation->account_id]);
+        $base = $this->coveringContract($reservation) ?? $this->previousContract($reservation);
+        $latest = $base ? $this->chain(Contract::find($base->id))->filter(fn ($item) => in_array($item->status, ['issued', 'signed'], true))->last() : null;
+        if (!$latest) {
+            return null;
+        }
+        $day = $reservation->left_at ? $reservation->left_at->copy()->startOfDay() : now()->startOfDay();
+        $from = $latest->status;
+        $latest->forceFill(['status' => 'terminated', 'ended_on' => $day])->save();
+        $this->event($latest, 'terminated', $user, $day, 'Left', ['reservation_id' => $reservation->id, 'from' => $from]);
+        unset(self::$contracts[(int) $reservation->account_id]);
+        return $latest;
+    }
+
+    // Undo left: the contract / annex its Mark left terminated goes back to its status before (and covers its whole term again), logged
+    public function restoreOnUndoLeft(Reservation $reservation, Model $user): ?Contract
+    {
+        $event = ContractEvent::where('account_id', $reservation->account_id)->where('type', 'terminated')
+            ->where('data->reservation_id', (int) $reservation->id)->latest('id')->first();
+        $contract = $event ? Contract::where('account_id', $reservation->account_id)->find($event->contract_id) : null;
+        if (!$contract || $contract->status !== 'terminated') {
+            return null;
+        }
+        $contract->forceFill(['status' => $event->data['from'] ?? 'issued', 'ended_on' => null])->save();
+        $this->event($contract, 'restored', $user, null, 'Undo left', ['reservation_id' => $reservation->id]);
+        unset(self::$contracts[(int) $reservation->account_id]);
+        return $contract;
+    }
+
+    /**
+     * End / Cancel (Phase 3, 2026-11-25; the account owner only): an issued / signed contract or annex that no annex renews yet.
+     * End = it stops on that date (status Ended; it covers the periods up to it; a renewal then needs a NEW contract); Cancel = void
+     * (status Cancelled, cancelled_at = that date, cancel_reason; it covers nothing). Both logged in contract_events with the reason.
+     */
+    public function close(int $accountId, $id, string $action, string $date, string $reason, Model $user): Contract
+    {
+        return DB::transaction(function () use ($accountId, $id, $action, $date, $reason, $user) {
+            $contract = $this->contractRepository->forAccount($accountId)->lockForUpdate()->findOrFail($id);
+            if (!$this->can($contract, $action, $user)) {
+                throw ValidationException::withMessages(['reason' => !self::isOwner($user) ? 'Only the account owner can end or cancel a contract.'
+                    : (!in_array($contract->status, ['issued', 'signed'], true) ? 'Only an issued or signed contract can be ended or cancelled: this one is ' . strtolower($contract->status_label) . '.'
+                        : 'A renewal annex renews this contract: end or cancel the latest annex instead.')]);
+            }
+            $day = \Illuminate\Support\Carbon::parse($date)->startOfDay();
+            if ($action === 'end') {
+                if ($day->lt($contract->starts_on) || $day->gt($contract->ends_on)) {
+                    throw ValidationException::withMessages(['date' => 'The end date must be inside its term (' . $contract->starts_on->format(Reservation::DATE_FORMAT)
+                        . ' → ' . $contract->ends_on->format(Reservation::DATE_FORMAT) . ').']);
+                }
+                $contract->ended_on = $day;
+                $contract->status = 'ended';
+            } else {
+                $contract->cancelled_at = $day;
+                $contract->cancel_reason = trim($reason);
+                $contract->status = 'cancelled';
+            }
+            $contract->save();
+            $this->event($contract, $action === 'end' ? 'ended' : 'cancelled', $user, $day, $reason, ['contract_no' => $contract->contract_no]);
+            unset(self::$contracts[$accountId]);
+            return $contract;
+        });
+    }
+
+    // one line of the contract's history (contract_events)
+    private function event(Contract $contract, string $type, ?Model $user, $date = null, ?string $reason = null, array $data = []): void
+    {
+        $event = new ContractEvent(['account_id' => $contract->account_id, 'contract_id' => $contract->id, 'type' => $type, 'event_date' => $date,
+            'reason' => $reason !== null ? trim($reason) : null, 'data' => $data ?: null]);
+        if ($user) {
+            $event->creatable()->associate($user);
+        }
+        $event->save();
     }
 
     /**
@@ -948,8 +1447,10 @@ class ContractService
         }
         $contract->signed_on = $data['signed_on'];
         $contract->signed_by = $user->getKey();
+        $wasSigned = $contract->status === 'signed';
         $contract->status = 'signed';
         $contract->save();
+        $this->event($contract, 'signed', $user, $contract->signed_on, null, ['replaced' => $wasSigned]);
         unset(self::$contracts[$accountId]);
         return $contract;
     }
@@ -968,7 +1469,12 @@ class ContractService
         $own = $contract->creatable_type === $user->getMorphClass() && (int) $contract->creatable_id === (int) $user->getKey();
         return match ($action) {
             'edit', 'issue' => $contract->isDraft(),
-            'delete' => $contract->isDraft() && ($owner || $own),
+            // once numbered (set back to draft): the owner only
+            'delete' => $contract->isDraft() && ($owner || ($own && !$contract->contract_no)),
+            'unissue' => $contract->status === 'issued' && $owner,
+            // Phase 3: the owner cancels (a wrong contract) an issued / signed one, the latest of its chain only; ending = Mark left
+            // (terminateOnLeft(), user 2026-11-25: no End button)
+            'cancel' => $owner && in_array($contract->status, ['issued', 'signed'], true) && !$contract->renewals()->exists(),
             'sign' => $contract->status === 'issued',
             'replace_scan' => $contract->status === 'signed' && $owner,
             default => false,
@@ -999,7 +1505,7 @@ class ContractService
             $values = $this->variables($reservation, $lang, $this->contractVariables($contract));
             $source = $this->sourceText($contract, $lang);
             $body = $source ? self::render($source, $values) : null;
-            $title = $lang === 'en' ? ($contract->template?->title_en ?: $contract->title_en) : ($contract->template?->title_ar ?: $contract->title_ar);
+            $title = $this->printedTitle($contract, $lang, $this->isAnnex($contract, $lang));
         } else {
             $values = $contract->values[$lang] ?? [];
             $body = $contract->{'body_' . $lang};
@@ -1010,6 +1516,7 @@ class ContractService
             'lang' => $lang,
             'values' => $values,
             'body' => $body,
+            'annex' => $this->isAnnex($contract, $lang),
             'title' => $title ?: ($lang === 'en' ? 'Contract' : 'عقد'),
             'account' => Account::settingsOf($accountId),
         ];

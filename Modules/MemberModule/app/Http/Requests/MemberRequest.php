@@ -44,6 +44,14 @@ class MemberRequest extends FormRequest
             'national_number' => $this->input('id_type') === 'passport' ? ['nullable', 'regex:/^[A-Za-z0-9]{5,20}$/'] : 'nullable|digits_between:5,15',
             'nationality' => 'nullable|string|max:100',
             'address' => 'nullable|string|max:1000',
+            // the lessee of a contract (2026-11-25)
+            'legal_name' => 'nullable|string|max:255',
+            'representative_name' => 'nullable|string|max:255',
+            'representative_title' => 'nullable|string|max:255',
+            'commercial_register' => 'nullable|string|max:50',
+            'tax_number' => 'nullable|string|max:50',
+            'other_phone' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+ ]{8,30}$/'],
+            'activity' => 'nullable|string|max:500',
             'company_id' => ['nullable', 'integer', $ownedBy('companies')],
             'job_id' => ['nullable', 'integer', $ownedBy('job_positions')],
             'from_where' => 'nullable|string|max:1000',
@@ -56,6 +64,7 @@ class MemberRequest extends FormRequest
     {
         return [
             'phone.regex' => 'The phone must be a valid phone number: digits only (8-15), optionally starting with +.',
+            'other_phone.regex' => 'The other mobile must be a phone number: digits only, optionally starting with +.',
             'national_number.regex' => 'A passport number is 5-20 letters and digits.',
         ];
     }
@@ -69,6 +78,10 @@ class MemberRequest extends FormRequest
             'id_type' => 'ID type',
             'national_number' => 'ID number',
             'message_language' => 'WhatsApp language',
+            'legal_name' => 'legal name',
+            'representative_name' => 'legal representative',
+            'tax_number' => 'tax card no.',
+            'other_phone' => 'other mobile',
         ];
     }
 

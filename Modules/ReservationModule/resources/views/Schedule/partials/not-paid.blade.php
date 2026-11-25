@@ -61,6 +61,7 @@
                                 <td data-label="Unit">
                                     {{ $reservation->unit?->name ?? '-' }}
                                     <div class="text-xs text-slate-500">{{ $reservation->space?->name }}</div>
+                                    @include('contractmodule::Contract.partials.badge', ['reservation' => $reservation])
                                 </td>
                                 <td data-label="Date">
                                     {{-- a subscription: its period (dates); hourly / full day: the booking's date + time --}}

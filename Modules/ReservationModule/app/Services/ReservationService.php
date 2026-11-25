@@ -596,17 +596,27 @@ class ReservationService
         if (!$reservation->isPeriod() || !$reservation->isCounted() || $reservation->left_at || $reservation->renewedBy()->exists()) {
             throw ValidationException::withMessages(['reservation' => 'Only an active, not renewed subscription period can be marked as left.']);
         }
-        $reservation->forceFill(['left_at' => now(), 'left_by' => $by->getKey()])->save();
+        DB::transaction(function () use ($reservation, $by) {
+            $reservation->forceFill(['left_at' => now(), 'left_by' => $by->getKey()])->save();
+            // ContractModule (2026-11-25): the period's contract chain is terminated on the left date
+            app(\Modules\ContractModule\app\Services\ContractService::class)->terminateOnLeft($reservation, $by);
+        });
         return $reservation;
     }
 
-    public function undoLeft($accountId, $id): Reservation
+    public function undoLeft($accountId, $id, ?Model $by = null): Reservation
     {
         $reservation = $this->findOne($accountId, $id);
         if (!$reservation->left_at) {
             throw ValidationException::withMessages(['reservation' => 'This period is not marked as left.']);
         }
-        $reservation->forceFill(['left_at' => null, 'left_by' => 0])->save();
+        DB::transaction(function () use ($reservation, $by) {
+            $reservation->forceFill(['left_at' => null, 'left_by' => 0])->save();
+            // ContractModule (2026-11-25): the contract its Mark left terminated goes back
+            if ($by) {
+                app(\Modules\ContractModule\app\Services\ContractService::class)->restoreOnUndoLeft($reservation, $by);
+            }
+        });
         return $reservation;
     }
 

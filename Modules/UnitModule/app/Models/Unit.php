@@ -32,6 +32,8 @@ class Unit extends Model
     protected $fillable = [
         'account_id', 'space_id', 'subscription_type_id', 'name_ar', 'name_en', 'color_id',
         'description_ar', 'description_en', 'notes_ar', 'notes_en', 'capacity', 'concurrent_usage', 'lease_period', 'is_active', 'sort_order',
+        // the contracts' unit numbers (2026-11-25, ContractModule): prefix + first number
+        'unit_no_prefix', 'unit_no_start',
     ];
 
     // the units' order in their space (sort_order, moved with ↑ / ↓ on the space page), then the name

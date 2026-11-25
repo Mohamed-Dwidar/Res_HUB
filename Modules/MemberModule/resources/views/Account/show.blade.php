@@ -55,11 +55,17 @@
             ($member->id_type_label ?? 'ID Number') => $member->national_number,
             'Nationality' => $member->nationality,
             'Company' => $member->company?->name,
+            'Legal Name' => $member->legal_name,
+            'Legal Representative' => $member->representative_name,
+            'Title' => $member->representative_title,
+            'Other Mobile' => $member->other_phone,
+            'Commercial Register' => $member->commercial_register,
+            'Tax Card No.' => $member->tax_number,
             'Job' => $member->job?->name,
             'WhatsApp Language' => $member->message_language ? config('messagingmodule.languages.' . $member->message_language) : null,
             'Added At' => $member->created_at?->format('Y-m-d H:i'),
         ], fn ($value) => filled($value));
-        $wideFields = array_filter(['Address' => $member->address, 'Source (from where)' => $member->from_where, 'Notes' => $member->notes], fn ($value) => filled($value));
+        $wideFields = array_filter(['Activity' => $member->activity, 'Address' => $member->address, 'Source (from where)' => $member->from_where, 'Notes' => $member->notes], fn ($value) => filled($value));
     @endphp
     <div class="form-section mt-6">Member Data</div>
     <dl class="detail-list detail-list--two">

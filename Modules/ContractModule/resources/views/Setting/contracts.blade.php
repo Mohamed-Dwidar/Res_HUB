@@ -57,14 +57,15 @@
     <div class="message-texts-head">
         <div class="form-section">Templates</div>
         <a href="{{ route('account.settings.contracts.templates.create') }}" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> New Template</a>
+        <a href="{{ route('account.settings.contracts.templates.create', ['kind' => 'renewal']) }}" class="btn btn-secondary btn-sm"><i data-lucide="plus"></i> New Renewal Annex</a>
     </div>
-    <div class="mb-3 text-sm text-slate-500">A template is the contract text of its units: their reservations get contracts from it. A unit has one template at most; units can also be chosen from the unit's form. Editing a template never changes contracts already issued.</div>
+    <div class="mb-3 text-sm text-slate-500">A template is the contract text of its units: their reservations get contracts from it; a Renewal annex template = the annex printed when a renewed subscription's contract is renewed. A unit has one template of each type; units can also be chosen from the unit's form. Editing a template never changes contracts already issued.</div>
     @if ($templates->isEmpty())
         <div class="notice">No templates yet. Add one with <b>+ New Template</b>, write its text, then choose its units.</div>
     @else
         <div class="table-wrap">
             <table class="data-table message-templates">
-                <thead><tr><th>Name</th><th>Title</th><th>Units</th><th>Term</th><th>AR / EN</th><th>Renewal Annex</th><th>Enabled</th><th></th></tr></thead>
+                <thead><tr><th>Name</th><th>Title</th><th>Units</th><th>Term</th><th>AR / EN</th><th>Type</th><th>Enabled</th><th></th></tr></thead>
                 <tbody>
                     @foreach ($templates as $template)
                         @php($bySpace = $template->units->groupBy(fn ($unit) => $unit->space?->name ?? '-'))
@@ -85,13 +86,8 @@
                             </td>
                             <td>{{ $template->term_label }}</td>
                             <td>AR @if ($template->body_en) · EN @else <span class="text-xs text-slate-400">· no EN</span> @endif</td>
-                            <td>
-                                @if ($template->renewal_body_ar)
-                                    AR @if ($template->renewal_body_en) · EN @endif
-                                @else
-                                    <span class="text-slate-400">None</span>
-                                @endif
-                            </td>
+                            <td><span class="badge {{ $template->kind === 'renewal' ? 'badge-status-info' : 'badge-status-primary' }}">{{ $template->kind_label }}</span>
+                                @if ($template->kind !== 'renewal' && $template->renewal_body_ar)<div class="text-xs text-slate-500" title="An annex text kept in this contract template: used only while the units have no Renewal annex template">+ old annex text</div>@endif</td>
                             <td>
                                 <span class="badge {{ $template->is_enabled ? 'badge-status-success' : 'badge-inactive' }}">{{ $template->is_enabled ? 'On' : 'Off' }}</span>
                             </td>

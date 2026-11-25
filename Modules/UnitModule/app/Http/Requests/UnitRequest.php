@@ -57,6 +57,15 @@ class UnitRequest extends FormRequest
                     $fail($error);
                 }
             }],
+            // the contracts' unit numbers (2026-11-25): a prefix + an optional first number
+            'unit_no_prefix' => 'nullable|string|max:10',
+            'unit_no_start' => 'nullable|integer|min:1|max:999999',
+            // its renewal annex template (2026-11-25, one at most)
+            'renewal_template_id' => ['nullable', 'integer', function ($attribute, $value, $fail) {
+                if ($error = app(ContractService::class)->unitTemplateError($this->user()->userable->ownerAccountId(), $value, 'renewal')) {
+                    $fail($error);
+                }
+            }],
         ];
     }
 
@@ -78,6 +87,7 @@ class UnitRequest extends FormRequest
             'color_id' => 'color',
             'plans.*' => 'plan',
             'contract_template_id' => 'contract template',
+            'renewal_template_id' => 'renewal annex template',
             'description_ar' => 'description (Arabic)',
             'description_en' => 'description (English)',
             'notes_ar' => 'notes (Arabic)',

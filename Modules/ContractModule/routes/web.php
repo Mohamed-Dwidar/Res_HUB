@@ -42,7 +42,15 @@ $contractRoutes = function ($controller) {
 };
 
 Route::prefix('account/contracts')->name('account.contracts.')->middleware(['auth', 'user.active:' . Account::class])
-    ->group(fn () => $contractRoutes(ContractAccountModuleController::class));
+    ->group(function () use ($contractRoutes) {
+        $contractRoutes(ContractAccountModuleController::class);
+        // Back to draft (an issued contract): the owner only
+        Route::get('{id}/unissue', [ContractAccountModuleController::class, 'unissueForm'])->name('unissue');
+        Route::post('{id}/unissue', [ContractAccountModuleController::class, 'unissue'])->name('unissue.store');
+        // Cancel a wrong contract (Phase 3): the owner only; it is ended by Mark left (ContractService::terminateOnLeft())
+        Route::get('{id}/{action}', [ContractAccountModuleController::class, 'closeForm'])->whereIn('action', ['cancel'])->name('close');
+        Route::post('{id}/{action}', [ContractAccountModuleController::class, 'close'])->whereIn('action', ['cancel'])->name('close.store');
+    });
 
 Route::prefix('employee/contracts')->name('employee.contracts.')->middleware(['auth', 'user.active:' . Employee::class])
     ->group(fn () => $contractRoutes(ContractEmployeeModuleController::class));

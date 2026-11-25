@@ -100,7 +100,7 @@ class ContractSettingAccountModuleController extends Controller
     {
         return [
             'spaces' => $this->contractService->spacesWithUnits($this->accountId()),
-            'taken' => $this->contractService->unitsTaken($this->accountId(), $templateId),
+            'taken' => ['contract' => (object) $this->contractService->unitsTaken($this->accountId(), $templateId), 'renewal' => (object) $this->contractService->unitsTaken($this->accountId(), $templateId, 'renewal')],
             'sample' => $this->contractService->sampleVariables($this->accountId()),
             'terms' => collect(config('contractmodule.terms'))->mapWithKeys(fn ($months) => [$months => ContractTemplate::termLabel($months)])->all(),
         ];

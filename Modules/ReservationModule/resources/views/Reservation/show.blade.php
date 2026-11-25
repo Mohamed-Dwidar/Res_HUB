@@ -81,6 +81,8 @@
             <div class="mt-1 text-slate-500">{{ $reservation->plan?->name ?? '-' }}</div>
             {{-- the period (the status is in the header menu) --}}
             <div class="mt-2 text-slate-500">{{ $reservation->period }}</div>
+            {{-- a subscription: Contract (link) / No contract (2026-11-25; its buttons = the Contract block below) --}}
+            @include('contractmodule::Contract.partials.badge')
             {{-- the renewal increase (2026-11-12): the next renewal's price until it is renewed --}}
             @if ($reservation->hasRenewalIncrease())
                 <div class="mt-1 renewal-next-price">{{ $reservation->renewedBy ? 'Renewal increase: ' . $reservation->renewalIncreaseLabel() : 'Next renewal: ' . $reservation->nextRenewalText() }}</div>

@@ -15,6 +15,7 @@
     <td data-label="Unit">
         {{ $open->unit?->name ?? '-' }}
         <div class="text-xs text-slate-500">{{ $open->space?->name }}</div>
+        @include('contractmodule::Contract.partials.badge', ['reservation' => $open])
     </td>
     @php($statusCol = in_array($kind, ['owing', 'not_renewed', 'not_paid'], true))
     <td data-label="{{ $statusCol && $kind !== 'not_renewed' ? 'Date' : 'Renewal date' }}">

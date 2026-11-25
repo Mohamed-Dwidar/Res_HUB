@@ -177,6 +177,15 @@ class UnitService
     {
         if (!empty($data['contract_template_sent'])) {
             app(ContractService::class)->syncUnitTemplate((int) $unit->account_id, (int) $unit->id, ($data['contract_template_id'] ?? null) ?: null);
+            // the contracts' unit numbers (2026-11-25)
+            if (array_key_exists('unit_no_prefix', $data) || array_key_exists('unit_no_start', $data)) {
+                $unit->forceFill(['unit_no_prefix' => ($data['unit_no_prefix'] ?? null) !== null && $data['unit_no_prefix'] !== '' ? $data['unit_no_prefix'] : null,
+                    'unit_no_start' => ($data['unit_no_start'] ?? null) ?: null])->save();
+            }
+            // its renewal annex template (2026-11-25; an older form without the field keeps it)
+            if (array_key_exists('renewal_template_id', $data)) {
+                app(ContractService::class)->syncUnitTemplate((int) $unit->account_id, (int) $unit->id, ($data['renewal_template_id'] ?? null) ?: null, 'renewal');
+            }
         }
     }
 

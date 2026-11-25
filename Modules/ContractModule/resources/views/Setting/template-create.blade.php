@@ -1,7 +1,7 @@
 @extends('layoutmodule::account.main')
 
 @section('title')
-    New Contract Template @if (!empty($copyOf))<span class="text-slate-500">· copy of {{ $copyOf }}</span>@endif
+    New {{ request('kind') === 'renewal' || ($copy?->kind ?? null) === 'renewal' ? 'Renewal Annex' : 'Contract' }} Template @if (!empty($copyOf))<span class="text-slate-500">· copy of {{ $copyOf }}</span>@endif
 @endsection
 
 @section('content')

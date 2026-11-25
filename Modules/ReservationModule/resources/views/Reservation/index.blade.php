@@ -65,6 +65,12 @@
                 <option value="{{ $value }}">{{ $label }}</option>
             @endforeach
         </select>
+        {{-- Contract (2026-11-25): subscriptions only; custom.js moves to the All tab (ContractService::filterReservations()) --}}
+        <select name="contract" class="{{ config('layoutmodule.form.select') }}" aria-label="Contract">
+            <option value="">All Contracts</option>
+            <option value="with">With contract</option>
+            <option value="without">Without contract (current)</option>
+        </select>
         @include('layoutmodule::partials.datatable-clear')
     </form>
     {{-- the Renewal filter's line (json html "reservations-renewal"; empty without the filter) --}}
@@ -81,7 +87,7 @@
                     <th data-data="period" data-name="start_at" data-class="whitespace-nowrap">Period</th>
                     {{-- only with the Renewal filter (datatables.js data-visible-if) --}}
                     <th data-data="renewal_html" data-visible-if="renewal">Renewal</th>
-                    <th data-data="net_amount" data-name="net_amount" data-class="whitespace-nowrap">Amount</th>
+                    <th data-data="net_amount" data-name="net_amount" data-class="col-amount">Amount</th>
                     <th data-data="paid_amount" data-name="paid_amount" data-class="whitespace-nowrap">Paid</th>
                     <th data-data="remaining_html" data-name="remaining" data-class="whitespace-nowrap">Remaining</th>
                     <th data-data="by">Created By</th>

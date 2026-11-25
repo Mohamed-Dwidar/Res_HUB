@@ -17,12 +17,16 @@ return [
             'end_date' => 'The contract term ends',
             'term' => 'The contract duration as written on the contract, e.g. سنة ميلادية',
             'unit_number' => 'The unit number as written on the contract',
-            'contract_value' => 'The contract value (default: the price for the term)',
+            'contract_value' => 'The contract value before tax (default: the reservation price for the term)',
+            'contract_value_label' => 'قيمة العقد السنوية / الشهرية / قيمة العقد, by the term',
             'currency' => 'The currency of the value, e.g. جنيه مصري',
             'activity' => 'The tenant\'s activity in the unit (typed on the contract)',
+            'notes' => 'The notes (ملاحظات) on the contract',
             'deposit' => 'Security deposit (typed on the contract)',
             'previous_contract_no' => 'Renewal annex: the number of the contract it renews',
             'previous_contract_date' => 'Renewal annex: the date of the contract it renews',
+            'original_contract_date' => 'Renewal annex: the date of the first contract of the chain (التعاقد الأصلي)',
+            'contract_value_period' => 'سنويا / شهريا by the term (empty for another term)',
         ],
         'Lessor' => [
             'lessor_name' => 'Lessor name (Settings › Contracts)',
@@ -36,12 +40,14 @@ return [
             'unit_address' => 'The unit address on the contract (= {property_address})',
         ],
         'Tenant' => [
-            'tenant_name' => 'The tenant\'s name on the contract (default: the member)',
+            'tenant_name' => 'The tenant\'s legal name on the contract (default: the member\'s legal name, else the company / member)',
             'tenant_representative' => 'The tenant\'s legal representative',
-            'tenant_company' => 'The tenant\'s company name',
+            'tenant_company' => 'The tenant\'s name when the contract is with a company',
             'tenant_title' => 'The representative\'s title (الصفة)',
             'tenant_national_id' => 'The tenant\'s national ID / ID number',
-            'tenant_mobile' => 'The tenant\'s mobile',
+            'tenant_commercial_register' => 'The tenant\'s commercial register',
+            'tenant_tax_number' => 'The tenant\'s tax card no.',
+            'tenant_mobile' => 'The tenant\'s mobile(s)',
             'tenant_email' => 'The tenant\'s email',
             'member_name' => 'Member name',
             'member_phone' => 'Member phone',
@@ -88,6 +94,9 @@ return [
 
     // the default currency label of a new contract's value (editable per contract)
     'currency' => 'جنيه مصري',
+
+    // the default notes printed on a new contract (editable per contract)
+    'notes' => 'لا توجد',
 
     // the Contracts list "Ending soon" filter: issued / signed contracts ending in the next N days
     'ending_days' => 30,

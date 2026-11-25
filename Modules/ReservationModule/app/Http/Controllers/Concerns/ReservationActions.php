@@ -126,7 +126,7 @@ trait ReservationActions
     private function tabCounts(array $filters): array
     {
         $filters = ['search' => trim((string) ($filters['search'] ?? ''))]
-            + Arr::only($filters, ['member_id', 'reservation_status_id', 'space_id', 'unit_id', 'subscription_type_id', 'payment_status']);
+            + Arr::only($filters, ['member_id', 'reservation_status_id', 'space_id', 'unit_id', 'subscription_type_id', 'payment_status', 'contract']);
 
         return ['reservations-today' => $this->reservationService->listQuery($this->accountId(), $filters)->counted()->tab('today', $filters)->count()];
     }
@@ -200,7 +200,7 @@ trait ReservationActions
     private function listFilters(array $filters): array
     {
         return ['search' => trim((string) ($filters['search'] ?? ''))]
-            + Arr::only($filters, ['member_id', 'reservation_status_id', 'space_id', 'unit_id', 'subscription_type_id', 'payment_status']);
+            + Arr::only($filters, ['member_id', 'reservation_status_id', 'space_id', 'unit_id', 'subscription_type_id', 'payment_status', 'contract']);
     }
 
     private function table(array $filters, $id = null)
@@ -419,7 +419,7 @@ trait ReservationActions
 
     public function undoLeft(Request $request, $id)
     {
-        $this->reservationService->undoLeft($this->accountId(), $id);
+        $this->reservationService->undoLeft($this->accountId(), $id, Auth::user());
 
         return response()->json([
             'message' => 'The period is no longer marked as left.',

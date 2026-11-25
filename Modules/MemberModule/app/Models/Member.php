@@ -32,6 +32,9 @@ class Member extends Model
         'message_language',
         // contracts (ContractModule, 2026-10-31): the ID type (the number = national_number, text: passports have letters), nationality, address
         'id_type', 'nationality', 'address',
+        // the lessee of a contract (2026-11-25): the name printed (NULL = the member / company), its representative (ID number =
+        // national_number), commercial register, tax card, a second mobile, the activity
+        'legal_name', 'representative_name', 'representative_title', 'commercial_register', 'tax_number', 'other_phone', 'activity',
     ];
 
     // id_type values (NULL with a number = a national ID)

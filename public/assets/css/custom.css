@@ -4381,3 +4381,145 @@ a.dash-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1); }
     /* the renewal date + "due since (N days)" / "(in N days)" on ONE line, the period on the second (2026-11-19, user) */
     .renewal-row__when-line { white-space: nowrap; }
 }
+
+/* Cairo (the PDFs' font, local), only for the contract on its page */
+@font-face {
+    font-family: "Cairo";
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/Cairo/Cairo-Regular.ttf") format("truetype");
+}
+@font-face {
+    font-family: "Cairo";
+    font-weight: 700;
+    font-display: swap;
+    src: url("../fonts/Cairo/Cairo-Bold.ttf") format("truetype");
+}
+/* the whole contract on its page (Contract/partials/document; the PDF's look: pdf.css contract-*, 2026-11-25) */
+.contract-document {
+    font-family: "Cairo", sans-serif;
+    max-width: 60rem;
+    margin: 1rem auto 0;
+    padding: 2rem;
+    overflow-x: auto;
+    color: #212121;
+    background-color: #fff;
+    border: 1px solid rgb(203 213 225);
+    border-radius: 0.5rem;
+}
+.contract-document__logo {
+    display: block;
+    height: 4rem;
+    margin-bottom: 1rem;
+    margin-right: auto;
+}
+.contract-document .contract-title {
+    margin: 0 0 1rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-align: center;
+}
+.contract-document .contract-subtitle {
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+.contract-document .contract-date {
+    margin-bottom: 0.75rem;
+}
+.contract-document .contract-table,
+.contract-document .contract-signatures {
+    width: 100%;
+    min-width: 34rem;
+    margin-bottom: 1rem;
+    border-collapse: collapse;
+}
+.contract-document .contract-table td,
+.contract-document .contract-signatures td {
+    padding: 0.55rem 0.6rem;
+    font-size: 0.875rem;
+    vertical-align: middle;
+    border: 1px solid #333;
+}
+.contract-document .contract-table__label {
+    width: 20%;
+    font-weight: 700;
+}
+.contract-document .contract-table__half {
+    width: 29%;
+}
+.contract-document .contract-table__head {
+    font-weight: 700;
+    background-color: #efefef;
+}
+.contract-document .contract-signatures__label {
+    width: 17.5%;
+    font-weight: 700;
+    background-color: #efefef;
+}
+.contract-document .contract-signatures__name {
+    text-align: center;
+}
+.contract-document .contract-signatures__line {
+    height: 4.5rem;
+}
+.contract-document .contract-body {
+    margin-top: 1.5rem;
+    color: #212121;
+}
+.contract-document .contract-body h3 {
+    color: #212121;
+}
+.contract-document .contract-body--annex {
+    font-size: 1rem;
+    line-height: 2;
+}
+.contract-document .contract-annex-signatures {
+    width: 100%;
+    margin: 3rem 0 2rem;
+}
+.contract-document .contract-annex-signatures td {
+    width: 50%;
+    font-weight: 700;
+    text-align: center;
+}
+@media (max-width: 640px) {
+    .contract-document {
+        padding: 1rem;
+    }
+}
+
+/* the reservations list Status cell: Paid = solid green, Contract = solid blue (2026-11-25, user) */
+.row-badge--paid .badge {
+    color: #fff;
+    background-color: rgb(var(--color-success));
+    border-color: rgb(var(--color-success));
+}
+.row-badge--contract .badge-contract {
+    color: #fff;
+    background-color: rgb(37 99 235);
+    border-color: rgb(37 99 235);
+}
+
+/* the reservations list Amount column: as narrow as the amount, its hint lines (discount, extras) wrap (2026-11-25, user) */
+.data-table th.col-amount,
+.data-table td.col-amount {
+    width: 6rem;
+    max-width: 6rem;
+    white-space: normal;
+}
+.data-table td.col-amount > span {
+    white-space: nowrap;
+}
+
+/* the contract page's History (contract_events) */
+.contract-history li {
+    padding: 0.4rem 0;
+    font-size: 0.85rem;
+    border-bottom: 1px dashed rgb(226 232 240);
+}
+
+
+/* the renewal annex page: its text with the renewal's values (read only) */
+.contract-document--text {
+    margin-top: 0;
+}

@@ -23,10 +23,10 @@ class Contract extends Model
 {
     use SafeMorphHelper, SoftDeletes;
 
-    const STATUSES = ['draft' => 'Draft', 'issued' => 'Issued', 'signed' => 'Signed', 'ended' => 'Ended', 'cancelled' => 'Cancelled'];
+    const STATUSES = ['draft' => 'Draft', 'issued' => 'Issued', 'signed' => 'Signed', 'ended' => 'Ended', 'terminated' => 'Terminated', 'cancelled' => 'Cancelled'];
 
     // the badge colours (custom.css badge-status-*)
-    const STATUS_COLORS = ['draft' => 'pending', 'issued' => 'primary', 'signed' => 'success', 'ended' => 'slate', 'cancelled' => 'danger'];
+    const STATUS_COLORS = ['draft' => 'pending', 'issued' => 'primary', 'signed' => 'success', 'ended' => 'slate', 'terminated' => 'slate', 'cancelled' => 'danger'];
 
     const PARTY_TYPES = ['individual' => 'Individual (the member)', 'company' => 'Company (the member\'s company)'];
 
@@ -38,13 +38,33 @@ class Contract extends Model
         'party_type', 'space_id', 'unit_id', 'starts_on', 'ends_on', 'term_months', 'amount', 'term_amount', 'deposit_amount',
         'activity', 'title_ar', 'title_en', 'body_ar', 'body_en', 'notes',
         'unit_number', 'contract_date', 'duration_text', 'currency', 'tenant_name', 'tenant_representative', 'tenant_company', 'tenant_title',
-        'tenant_national_id', 'tenant_mobile', 'tenant_email', 'unit_address',
+        'tenant_national_id', 'tenant_mobile', 'tenant_email', 'unit_address', 'tenant_commercial_register', 'tenant_tax_number',
+        'lessor_name', 'lessor_commercial_register', 'lessor_tax_number', 'lessor_representative', 'lessor_representative_title',
+        'lessor_representative_national_id',
     ];
+
+    // the lessor as printed on THIS contract (2026-11-25): NULL = never set (Settings › Contracts), '' = emptied here
+    const LESSOR_FIELDS = ['lessor_name', 'lessor_commercial_register', 'lessor_tax_number', 'lessor_representative', 'lessor_representative_title', 'lessor_representative_national_id'];
 
     // the contract's own data (2026-11-01): pre-filled from the reservation / member / company / settings, edited per contract;
     // what the PDF and the placeholders print (never written back to the member / company unless asked)
     const OWN_FIELDS = ['unit_number', 'contract_date', 'duration_text', 'term_amount', 'currency', 'tenant_name', 'tenant_representative',
-        'tenant_company', 'tenant_title', 'tenant_national_id', 'tenant_mobile', 'tenant_email', 'unit_address', 'activity', 'deposit_amount', 'notes'];
+        'tenant_company', 'tenant_title', 'tenant_national_id', 'tenant_mobile', 'tenant_email', 'unit_address', 'activity', 'deposit_amount', 'notes',
+        'tenant_commercial_register', 'tenant_tax_number', 'lessor_name', 'lessor_commercial_register', 'lessor_tax_number',
+        'lessor_representative', 'lessor_representative_title', 'lessor_representative_national_id'];
+
+    // required on a draft and to issue it (2026-11-25, user): everything except the tenant's email and title, the deposit and the notes
+    // (the English text is optional too); COMPANY_FIELDS only for a company
+    const REQUIRED_FIELDS = [
+        'unit_number' => 'unit number', 'contract_date' => 'contract date', 'duration_text' => 'contract duration', 'term_amount' => 'contract value',
+        'currency' => 'currency', 'lessor_name' => 'lessor name', 'lessor_commercial_register' => 'lessor commercial register',
+        'lessor_tax_number' => 'lessor tax registration no.', 'lessor_representative' => 'lessor legal representative',
+        'lessor_representative_title' => 'lessor representative\'s title', 'lessor_representative_national_id' => 'lessor representative\'s national ID',
+        'tenant_name' => 'tenant name', 'tenant_representative' => 'legal representative', 'tenant_national_id' => 'national ID',
+        'tenant_mobile' => 'mobile', 'unit_address' => 'unit address', 'activity' => 'activity',
+    ];
+
+    const COMPANY_FIELDS = ['tenant_commercial_register' => 'commercial register', 'tenant_tax_number' => 'tax card no.'];
 
     protected $casts = [
         'contract_no' => 'integer',
@@ -113,6 +133,18 @@ class Contract extends Model
         return $this->morphTo();
     }
 
+    // its history, newest first (Phase 3, 2026-11-25)
+    public function events(): HasMany
+    {
+        return $this->hasMany(ContractEvent::class)->latest('id');
+    }
+
+    // the last day it covers: an ended contract stops on its end date
+    public function getCoversUntilAttribute()
+    {
+        return $this->ended_on && $this->ended_on->lt($this->ends_on) ? $this->ended_on : $this->ends_on;
+    }
+
     public function isDraft(): bool
     {
         return $this->status === 'draft';
@@ -121,6 +153,12 @@ class Contract extends Model
     public function isRenewal(): bool
     {
         return $this->kind === 'renewal';
+    }
+
+    // "Contract" / "Annex"
+    public function getKindLabelAttribute(): string
+    {
+        return $this->isRenewal() ? 'Renewal annex' : 'Contract';
     }
 
     // "#251" once issued, "Draft" before

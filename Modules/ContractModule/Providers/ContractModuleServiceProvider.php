@@ -21,7 +21,10 @@ class ContractModuleServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    protected array $commands = [];
+    protected array $commands = [
+        \Modules\ContractModule\app\Console\SeedTemplateCommand::class,
+        \Modules\ContractModule\app\Console\UnitNumbersCommand::class,
+    ];
 
     /**
      * Provider classes to register.
