@@ -143,7 +143,7 @@ class ScheduleService
     public function cancelled(int $accountId, Account $account, Carbon $date): Collection
     {
         return $this->cancelledQuery($accountId, $account, $date)
-            ->with('member', 'space', 'unit.color', 'subscriptionType', 'status')
+            ->with('member', 'space', 'unit.color', 'subscriptionType', 'status', 'cancelledBy.userable')
             ->orderBy('start_at')->orderBy('id')->get();
     }
 

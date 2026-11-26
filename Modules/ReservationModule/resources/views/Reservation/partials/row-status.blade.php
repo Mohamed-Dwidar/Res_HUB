@@ -5,6 +5,10 @@
 --}}
 @php($area = request()->routeIs('employee.*') ? 'employee' : 'account')
 <div><span class="{{ $reservation->status?->badge_class ?? 'badge badge-status-slate' }}">{{ $reservation->status?->name ?? '-' }}</span></div>
+@unless ($reservation->isCounted())
+    {{-- who / when cancelled (2026-11-26) --}}
+    <div class="mt-1">@include('reservationmodule::Reservation.partials.cancelled-by', ['inline' => true])</div>
+@endunless
 @if ($reservation->isCounted())
     {{-- Paid = a solid green badge, Contract (below) = a solid blue one (2026-11-25, user; custom.css .row-badge) --}}
     <div @class(['mt-1', 'row-badge row-badge--paid' => $reservation->payment_status === 'paid'])>

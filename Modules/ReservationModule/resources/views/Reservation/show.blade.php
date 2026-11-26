@@ -98,6 +98,10 @@
                 <div class="mt-2"><span class="badge badge-status-info">Invoice requested</span> <span class="text-xs text-slate-500">through the package</span></div>
             @endif
             <div class="mt-2 text-sm text-slate-500">Added by <b>{{ $reservation->creatable?->userable?->displayName() ?? $reservation->creatable?->email ?? '-' }}</b> | At {{ $reservation->created_at->format('d-m-Y h:i A') }}</div>
+            {{-- cancelled (2026-11-26, user): when / who; older cancellations were never dated --}}
+            @if (!$reservation->isCounted())
+                <div class="mt-1 text-sm text-danger">{{ $reservation->status?->name ?? 'Cancelled' }} @include('reservationmodule::Reservation.partials.cancelled-by')</div>
+            @endif
             @if ($reservation->notes)
                 <div class="mt-1 whitespace-pre-line text-sm text-slate-600">{{ $reservation->notes }}</div>
             @endif

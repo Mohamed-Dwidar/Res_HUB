@@ -219,7 +219,11 @@ class ReservationService
         // never overwrites a link
         $link = $restoring && !$reservation->renewal_of ? $this->renewalCandidate($reservation) : null;
 
-        return DB::transaction(function () use ($reservation, $statusId, $note, $link, $cancelEvent, $forceReason, $user) {
+        return DB::transaction(function () use ($reservation, $statusId, $note, $link, $cancelEvent, $forceReason, $user, $cancelling, $restoring) {
+            // when / who cancelled it (2026-11-26): shown in the view; emptied when it is restored
+            if ($cancelling || $restoring) {
+                $reservation->forceFill(['cancelled_at' => $cancelling ? now() : null, 'cancelled_by' => $cancelling ? (int) $user?->getKey() : 0]);
+            }
             $reservation->update(array_filter([
                 'reservation_status_id' => $statusId,
                 'renewal_of' => $link?->id,
@@ -243,7 +247,7 @@ class ReservationService
      * refused when its slot is taken now (the reservations holding it, as links); then like changeStatus()
      * (package recalculated, paid / remaining refreshed: the amount due comes back).
      */
-    public function restore($accountId, $id)
+    public function restore($accountId, $id, ?Model $user = null)
     {
         $reservation = $this->findOne($accountId, $id);
         if ($reservation->isCounted()) {
@@ -252,7 +256,7 @@ class ReservationService
         $status = $this->restoreStatus($accountId)
             ?? throw ValidationException::withMessages(['html_status' => 'There is no active counted status to restore to.']);
 
-        return $this->changeStatus($accountId, $id, $status->id);
+        return $this->changeStatus($accountId, $id, $status->id, null, $user);
     }
 
     // the status a reservation is restored to: the default one when it is counted, else the first active counted one
@@ -397,7 +401,7 @@ class ReservationService
 
         // the same package (the Renew form does not change it)
         // extras are never copied (2026-11-08): the renewal starts with none
-        $renewal = $subscription->replicate(['paid_amount', 'remaining', 'extras_total', 'repeat_id', 'notes', 'left_at', 'left_by']);
+        $renewal = $subscription->replicate(['paid_amount', 'remaining', 'extras_total', 'repeat_id', 'notes', 'left_at', 'left_by', 'cancelled_at', 'cancelled_by']);
         $renewal->forceFill([
             'start_at' => $start,
             'end_at' => $newEnd,

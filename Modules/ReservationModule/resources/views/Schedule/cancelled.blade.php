@@ -17,7 +17,7 @@
     @else
         <div class="table-wrap">
             <table class="data-table">
-                <thead><tr><th>Member</th><th>Type</th><th>Space / Unit</th><th>Time</th><th>Amount</th><th>Status</th></tr></thead>
+                <thead><tr><th>Member</th><th>Type</th><th>Space / Unit</th><th>Time</th><th>Amount</th><th>Status</th><th>Cancelled By</th></tr></thead>
                 <tbody>
                     @foreach ($reservations as $reservation)
                         <tr>
@@ -47,6 +47,7 @@
                             </td>
                             <td class="whitespace-nowrap">{{ number_format($reservation->dueAmount(), 2) }}</td>
                             <td><span class="{{ $reservation->status?->badge_class ?? 'badge badge-status-slate' }}">{{ $reservation->status?->name ?? '-' }}</span></td>
+                            <td>@include('reservationmodule::Reservation.partials.cancelled-by', ['inline' => true])</td>
                         </tr>
                     @endforeach
                 </tbody>

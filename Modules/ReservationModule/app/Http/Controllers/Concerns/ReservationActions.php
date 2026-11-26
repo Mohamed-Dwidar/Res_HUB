@@ -210,7 +210,7 @@ trait ReservationActions
         // by period only: the not counted ones (cancelled, pending ...) stay in their date place, muted (user 2026-10-27; they were
         // always after the counted ones) + who added it (the "By" column)
         // + the WhatsApp icon state (MessagingModule's messageLogs: the row's own sends, a fixed number of queries for the page)
-        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy', 'messageLogs');
+        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy', 'messageLogs', 'cancelledBy.userable');
         // the Renewal filter (2026-10-29): Upcoming / Renewed rows show the renewal when it exists (member, place, period, amounts,
         // status, menu); Not renewed & Not paid / Left = the period itself; the Renewal column = RenewalView (the Schedule rows)
         $shown = fn ($reservation) => in_array($renewal[0] ?? null, ['upcoming', 'renewed'], true) ? ($reservation->renewedBy ?? $reservation) : $reservation;
@@ -392,7 +392,7 @@ trait ReservationActions
 
     public function restore(Request $request, $id)
     {
-        $reservation = $this->reservationService->restore($this->accountId(), $id);
+        $reservation = $this->reservationService->restore($this->accountId(), $id, Auth::user());
 
         return response()->json([
             'message' => 'The reservation has been restored to "' . $reservation->status?->name . '", its amount is due again.'

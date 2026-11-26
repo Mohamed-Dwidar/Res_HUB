@@ -57,6 +57,7 @@ class Reservation extends Model implements Payable
         'start_at' => 'datetime',
         'end_at' => 'datetime',
         'left_at' => 'datetime',
+        'cancelled_at' => 'datetime',
         'all_day' => 'boolean',
         'is_repeat' => 'boolean',
         'amount' => 'float',
@@ -142,6 +143,12 @@ class Reservation extends Model implements Payable
     }
 
     // the counted (not cancelled like) reservation that renews this period: "renewed" (at most one, ReservationService)
+    // the login that cancelled it (cancelled_at, 2026-11-26; 0 = not recorded)
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\UserModule\app\Models\User::class, 'cancelled_by');
+    }
+
     public function renewedBy(): HasOne
     {
         return $this->hasOne(self::class, 'renewal_of')->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds() ?: [0]);
